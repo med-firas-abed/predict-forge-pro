@@ -28,18 +28,13 @@ git add .
 git commit -m "PrediTeq v1.0 — production ready"
 ```
 
-Create a **new repository** on GitHub (https://github.com/new):
-- Name: `pfe_MIME_26` (or `prediteq`)
-- **Private** repository
-- Do NOT initialize with README
+The code is already pushed to:
 
-Then push:
-
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/pfe_MIME_26.git
-git branch -M main
-git push -u origin main
 ```
+https://github.com/med-firas-abed/predict-forge-pro
+```
+
+Branch: `main`
 
 > ⚠️ The repo is ~59 MB (mostly the 50 MB RF model). This is under GitHub's 100 MB file limit.
 
@@ -51,7 +46,7 @@ git push -u origin main
 
 1. Go to https://dashboard.render.com
 2. Click **"New +"** → **"Web Service"**
-3. Connect your GitHub repo: `pfe_MIME_26`
+3. Connect your GitHub repo: `predict-forge-pro`
 4. Configure:
 
 | Setting | Value |
@@ -116,7 +111,7 @@ You should see:
 
 1. Go to https://vercel.com/dashboard
 2. Click **"Add New..."** → **"Project"**
-3. **Import** your GitHub repo: `pfe_MIME_26`
+3. **Import** your GitHub repo: `predict-forge-pro`
 4. Configure:
 
 | Setting | Value |
