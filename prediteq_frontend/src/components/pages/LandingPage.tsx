@@ -199,7 +199,8 @@ function Navbar({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: 
           </button>
           <button
             onClick={onGetStarted}
-            className={`px-5 py-2 rounded-lg bg-gradient-to-r text-white text-sm font-semibold transition-all shadow-lg ${dark ? 'from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 shadow-teal-500/20' : 'from-teal-700 to-teal-500 hover:from-teal-600 hover:to-teal-400 shadow-teal-700/15'}`}
+            className="px-5 py-2 rounded-lg text-white text-sm font-semibold transition-all shadow-lg"
+            style={{ backgroundImage: dark ? 'linear-gradient(to right, #14b8a6, #06b6d4)' : 'linear-gradient(to right, #0f766e, #14b8a6)' }}
           >
             {T.nav.getStarted[lang]}
           </button>
@@ -239,7 +240,8 @@ function Navbar({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: 
           </div>
           <button
             onClick={onGetStarted}
-            className={`w-full mt-2 px-5 py-2.5 rounded-lg bg-gradient-to-r text-white text-sm font-semibold ${dark ? 'from-teal-500 to-cyan-500' : 'from-teal-700 to-teal-500'}`}
+            className="w-full mt-2 px-5 py-2.5 rounded-lg text-white text-sm font-semibold"
+            style={{ backgroundImage: dark ? 'linear-gradient(to right, #14b8a6, #06b6d4)' : 'linear-gradient(to right, #0f766e, #14b8a6)' }}
           >
             {T.nav.getStarted[lang]}
           </button>
@@ -336,7 +338,10 @@ function Hero({ onGetStarted }: { onGetStarted: () => void }) {
         <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tight">
           <span className={dark ? 'text-white' : 'text-gray-900'}>{T.hero.h1a[lang]}</span>
           <br />
-          <span className={`bg-gradient-to-r bg-clip-text text-transparent ${dark ? 'from-teal-400 to-cyan-400' : 'from-teal-700 to-teal-500'}`}>
+          <span
+            className="bg-clip-text text-transparent"
+            style={{ backgroundImage: dark ? 'linear-gradient(to right, #2dd4bf, #22d3ee)' : 'linear-gradient(to right, #0f766e, #14b8a6)' }}
+          >
             {T.hero.h1b[lang]}
           </span>
         </h1>
@@ -348,7 +353,8 @@ function Hero({ onGetStarted }: { onGetStarted: () => void }) {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
           <button
             onClick={onGetStarted}
-            className={`group px-8 py-3.5 rounded-xl bg-gradient-to-r text-white font-semibold text-base transition-all shadow-xl flex items-center gap-2 ${dark ? 'from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 shadow-teal-500/25' : 'from-teal-700 to-teal-500 hover:from-teal-600 hover:to-teal-400 shadow-teal-700/20'}`}
+            className="group px-8 py-3.5 rounded-xl text-white font-semibold text-base transition-all shadow-xl flex items-center gap-2"
+            style={{ backgroundImage: dark ? 'linear-gradient(to right, #14b8a6, #06b6d4)' : 'linear-gradient(to right, #0f766e, #14b8a6)' }}
           >
             {T.hero.cta[lang]}
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -725,7 +731,10 @@ function CtaSection({ onGetStarted }: { onGetStarted: () => void }) {
       <div className="max-w-3xl mx-auto px-6">
         <h2 className={`text-4xl sm:text-5xl font-extrabold mb-4 leading-tight ${dark ? 'text-white' : 'text-gray-900'}`}>
           {T.cta.h2a[lang]}<br />
-          <span className={`bg-gradient-to-r bg-clip-text text-transparent ${dark ? 'from-teal-400 to-cyan-400' : 'from-teal-700 to-teal-500'}`}>
+          <span
+            className="bg-clip-text text-transparent"
+            style={{ backgroundImage: dark ? 'linear-gradient(to right, #2dd4bf, #22d3ee)' : 'linear-gradient(to right, #0f766e, #14b8a6)' }}
+          >
             {T.cta.h2b[lang]}
           </span>
         </h2>
@@ -734,7 +743,8 @@ function CtaSection({ onGetStarted }: { onGetStarted: () => void }) {
         </p>
         <button
           onClick={onGetStarted}
-          className={`px-10 py-4 rounded-xl bg-gradient-to-r text-white font-semibold text-lg transition-all shadow-xl ${dark ? 'from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 shadow-teal-500/25' : 'from-teal-700 to-teal-500 hover:from-teal-600 hover:to-teal-400 shadow-teal-700/20'}`}
+          className="px-10 py-4 rounded-xl text-white font-semibold text-lg transition-all shadow-xl"
+          style={{ backgroundImage: dark ? 'linear-gradient(to right, #14b8a6, #06b6d4)' : 'linear-gradient(to right, #0f766e, #14b8a6)' }}
         >
           {T.cta.btn[lang]}
         </button>
