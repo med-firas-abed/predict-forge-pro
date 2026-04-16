@@ -35,7 +35,7 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img
-            src={theme === "dark" ? "/logo-dark.svg" : "/logo-light.svg"}
+            src="/logo-light.svg"
             alt="PrediTeq"
             className="h-20 object-contain animate-float mb-3"
           />
