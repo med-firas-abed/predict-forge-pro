@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /machines
+Disallow: /maintenance
+Disallow: /alertes
+Disallow: /couts
+Disallow: /seuils
+Disallow: /simulateur
+Disallow: /administration
+Disallow: /admin/
+Disallow: /rapport-ia
+Disallow: /geo
+Disallow: /calendrier
+
+# Social crawlers — allow landing page
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+Sitemap: https://prediteq.vercel.app/sitemap.xml

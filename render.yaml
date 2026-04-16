@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: prediteq-api
+    runtime: python
+    region: frankfurt          # closest to Tunisia
+    plan: starter              # $7/mo — no cold starts, always on
+    # No rootDir — we need both prediteq_api/ AND prediteq_ml/ (models)
+    buildCommand: pip install -r prediteq_api/requirements.txt
+    startCommand: cd prediteq_api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SUPABASE_URL
+        sync: false            # set manually in Render dashboard
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false            # verified sender email for Resend
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false            # set to your Vercel domain(s)
+      - key: DASHBOARD_URL
+        sync: false            # frontend URL for email links
+      - key: MQTT_BROKER
+        value: ""              # empty = simulated mode

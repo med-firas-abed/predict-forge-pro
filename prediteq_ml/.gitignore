@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+# Training data (large CSVs, regeneratable via pipeline steps)
+data/raw/
+data/processed/
+data/cmapss/
+
+# Pipeline outputs (plots, metrics — regeneratable)
+outputs/
