@@ -244,10 +244,14 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                       onClick={() => setRole(r)}
                       className={`flex-1 h-12 rounded-xl text-sm font-medium border transition-all btn-premium ${
                         role === r
-                          ? theme === 'dark' ? "bg-primary text-white border-primary" : "text-white border-teal-700"
+                          ? "text-white"
                           : "bg-background text-foreground border-input hover:bg-muted"
                       }`}
-                      style={role === r && theme !== 'dark' ? { backgroundImage: 'linear-gradient(to right, #0f766e, #14b8a6)' } : undefined}
+                      style={role === r ? {
+                        backgroundColor: theme === 'dark' ? 'hsl(191, 50%, 42%)' : undefined,
+                        backgroundImage: theme !== 'dark' ? 'linear-gradient(to right, #0f766e, #14b8a6)' : undefined,
+                        borderColor: theme === 'dark' ? 'hsl(191, 50%, 42%)' : '#0f766e'
+                      } : undefined}
                     >
                       {r === "user"
                         ? t("auth.user")

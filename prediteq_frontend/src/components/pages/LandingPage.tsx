@@ -324,8 +324,21 @@ function Hero({ onGetStarted }: { onGetStarted: () => void }) {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
       {/* Ambient glow */}
-      <div className={`absolute inset-0 ${dark ? 'bg-gradient-to-b from-[#0a1628] via-[#0e1f38] to-[#0a1628]' : 'bg-gradient-to-b from-gray-50 via-white to-gray-50'}`} />
-      <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-full blur-[120px] ${dark ? 'bg-teal-500/10' : 'bg-teal-700/10'}`} />
+      <div
+        className="absolute inset-0"
+        style={{ backgroundImage: dark
+          ? 'linear-gradient(to bottom, #0a1628, #0e1f38, #0a1628)'
+          : 'linear-gradient(to bottom, #f9fafb, #ffffff, #f9fafb)'
+        }}
+      />
+      <div
+        className="absolute top-1/4 left-1/2 w-[800px] h-[400px] rounded-full"
+        style={{
+          transform: 'translateX(-50%)',
+          filter: 'blur(120px)',
+          backgroundColor: dark ? 'rgba(20,184,166,0.10)' : 'rgba(15,118,110,0.10)'
+        }}
+      />
 
       <div className="relative z-10 max-w-5xl mx-auto text-center px-6">
         <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mb-8 ${dark ? 'border-teal-500/20 bg-teal-500/5' : 'border-teal-700/30 bg-teal-700/5'}`}>
