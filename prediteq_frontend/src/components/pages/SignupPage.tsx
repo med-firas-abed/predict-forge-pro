@@ -142,7 +142,7 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
         {/* Logo */}
         <div className="flex flex-col items-center mb-6 w-full">
           <img
-            src="/logo-light.svg"
+            src="/logo-dark-removebg-preview.png"
             alt="PrediTeq"
             className="h-20 max-w-full object-contain animate-float"
           />

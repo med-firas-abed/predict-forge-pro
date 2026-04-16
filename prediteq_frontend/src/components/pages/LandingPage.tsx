@@ -163,7 +163,7 @@ function Navbar({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: 
       <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
         {/* Logo block */}
         <div className="flex items-center">
-          <img src={dark ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"} alt="PrediTeq" className="h-10 w-auto" />
+          <img src="/logo-dark-removebg-preview.png" alt="PrediTeq" className="h-10 w-auto" />
         </div>
 
         {/* Desktop nav */}
@@ -754,7 +754,7 @@ function Footer() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
           <div>
             <div className="flex flex-col items-start gap-2 mb-4">
-              <img src={dark ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"} alt="PrediTeq" className="h-10 w-auto" />
+              <img src="/logo-dark-removebg-preview.png" alt="PrediTeq" className="h-10 w-auto" />
               <div className={`flex items-center gap-2 text-xs italic ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
                 <span className="tracking-wide">by</span>
                 <img src="/aroteq-logo.png" alt="AroTeq" className="h-7 w-auto" />

@@ -69,7 +69,7 @@ export function ResetPasswordPage({ onNavigate }: Props) {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
           <img
-            src="/logo-light.svg"
+            src="/logo-dark-removebg-preview.png"
             alt="PrediTeq"
             className="h-16 object-contain"
           />
