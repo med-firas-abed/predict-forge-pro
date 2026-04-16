@@ -439,7 +439,7 @@ const TR: Record<string, Record<Lang, string>> = {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("pl-lang") as Lang) || "fr");
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("pl-theme") as Theme) || "light");
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("pl-theme") as Theme) || "dark");
   const [alertEmails, setAlertEmails] = useState(() => {
     const saved = localStorage.getItem("pl-alert-emails");
     if (saved) try { return JSON.parse(saved); } catch { /* ignore */ }

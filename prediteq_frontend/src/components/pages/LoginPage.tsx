@@ -76,7 +76,7 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
         </div>
 
         {/* Form card with gradient border */}
-        <div className={`relative rounded-2xl p-[1px] auth-card-shadow ${theme === 'dark' ? 'bg-gradient-to-br from-primary/60 via-primary/20 to-border' : 'bg-gradient-to-br from-teal-700/60 via-teal-500/20 to-gray-200'}`}>
+        <div className="relative rounded-2xl p-[1px] auth-card-shadow" style={{ backgroundImage: theme === 'dark' ? 'linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))' : 'linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)' }}>
           <div className="bg-card rounded-2xl p-8 space-y-6">
             <div className="text-center">
               <h1 className="text-lg font-semibold text-foreground">
@@ -127,7 +127,8 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
               <button
                 type="submit"
                 disabled={submitting}
-                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === 'dark' ? 'bg-primary hover:bg-primary/90' : 'bg-gradient-to-r from-teal-700 to-teal-500 hover:from-teal-600 hover:to-teal-400 shadow-lg shadow-teal-700/15'}`}
+                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === 'dark' ? 'bg-primary hover:bg-primary/90' : 'shadow-lg'}`}
+                style={theme !== 'dark' ? { backgroundImage: 'linear-gradient(to right, #0f766e, #14b8a6)' } : undefined}
               >
                 {submitting ? "..." : t("auth.signInBtn")}
               </button>
