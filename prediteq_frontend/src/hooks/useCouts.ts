@@ -40,6 +40,7 @@ export function useCouts(machineId?: string) {
       if (error) throw error;
       return (data ?? []).map(mapCost);
     },
+    refetchInterval: 60_000,
   });
 
   return {

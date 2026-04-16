@@ -131,8 +131,8 @@ def _fetch_alerts(machine_uuid: str, start_iso: str) -> list[dict]:
 
 
 def _fetch_rul_predictions(machine_uuid: str, start_iso: str) -> list[dict]:
-    sb = get_supabase()
     try:
+        sb = get_supabase()
         return sb.table('predictions_rul').select('rul_jours, ic_bas, ic_haut, created_at') \
             .eq('machine_id', machine_uuid) \
             .gte('created_at', start_iso) \
@@ -524,7 +524,7 @@ def generate_pdf_bytes(markdown_text: str, title: str = "Rapport PrediTeq", lang
     pdf.set_font(font_family, bold_style, 18)
     pdf.cell(0, 12, title, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font(font_family, "", 10)
-    pdf.cell(0, 8, f"Genere le {now}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(0, 8, f"Généré le {now}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(8)
 
     # Body
@@ -545,7 +545,7 @@ def generate_pdf_bytes(markdown_text: str, title: str = "Rapport PrediTeq", lang
             continue  # skip separator
         elif in_table:
             # Flush table
-            _render_table(pdf, table_rows)
+            _render_table(pdf, table_rows, font_family)
             table_rows = []
             in_table = False
 
@@ -592,12 +592,12 @@ def generate_pdf_bytes(markdown_text: str, title: str = "Rapport PrediTeq", lang
 
     # Flush any remaining table
     if table_rows:
-        _render_table(pdf, table_rows)
+        _render_table(pdf, table_rows, font_family)
 
     return pdf.output()
 
 
-def _render_table(pdf, rows: list[list[str]]):
+def _render_table(pdf, rows: list[list[str]], font_family: str = "Helvetica"):
     """Render a simple table in the PDF."""
     if not rows:
         return
@@ -609,13 +609,13 @@ def _render_table(pdf, rows: list[list[str]]):
 
     # Header row
     if rows:
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font(font_family, "B", 9)
         for cell in rows[0]:
             pdf.cell(col_w, 6, cell[:40], border=1, align="C")
         pdf.ln()
 
     # Data rows
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font(font_family, "", 9)
     for row in rows[1:]:
         for i in range(n_cols):
             val = row[i] if i < len(row) else ""
@@ -624,4 +624,4 @@ def _render_table(pdf, rows: list[list[str]]):
 
     pdf.ln(2)
     pdf.set_x(pdf.l_margin)  # ensure X resets
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font(font_family, "", 11)

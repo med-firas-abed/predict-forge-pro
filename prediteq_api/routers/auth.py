@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
 from core.supabase_client import get_supabase
+from core.config import settings
 from core.auth import CurrentUser, require_auth, require_admin, _get_user_from_token
 from core.email_client import send_alert_email
 from core.audit import log_audit
@@ -79,6 +80,20 @@ def signup(body: SignupRequest):
         raise HTTPException(400, "Role must be 'user' or 'admin'")
     if body.role == "user" and not body.machine_id:
         raise HTTPException(400, "machine_id is required for role=user")
+    # Block admin self-registration in production: only allow via first-bootstrap
+    if body.role == "admin":
+        try:
+            count_res = sb.table("profiles") \
+                .select("id", count="exact") \
+                .eq("status", "approved") \
+                .eq("role", "admin") \
+                .execute()
+            if count_res.count and count_res.count > 0:
+                raise HTTPException(403, "L'inscription admin n'est pas autorisée. Contactez un administrateur existant.")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Bootstrap check on signup: %s", e)
 
     # Password strength: min 8 chars, 1 upper, 1 lower, 1 digit
     if not _PASSWORD_RE.match(body.password):
@@ -170,15 +185,9 @@ def login(body: LoginRequest):
 
     status = profile.get("status", "pending")
     if status == "pending":
-        return {
-            "status": "pending",
-            "message": "Votre compte est en attente d'approbation.",
-        }
+        raise HTTPException(403, "Votre compte est en attente d'approbation.")
     if status == "rejected":
-        return {
-            "status": "rejected",
-            "message": "Votre demande d'accès a été refusée.",
-        }
+        raise HTTPException(403, "Votre demande d'accès a été refusée.")
 
     # Approved → return session tokens
     machine = profile.get("machines")
@@ -203,10 +212,14 @@ def login(body: LoginRequest):
 async def get_my_status(user: CurrentUser = Depends(_get_user_from_token)):
     """Returns current account status (for pending page polling)."""
     sb = get_supabase()
-    profile_res = sb.table("profiles") \
-        .select("*, machines(code)") \
-        .eq("id", user.id) \
-        .execute()
+    try:
+        profile_res = sb.table("profiles") \
+            .select("*, machines(code)") \
+            .eq("id", user.id) \
+            .execute()
+    except Exception as e:
+        logger.error("Profile fetch for /me/status: %s", e)
+        raise HTTPException(502, "Erreur base de données")
 
     if not profile_res.data:
         raise HTTPException(404, "Profile not found")
@@ -221,6 +234,42 @@ async def get_my_status(user: CurrentUser = Depends(_get_user_from_token)):
         machine_id=p.get("machine_id"),
         machine_code=machine.get("code") if machine else None,
     )
+
+
+# ─── GET /admin/users ──────────────────────────────────────────────────────────
+
+@router.get("/admin/users")
+async def list_all_users(admin: CurrentUser = Depends(require_admin)):
+    """List all users with emails resolved from auth.users."""
+    sb = get_supabase()
+    res = sb.table("profiles") \
+        .select("*, machines(code)") \
+        .order("created_at", desc=True) \
+        .execute()
+
+    users = []
+    for p in res.data:
+        # Resolve email from auth.users
+        email = ""
+        try:
+            auth_user = sb.auth.admin.get_user_by_id(p["id"])
+            if auth_user and auth_user.user:
+                email = auth_user.user.email or ""
+        except Exception:
+            pass
+        machine = p.get("machines")
+        users.append({
+            "id": p["id"],
+            "full_name": p.get("full_name", ""),
+            "email": email,
+            "role": p.get("role", "user"),
+            "status": p.get("status", "pending"),
+            "machine_id": p.get("machine_id"),
+            "machine_code": machine.get("code") if machine else None,
+            "created_at": p.get("created_at"),
+            "approved_at": p.get("approved_at"),
+        })
+    return users
 
 
 # ─── GET /admin/users/pending ─────────────────────────────────────────────────
@@ -287,7 +336,7 @@ async def approve_user(user_id: str, admin: CurrentUser = Depends(require_admin)
                 <h2 style="color: #27ae60;">✅ Compte approuvé — PrediTeq</h2>
                 <p>Bonjour <b>{target.get('full_name', '')}</b>,</p>
                 <p>Votre compte a été approuvé. Vous pouvez désormais vous connecter.</p>
-                <p><a href="https://prediteq.vercel.app" style="color: #3498db;">
+                <p><a href="{settings.DASHBOARD_URL}" style="color: #3498db;">
                     Accéder à PrediTeq →
                 </a></p>
             </div>
@@ -312,6 +361,9 @@ async def reject_user(user_id: str, admin: CurrentUser = Depends(require_admin))
     if not res.data:
         raise HTTPException(404, "User not found")
     target = res.data[0]
+
+    if target.get("status") == "approved":
+        raise HTTPException(400, "Impossible de rejeter un utilisateur déjà approuvé")
 
     sb.table("profiles").update({
         "status": "rejected",

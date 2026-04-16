@@ -36,7 +36,8 @@ def health_detail(user: CurrentUser = Depends(require_auth)):
             sb.table("machines").select("id").limit(1).execute()
             deps["supabase"] = {"status": "ok"}
         except Exception as e:
-            deps["supabase"] = {"status": "error", "message": str(e)}
+            logger.error("Supabase health check failed: %s", e)
+            deps["supabase"] = {"status": "error", "message": "Connection failed"}
 
         # Groq LLM
         try:

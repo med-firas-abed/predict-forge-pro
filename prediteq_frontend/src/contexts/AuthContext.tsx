@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 
 export type UserRole = "admin" | "user";
 export type AccountStatus = "pending" | "approved" | "rejected";
@@ -63,12 +64,19 @@ async function fetchProfile(userId: string, email?: string): Promise<AppUser | n
 }
 
 async function fetchAllProfiles(): Promise<AppUser[]> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*, machines(code)")
-    .order("created_at", { ascending: false });
-  if (error || !data) return [];
-  return data.map((d) => rowToUser(d));
+  try {
+    // Use backend API to get users with emails resolved from auth.users
+    const data = await apiFetch<Array<Record<string, unknown>>>("/admin/users");
+    return data.map((d) => rowToUser(d, (d.email as string) || ""));
+  } catch {
+    // Fallback to Supabase direct (emails will be empty)
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*, machines(code)")
+      .order("created_at", { ascending: false });
+    if (error || !data) return [];
+    return data.map((d) => rowToUser(d));
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -157,39 +165,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(async (data: { fullName: string; email: string; password: string; role: UserRole; machineId?: string }) => {
-    const { error: authError, data: signUpData } = await supabase.auth.signUp({
-      email: data.email,
-      password: data.password,
-      options: {
-        data: {
+    try {
+      await apiFetch("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({
           full_name: data.fullName,
+          email: data.email,
+          password: data.password,
           role: data.role,
           machine_id: data.machineId || null,
-        },
-      },
-    });
-    if (authError) {
-      if (authError.message.includes("already registered")) {
+        }),
+      });
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erreur lors de l'inscription.";
+      if (msg.includes("409")) {
         return { success: false, error: "Un compte avec cet email existe déjà." };
       }
-      return { success: false, error: authError.message };
-    }
-
-    // Auto-approve first admin (bootstrap: no admin exists yet to approve)
-    if (data.role === "admin" && signUpData.user) {
-      const { count } = await supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "approved");
-      if (count === 0) {
-        await supabase.from("profiles")
-          .update({ status: "approved", approved_at: new Date().toISOString() })
-          .eq("id", signUpData.user.id);
+      if (msg.includes("403")) {
+        return { success: false, error: "L'inscription admin n'est pas autorisée. Contactez un administrateur existant." };
       }
+      return { success: false, error: msg };
     }
-
-    await supabase.auth.signOut();
-    return { success: true };
   }, []);
 
   const logout = useCallback(async () => {
@@ -198,17 +195,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const approveUser = useCallback(async (id: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("profiles")
-      .update({ status: "approved", approved_at: new Date().toISOString(), approved_by: user?.id })
-      .eq("id", id);
+    await apiFetch(`/admin/users/${id}/approve`, { method: "PATCH" });
     await refreshUsers();
   }, [refreshUsers]);
 
   const rejectUser = useCallback(async (id: string) => {
-    await supabase.from("profiles")
-      .update({ status: "rejected" })
-      .eq("id", id);
+    await apiFetch(`/admin/users/${id}/reject`, { method: "PATCH" });
     await refreshUsers();
   }, [refreshUsers]);
 

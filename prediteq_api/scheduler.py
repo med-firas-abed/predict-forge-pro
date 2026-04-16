@@ -57,6 +57,8 @@ def _can_send_surveillance(sb, machine_uuid: str) -> bool:
         result = sb.table('email_logs') \
             .select('id') \
             .eq('machine_id', machine_uuid) \
+            .eq('type', 'hi') \
+            .eq('success', True) \
             .gte('created_at', week_ago) \
             .execute()
         return len(result.data) == 0
@@ -65,13 +67,14 @@ def _can_send_surveillance(sb, machine_uuid: str) -> bool:
         return False
 
 
-def _log_email(sb, machine_uuid: str, alert_type: str = 'hi'):
-    """Insert into email_logs after sending."""
+def _log_email(sb, machine_uuid: str, alert_type: str = 'hi', success: bool = True):
+    """Insert into email_logs after sending (or failing)."""
     try:
         sb.table('email_logs').insert({
             'machine_id': machine_uuid,
             'type': alert_type,
             'recipient_email': settings.ADMIN_EMAIL,
+            'success': success,
         }).execute()
     except Exception as e:
         logger.error("email_logs insert error: %s", e)
@@ -127,6 +130,18 @@ def _update_one_machine(manager, sb, code: str):
     except Exception as e:
         logger.error("machines update error for %s: %s", code, e)
 
+    # ── Insert predictions_rul (RUL history + confidence intervals) ───────
+    if rul_result and rul_result.get('rul_days') is not None:
+        try:
+            sb.table('predictions_rul').insert({
+                'machine_id': machine_uuid,
+                'rul_jours': round(rul_result['rul_days'], 2),
+                'ic_bas': round(rul_result['ci_low'], 2) if rul_result.get('ci_low') is not None else None,
+                'ic_haut': round(rul_result['ci_high'], 2) if rul_result.get('ci_high') is not None else None,
+            }).execute()
+        except Exception as e:
+            logger.error("predictions_rul insert error for %s: %s", code, e)
+
     # ── Insert historique_hi ──────────────────────────────────────────────
     try:
         sb.table('historique_hi').insert({
@@ -178,14 +193,14 @@ def _update_one_machine(manager, sb, code: str):
 
             subject = f"[URGENCE] {machine_nom} — RUL {rul_result['rul_days'] if rul_result and rul_result.get('rul_days') else 'N/A'} jours"
             html = build_urgence_html(machine_nom, code, hi, rul_result, recent_alerts)
-            if send_alert_email(settings.ADMIN_EMAIL, subject, html):
-                _log_email(sb, machine_uuid, 'hi')
+            sent = send_alert_email(settings.ADMIN_EMAIL, subject, html)
+            _log_email(sb, machine_uuid, 'hi', success=bool(sent))
 
         elif severite == 'surveillance' and _can_send_surveillance(sb, machine_uuid):
             subject = f"[SURVEILLANCE] {machine_nom} — HI {hi:.2f}"
             html = build_surveillance_html(machine_nom, code, hi, rul_result)
-            if send_alert_email(settings.ADMIN_EMAIL, subject, html):
-                _log_email(sb, machine_uuid, 'hi')
+            sent = send_alert_email(settings.ADMIN_EMAIL, subject, html)
+            _log_email(sb, machine_uuid, 'hi', success=bool(sent))
 
 
 # ─── Scheduler lifecycle ─────────────────────────────────────────────────────

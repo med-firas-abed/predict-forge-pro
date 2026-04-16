@@ -97,9 +97,15 @@ async def explain_anomaly(machine_code: str,
             c = float(np.corrcoef(arr[:, 0], arr[:, 1])[0, 1])
             features['corr_t_p'] = 0.0 if np.isnan(c) else c
 
-    # Compute SHAP
+    # Compute SHAP on normalized features (IF was trained on z-scored data)
     try:
-        shap_contributions = _compute_shap(manager._if, features)
+        scaler = manager._scaler  # {feat: {mean, std}}
+        normalized_features = {
+            f: (features.get(f, 0.0) - scaler[f]['mean']) / max(scaler[f]['std'], 1e-12)
+            for f in FEATURE_NAMES
+            if f in scaler
+        }
+        shap_contributions = _compute_shap(manager._if, normalized_features)
     except Exception as e:
         logger.error("SHAP computation error for %s: %s", machine_code, e)
         raise HTTPException(500, "SHAP computation failed")

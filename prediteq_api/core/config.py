@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = "PrediTeq Alerts <onboarding@resend.dev>"
     ADMIN_EMAIL: str = ""
-    DASHBOARD_URL: str = "https://prediteq.vercel.app"
+    DASHBOARD_URL: str = "https://prediteq-saas.vercel.app"
 
     # CORS (comma-separated origins — set in env for production)
-    CORS_ORIGINS: str = "https://prediteq.vercel.app"
+    CORS_ORIGINS: str = "https://prediteq-saas.vercel.app"
 
     # Root of prediteq_ml package (contains config.py, models/, steps/)
     ML_DIR: str = os.path.abspath(

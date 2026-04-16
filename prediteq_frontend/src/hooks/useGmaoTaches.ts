@@ -53,6 +53,7 @@ export function useGmaoTaches(machineId?: string) {
       if (error) throw error;
       return (data ?? []).map(mapTache);
     },
+    refetchInterval: 60_000,
   });
 
   const addTache = useMutation({

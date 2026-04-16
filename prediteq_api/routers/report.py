@@ -428,6 +428,18 @@ async def download_report_pdf(report_id: str, user: CurrentUser = Depends(requir
         raise HTTPException(404, "Report not found")
 
     report = result.data[0]
+
+    # Enforce machine scoping (same as GET /history/{id})
+    machine_filter = get_machine_filter(user)
+    if machine_filter:
+        try:
+            m_res = sb.table('machines').select('code').eq('id', machine_filter).execute()
+            user_code = m_res.data[0]['code'] if m_res.data else None
+        except Exception:
+            user_code = None
+        if report.get('machine_code') and report['machine_code'] != user_code:
+            raise HTTPException(403, "Accès interdit à ce rapport")
+
     contenu = report.get('contenu')
     if not contenu:
         raise HTTPException(404, "Report content is empty")
