@@ -24,8 +24,8 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href="https://prediteq.vercel.app" />
     <script>
-      // Sync theme class before first paint to avoid FOUC
-      (function(){var t=localStorage.getItem("pl-theme");if(t==="dark"||t==="light"){document.documentElement.className=t}})();
+      // Sync theme class before first paint — always force correct class
+      (function(){var t=localStorage.getItem("pl-theme");document.documentElement.className=t==="dark"?"dark":"light"})();
     </script>
   </head>
   <body>
