@@ -54,7 +54,7 @@ export function AppSidebar({ currentPage, onNavigate, collapsed, onToggleCollaps
       {/* Logo */}
       <div className={`flex items-center justify-center px-3 pt-6 pb-4 ${collapsed ? '' : 'px-5'}`}>
         <img
-          src="/logo-dark-removebg-preview.png"
+          src={theme === 'dark' ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
           alt="PrediTeq"
           className={`object-contain transition-all duration-300 ${collapsed ? 'h-8 w-10' : 'h-12 w-full max-w-[200px]'}`}
         />
