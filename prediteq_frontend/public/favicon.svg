@@ -1,4 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0ea5e9"/>
-  <text x="16" y="22" text-anchor="middle" fill="white" font-family="system-ui,sans-serif" font-size="18" font-weight="bold">P</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="#1e3a4f"/>
+  <!-- 3 ascending bar chart columns -->
+  <rect x="6" y="40" width="6" height="14" rx="1.5" fill="url(#g)"/>
+  <rect x="14" y="32" width="6" height="22" rx="1.5" fill="url(#g)"/>
+  <rect x="22" y="22" width="6" height="32" rx="1.5" fill="url(#g)"/>
+  <!-- P letter: stem + bowl as single path -->
+  <path d="M33 10 h0 v44 h7 v-44 h0 z" fill="white"/>
+  <path d="M33 10 h14 a12.5 12.5 0 0 1 0 25 h-14 v-7 h14 a5.5 5.5 0 0 0 0-11 h-14 z" fill="white"/>
 </svg>
