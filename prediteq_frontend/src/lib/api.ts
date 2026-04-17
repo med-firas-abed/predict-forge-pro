@@ -53,26 +53,29 @@ export async function apiStream(
   };
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60_000);
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: controller.signal,
-  });
-  if (res.status === 401) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (res.status === 401) {
+      await supabase.auth.signOut();
+      window.location.href = "/login";
+      throw new Error("Session expirée");
+    }
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`API ${res.status}: ${body}`);
+    }
+    // Caller is responsible for consuming the stream.
+    // Timeout remains active to abort stalled streams after 60s.
+    return res.body;
+  } catch (err) {
     clearTimeout(timeoutId);
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-    throw new Error("Session expirée");
+    throw err;
   }
-  if (!res.ok) {
-    clearTimeout(timeoutId);
-    const body = await res.text();
-    throw new Error(`API ${res.status}: ${body}`);
-  }
-  // Don't clear timeout here — let it protect the stream consumption too.
-  // The caller should clear it or rely on the 60s abort for stalled streams.
-  return res.body;
 }
 
 export async function apiBlob(

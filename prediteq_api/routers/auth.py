@@ -137,12 +137,14 @@ def signup(body: SignupRequest):
             count_res = sb.table("profiles") \
                 .select("id", count="exact") \
                 .eq("status", "approved") \
+                .eq("role", "admin") \
+                .neq("id", user_id) \
                 .execute()
             if count_res.count == 0:
                 sb.table("profiles").update({
                     "status": "approved",
                     "approved_at": datetime.now(timezone.utc).isoformat(),
-                }).eq("id", user_id).execute()
+                }).eq("id", user_id).eq("status", "pending").execute()
                 logger.info("Auto-approved first admin: %s", body.email)
                 return {"status": "approved", "message": "Premier admin — approuvé automatiquement"}
         except Exception as e:

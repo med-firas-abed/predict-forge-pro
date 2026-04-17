@@ -199,7 +199,6 @@ if __name__ == '__main__':
     print(trajectories.groupby('profile')['trajectory_id'].nunique())
     print(f"\n   Répartition par cas de charge :")
     print(trajectories.groupby('load_kg')['trajectory_id'].nunique())
-    print(trajectories.groupby('load_kg')['trajectory_id'].nunique())
     print(f"\n   Current range during ascent:")
     asc = trajectories[trajectories['phase'] == 'ascent']
     print(f"   Min: {asc['current_a'].min():.2f} A  |  "

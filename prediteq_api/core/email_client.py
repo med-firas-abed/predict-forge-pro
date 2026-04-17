@@ -9,6 +9,16 @@ logger = logging.getLogger(__name__)
 if settings.RESEND_API_KEY:
     resend.api_key = settings.RESEND_API_KEY
 
+# Warn loudly if RESEND_FROM is not configured for production
+if settings.RESEND_API_KEY and (
+    not settings.RESEND_FROM
+    or settings.RESEND_FROM == "PrediTeq Alerts <onboarding@resend.dev>"
+):
+    logger.error(
+        "RESEND_FROM is not configured (using Resend demo address). "
+        "Production emails will FAIL. Set RESEND_FROM in your environment."
+    )
+
 
 def send_alert_email(to: str, subject: str, html_body: str) -> bool:
     """Send an alert email via Resend. Returns True on success."""

@@ -100,10 +100,12 @@ async def explain_anomaly(machine_code: str,
     # Compute SHAP on normalized features (IF was trained on z-scored data)
     try:
         scaler = manager._scaler  # {feat: {mean, std}}
+        missing = [f for f in FEATURE_NAMES if f not in scaler]
+        if missing:
+            raise HTTPException(500, f"Scaler missing features: {missing}")
         normalized_features = {
             f: (features.get(f, 0.0) - scaler[f]['mean']) / max(scaler[f]['std'], 1e-12)
             for f in FEATURE_NAMES
-            if f in scaler
         }
         shap_contributions = _compute_shap(manager._if, normalized_features)
     except Exception as e:

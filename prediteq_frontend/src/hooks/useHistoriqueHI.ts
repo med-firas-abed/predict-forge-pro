@@ -12,8 +12,7 @@ export function useHistoriqueHI(machineId: string, days = 90) {
   const query = useQuery({
     queryKey: ["historique_hi", machineId, days],
     queryFn: async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - days);
+      const since = new Date(Date.now() - days * 86_400_000);
 
       const { data, error } = await supabase
         .from("historique_hi")

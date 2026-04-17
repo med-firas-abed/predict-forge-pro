@@ -51,7 +51,7 @@ export function useAlertes(machineId?: string) {
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
     try {
-      const channelName = `alertes-changes-${machineId ?? "all"}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const channelName = `alertes-changes-${machineId ?? "all"}`;
       const filter = machineId
         ? { event: "INSERT" as const, schema: "public", table: "alertes", filter: `machine_id=eq.${machineId}` }
         : { event: "INSERT" as const, schema: "public", table: "alertes" };

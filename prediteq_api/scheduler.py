@@ -180,27 +180,38 @@ def _update_one_machine(manager, sb, code: str):
 
         # ── Email logic ───────────────────────────────────────────────────
         if severite == 'urgence' and _can_send_urgence(sb, machine_uuid):
-            # Fetch recent alerts for email body
-            recent_alerts = []
-            try:
-                res = sb.table('alertes').select('titre, description') \
-                    .eq('machine_id', machine_uuid) \
-                    .order('created_at', desc=True) \
-                    .limit(3).execute()
-                recent_alerts = res.data
-            except Exception:
-                pass
+            # Double-check with a fresh query to reduce race window
+            if not _can_send_urgence(sb, machine_uuid):
+                logger.info("Urgence email skipped (race guard) for %s", code)
+            else:
+                # Fetch recent alerts for email body
+                recent_alerts = []
+                try:
+                    res = sb.table('alertes').select('titre, description') \
+                        .eq('machine_id', machine_uuid) \
+                        .order('created_at', desc=True) \
+                        .limit(3).execute()
+                    recent_alerts = res.data
+                except Exception:
+                    pass
 
-            subject = f"[URGENCE] {machine_nom} — RUL {rul_result['rul_days'] if rul_result and rul_result.get('rul_days') else 'N/A'} jours"
-            html = build_urgence_html(machine_nom, code, hi, rul_result, recent_alerts)
-            sent = send_alert_email(settings.ADMIN_EMAIL, subject, html)
-            _log_email(sb, machine_uuid, 'hi', success=bool(sent))
+                subject = f"[URGENCE] {machine_nom} — RUL {rul_result['rul_days'] if rul_result and rul_result.get('rul_days') else 'N/A'} jours"
+                html = build_urgence_html(machine_nom, code, hi, rul_result, recent_alerts)
+                # Log email BEFORE sending to claim the slot (reduces race window)
+                _log_email(sb, machine_uuid, 'hi', success=True)
+                sent = send_alert_email(settings.ADMIN_EMAIL, subject, html)
+                if not sent:
+                    # Update the log to reflect failure
+                    _log_email(sb, machine_uuid, 'hi', success=False)
 
         elif severite == 'surveillance' and _can_send_surveillance(sb, machine_uuid):
             subject = f"[SURVEILLANCE] {machine_nom} — HI {hi:.2f}"
             html = build_surveillance_html(machine_nom, code, hi, rul_result)
+            # Log before sending to claim the slot
+            _log_email(sb, machine_uuid, 'hi', success=True)
             sent = send_alert_email(settings.ADMIN_EMAIL, subject, html)
-            _log_email(sb, machine_uuid, 'hi', success=bool(sent))
+            if not sent:
+                _log_email(sb, machine_uuid, 'hi', success=False)
 
 
 # ─── Scheduler lifecycle ─────────────────────────────────────────────────────

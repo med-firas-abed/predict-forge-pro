@@ -131,7 +131,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Only set HSTS in production (avoids locking localhost to HTTPS)
+        host = request.headers.get("host", "")
+        if "localhost" not in host and "127.0.0.1" not in host:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -139,6 +142,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # ─── Rate limiting (in-memory, per IP) ────────────────────────────────────────
 
 import time
+import asyncio as _rl_asyncio
 from collections import defaultdict
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -148,6 +152,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._hits: dict[str, list[float]] = defaultdict(list)
         self._last_cleanup = time.time()
+        self._lock = _rl_asyncio.Lock()
 
     async def dispatch(self, request: Request, call_next):
         # Read X-Forwarded-For for correct IP behind Render's reverse proxy
@@ -156,38 +161,39 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         now = time.time()
 
-        # Periodic cleanup of stale keys (every 5 min)
-        if now - self._last_cleanup > 300:
-            stale = [k for k, v in self._hits.items() if not v or now - v[-1] > 120]
-            for k in stale:
-                del self._hits[k]
-            # Hard cap to prevent memory growth under DDoS — evict oldest entries
-            if len(self._hits) > 5_000:
-                # Fast O(n) eviction: remove entries older than 2 minutes
-                cutoff = now - 120
-                to_remove = [k for k, v in self._hits.items() if not v or v[-1] < cutoff]
-                for k in to_remove:
+        async with self._lock:
+            # Periodic cleanup of stale keys (every 5 min)
+            if now - self._last_cleanup > 300:
+                stale = [k for k, v in self._hits.items() if not v or now - v[-1] > 120]
+                for k in stale:
                     del self._hits[k]
-            self._last_cleanup = now
+                # Hard cap to prevent memory growth under DDoS — evict oldest entries
+                if len(self._hits) > 5_000:
+                    cutoff = now - 120
+                    to_remove = [k for k, v in self._hits.items() if not v or v[-1] < cutoff]
+                    for k in to_remove:
+                        del self._hits[k]
+                self._last_cleanup = now
 
-        # Auth endpoints: stricter limit (10/min)
-        if path.startswith("/auth"):
-            limit, window = 10, 60
-        else:
-            limit, window = 120, 60
+            # Auth endpoints: stricter limit (10/min)
+            if path.startswith("/auth"):
+                limit, window = 10, 60
+            else:
+                limit, window = 120, 60
 
-        segments = path.strip("/").split("/")
-        key = f"{ip}:{segments[0] if segments else 'root'}"
-        hits = self._hits[key]
-        # Prune old entries
-        self._hits[key] = [t for t in hits if now - t < window]
-        if len(self._hits[key]) >= limit:
-            return Response(
-                content='{"detail":"Too many requests"}',
-                status_code=429,
-                media_type="application/json",
-            )
-        self._hits[key].append(now)
+            segments = path.strip("/").split("/")
+            key = f"{ip}:{segments[0] if segments else 'root'}"
+            hits = self._hits[key]
+            # Prune old entries
+            self._hits[key] = [t for t in hits if now - t < window]
+            if len(self._hits[key]) >= limit:
+                return Response(
+                    content='{"detail":"Too many requests"}',
+                    status_code=429,
+                    media_type="application/json",
+                )
+            self._hits[key].append(now)
+
         return await call_next(request)
 
 app.add_middleware(RateLimitMiddleware)
