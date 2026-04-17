@@ -70,9 +70,17 @@ PROFILE_NAMES = ["A_linear", "B_exponential", "C_stepwise", "D_noisy_linear"]
 # Default starting HI — used on first-ever run or after reset.
 # A1 is brand new (opérationnel), B2 is mid-life (surveillance), C3 is worn (critique).
 INITIAL_HI = {
-    "ASC-A1": 0.98,
-    "ASC-B2": 0.48,
-    "ASC-C3": 0.18,
+    "ASC-A1": 0.92,
+    "ASC-B2": 0.68,
+    "ASC-C3": 0.22,
+}
+
+# Each machine must stay inside its designated zone during simulation.
+# The HI is clamped to these bounds so the demo always shows 3 distinct zones.
+HI_ZONE_BOUNDS = {
+    "ASC-A1": (0.82, 0.98),   # opérationnel  (≥ 0.80 → vert)
+    "ASC-B2": (0.62, 0.78),   # surveillance   (0.60–0.80 → jaune)
+    "ASC-C3": (0.10, 0.28),   # critique       (< 0.30 → rouge)
 }
 
 # Fraction of a full lifecycle per simulator session.
@@ -103,6 +111,9 @@ def _get_starting_hi(reset: bool = False) -> dict[str, float]:
         for code in MACHINE_CODES:
             if code not in hi_map:
                 hi_map[code] = INITIAL_HI.get(code, 0.98)
+            # Clamp to designated zone so machine always starts in its zone
+            lo, hi_bound = HI_ZONE_BOUNDS.get(code, (0.0, 1.0))
+            hi_map[code] = max(lo, min(hi_map[code], hi_bound))
         logger.info("Simulator: starting HI from DB: %s",
                      {k: f"{v:.3f}" for k, v in hi_map.items()})
         return hi_map
@@ -240,11 +251,15 @@ def _generate_all_trajectories(reset: bool = False) -> dict[str, pd.DataFrame]:
     logger.info("Simulator: generating trajectories (seed=%d, reset=%s)", seed, reset)
 
     starting_hi = _get_starting_hi(reset)
-    profiles = list(rng.choice(PROFILE_NAMES, size=3, replace=False))
+    # ASC-A1 always uses B_exponential; other 2 get random profiles
+    other_profiles = list(rng.choice(PROFILE_NAMES, size=2, replace=False))
+    machine_profiles = {"ASC-A1": "B_exponential",
+                        "ASC-B2": other_profiles[0],
+                        "ASC-C3": other_profiles[1]}
     slices: dict[str, pd.DataFrame] = {}
 
     for i, code in enumerate(MACHINE_CODES):
-        profile = profiles[i]
+        profile = machine_profiles[code]
         load = int(rng.choice(LOAD_CASES_KG))
         full_traj = _generate_trajectory(profile, load, rng)
 
@@ -261,7 +276,13 @@ def _generate_all_trajectories(reset: bool = False) -> dict[str, pd.DataFrame]:
             start_idx = max(0, len(full_traj) - session_len)
             end_idx = len(full_traj)
 
-        slices[code] = full_traj.iloc[start_idx:end_idx].reset_index(drop=True)
+        slc = full_traj.iloc[start_idx:end_idx].copy().reset_index(drop=True)
+
+        # Clamp simulated_hi so each machine stays in its designated zone
+        lo, hi_bound = HI_ZONE_BOUNDS.get(code, (0.0, 1.0))
+        slc["simulated_hi"] = slc["simulated_hi"].clip(lower=lo, upper=hi_bound)
+
+        slices[code] = slc
         logger.info("  %s: %s, %d kg, idx %d→%d (%d pts), HI %.3f→%.3f (target: %.3f)",
                     code, profile, load, start_idx, end_idx, len(slices[code]),
                     slices[code]["simulated_hi"].iloc[0],
@@ -367,9 +388,10 @@ async def start_simulator(speed: int = 60, reset: bool = False,
             for code, hi in INITIAL_HI.items():
                 uuid = manager.get_uuid(code)
                 if uuid:
+                    statut = 'operational' if hi >= 0.8 else ('degraded' if hi >= 0.3 else 'critical')
                     sb.table('machines').update({
                         'hi_courant': round(hi, 4),
-                        'statut': 'operational' if hi >= 0.6 else ('degraded' if hi >= 0.3 else 'critical'),
+                        'statut': statut,
                     }).eq('id', uuid).execute()
             logger.info("Simulator: reset HI values written to Supabase")
         except Exception as e:
