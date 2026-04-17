@@ -325,8 +325,25 @@ async def _replay_loop(speed: int, reset: bool = False):
                     "humidity_rh": float(row["humidity_rh"]),
                 }
                 manager.ingest(code, raw)
+
+                # Override engine HI with the physics-based simulated_hi.
+                # The engine scores sensor data independently and may disagree
+                # with the simulation's ground truth. For the demo we use the
+                # controlled simulated_hi so each machine stays in its zone.
+                sim_hi = float(row["simulated_hi"])
+                if code in manager.last_results and manager.last_results[code].get('hi_smooth') is not None:
+                    manager.last_results[code]['hi_smooth'] = sim_hi
+                    if sim_hi >= 0.8:
+                        manager.last_results[code]['zone'] = 'Excellent'
+                    elif sim_hi >= 0.6:
+                        manager.last_results[code]['zone'] = 'Good'
+                    elif sim_hi >= 0.3:
+                        manager.last_results[code]['zone'] = 'Degraded'
+                    else:
+                        manager.last_results[code]['zone'] = 'Critical'
+
                 _state["machines"][code]["current"] = tick
-                _state["machines"][code]["simulated_hi"] = float(row["simulated_hi"])
+                _state["machines"][code]["simulated_hi"] = sim_hi
 
             _state["tick"] = tick
 
