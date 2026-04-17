@@ -307,6 +307,20 @@ async def _replay_loop(speed: int, reset: bool = False):
                                      "profile": None, "load_kg": None}
                               for code, s in slices.items()}
 
+        # Pre-fill each engine's HI buffer with the first 60 simulated_hi values
+        # (sampled evenly from the first 10% of the trajectory) so that
+        # predict_rul() works immediately instead of waiting 60 minutes.
+        for code, traj_df in slices.items():
+            if code not in manager.engines:
+                manager._get_or_create(code)
+            engine = manager.engines[code]
+            hi_vals = traj_df["simulated_hi"].values
+            # Sample 60 points from the first 10% for a realistic HI history
+            prefill_end = max(60, len(hi_vals) // 10)
+            indices = np.linspace(0, prefill_end - 1, 60, dtype=int)
+            for idx in indices:
+                engine.buffer_hi_smooth.append(float(hi_vals[idx]))
+
         delay = 1.0 / speed
 
         for tick in range(max_len):
@@ -347,8 +361,8 @@ async def _replay_loop(speed: int, reset: bool = False):
                 # (hi_now, hi_mean, hi_std, hi_min, hi_slope).
                 if code in manager.engines:
                     engine = manager.engines[code]
-                    # Feed one HI value per simulated minute (every 60 ticks)
-                    if tick % 60 == 0:
+                    # Feed every 10 ticks (not every 60) so RUL updates quickly
+                    if tick % 10 == 0:
                         engine.buffer_hi_smooth.append(sim_hi)
 
                 _state["machines"][code]["current"] = tick
