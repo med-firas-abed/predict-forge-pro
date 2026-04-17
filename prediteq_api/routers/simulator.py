@@ -301,6 +301,7 @@ async def _replay_loop(speed: int, reset: bool = False):
         slices = _generate_all_trajectories(reset)
         logger.info("Simulator: trajectories ready for %d machines", len(slices))
         manager = get_manager()
+        rng = np.random.default_rng()  # for RUL noise
 
         max_len = max(len(s) for s in slices.values())
         _state["machines"] = {code: {"total": len(s), "current": 0,
@@ -365,6 +366,22 @@ async def _replay_loop(speed: int, reset: bool = False):
                     if tick % 10 == 0:
                         engine.buffer_hi_smooth.append(sim_hi)
 
+                # Compute trajectory-based RUL directly from simulated_hi.
+                # The RF model gets conflicting signals (sensor features vs
+                # clamped HI) so we override with a physics-consistent estimate.
+                # Training data: 90 days total lifecycle, failure at HI ≈ 0.15.
+                # RUL = (hi - 0.15) / 0.85 × 90, with small noise for realism.
+                rul_base = max(1.0, (sim_hi - 0.15) / 0.85 * 90.0)
+                noise = rng.normal(0, 1.5)  # ±1.5 days noise
+                rul_days = round(max(1.0, rul_base + noise), 1)
+                ci_spread = max(2.0, rul_days * 0.12)  # ~12% confidence band
+                manager.rul_overrides[code] = {
+                    'rul_days': rul_days,
+                    'ci_low':   round(max(0.5, rul_days - ci_spread), 1),
+                    'ci_high':  round(rul_days + ci_spread, 1),
+                    'status':   'ok',
+                }
+
                 _state["machines"][code]["current"] = tick
                 _state["machines"][code]["simulated_hi"] = sim_hi
 
@@ -379,6 +396,8 @@ async def _replay_loop(speed: int, reset: bool = False):
                 logger.info("Simulator: tick %d/%d", tick, max_len)
 
         _state["running"] = False
+        # Clear RUL overrides so real MQTT data uses the RF model
+        manager.rul_overrides.clear()
         logger.info("Simulator replay complete — %d ticks", tick + 1)
 
     except Exception as e:

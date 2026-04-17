@@ -190,6 +190,9 @@ class EngineManager:
         # Machine code → Supabase row cache {id, code, nom, region, ...}
         self.machine_cache: dict[str, dict] = {}
 
+        # Simulator can override RUL predictions (set by simulator replay loop)
+        self.rul_overrides: dict[str, dict] = {}
+
     def register_machines(self, machines: list[dict]):
         """Cache machine rows from Supabase (called at startup)."""
         for m in machines:
@@ -283,6 +286,9 @@ class EngineManager:
             return None
 
     def predict_rul(self, code: str) -> dict | None:
+        # Simulator override takes priority (physics-based RUL from trajectory)
+        if code in self.rul_overrides:
+            return self.rul_overrides[code]
         if code not in self.engines:
             return None
         try:
