@@ -342,6 +342,15 @@ async def _replay_loop(speed: int, reset: bool = False):
                     else:
                         manager.last_results[code]['zone'] = 'Critical'
 
+                # Also inject sim_hi into the engine's internal HI buffer
+                # so that predict_rul() uses the correct HI trajectory
+                # (hi_now, hi_mean, hi_std, hi_min, hi_slope).
+                if code in manager.engines:
+                    engine = manager.engines[code]
+                    # Feed one HI value per simulated minute (every 60 ticks)
+                    if tick % 60 == 0:
+                        engine.buffer_hi_smooth.append(sim_hi)
+
                 _state["machines"][code]["current"] = tick
                 _state["machines"][code]["simulated_hi"] = sim_hi
 
