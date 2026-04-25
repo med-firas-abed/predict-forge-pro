@@ -15,7 +15,7 @@ import sys
 import urllib.request
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config import TRAIN_RATIO
+from config import TRAIN_RATIO, CMAPSS_N_ESTIMATORS
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -277,9 +277,9 @@ if __name__ == '__main__':
     print(f"  Échantillons train : {len(X_rtr):,} | Val : {len(X_rval):,}")
 
     # ── Entraînement régresseur RF ──────────────────────────────────────
-    print("Entraînement du régresseur RandomForest RUL (500 arbres) ...")
+    print(f"Entraînement du régresseur RandomForest RUL ({CMAPSS_N_ESTIMATORS} arbres) ...")
     rf = RandomForestRegressor(
-        n_estimators=500,
+        n_estimators=CMAPSS_N_ESTIMATORS,
         max_features='sqrt',
         min_samples_leaf=5,
         random_state=42,

@@ -22,12 +22,13 @@ import { PendingPage } from "@/components/pages/PendingPage";
 import { ForgotPasswordPage } from "@/components/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/components/pages/ResetPasswordPage";
 import { PlannerPage } from "@/components/pages/PlannerPage";
+import { DiagnosticsPage } from "@/components/pages/DiagnosticsPage";
 import { ChatWidget } from "@/components/industrial/ChatWidget";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 
-type PageId = 'dashboard' | 'geo' | 'machines' | 'maintenance' | 'calendrier' | 'couts' | 'alertes' | 'rapport-ia' | 'planner' | 'seuils' | 'simulateur' | 'experiment' | 'administration' | 'admin-users';
+type PageId = 'dashboard' | 'geo' | 'machines' | 'maintenance' | 'calendrier' | 'couts' | 'alertes' | 'rapport-ia' | 'planner' | 'diagnostics' | 'seuils' | 'simulateur' | 'experiment' | 'administration' | 'admin-users';
 
 const PAGES: Record<PageId, React.ComponentType> = {
   dashboard: DashboardPage,
@@ -39,6 +40,7 @@ const PAGES: Record<PageId, React.ComponentType> = {
   alertes: AlertsPage,
   'rapport-ia': RapportIAPage,
   planner: PlannerPage,
+  diagnostics: DiagnosticsPage,
   seuils: SeuilsPage,
   simulateur: SimulatorPage,
   experiment: ExperimentPage,
@@ -56,6 +58,7 @@ const PAGE_META_KEYS: Record<PageId, { title: string; sub: string }> = {
   alertes: { title: "meta.alerts.title", sub: "meta.alerts.sub" },
   'rapport-ia': { title: "meta.rapportia.title", sub: "meta.rapportia.sub" },
   planner: { title: "meta.planner.title", sub: "meta.planner.sub" },
+  diagnostics: { title: "meta.diagnostics.title", sub: "meta.diagnostics.sub" },
   seuils: { title: "meta.seuils.title", sub: "meta.seuils.sub" },
   simulateur: { title: "meta.simulator.title", sub: "meta.simulator.sub" },
   experiment: { title: "meta.experiment.title", sub: "meta.experiment.sub" },
@@ -75,6 +78,7 @@ const routeToPage: Record<string, PageId> = {
   '/alertes': 'alertes',
   '/rapport-ia': 'rapport-ia',
   '/planner': 'planner',
+  '/diagnostics': 'diagnostics',
   '/seuils': 'seuils',
   '/simulateur': 'simulateur',
   '/experiment': 'experiment',
@@ -92,6 +96,7 @@ const pageToRoute: Record<PageId, string> = {
   alertes: '/alertes',
   'rapport-ia': '/rapport-ia',
   planner: '/planner',
+  diagnostics: '/diagnostics',
   seuils: '/seuils',
   simulateur: '/simulateur',
   experiment: '/experiment',

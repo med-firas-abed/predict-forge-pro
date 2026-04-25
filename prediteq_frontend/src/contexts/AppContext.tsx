@@ -40,6 +40,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "nav.admin": { fr: "Administration", en: "Administration", ar: "الإدارة" },
   "nav.rapportIA": { fr: "Rapport IA", en: "AI Report", ar: "تقرير الذكاء الاصطناعي" },
   "nav.planner": { fr: "Agent IA", en: "AI Planner", ar: "وكيل الذكاء الاصطناعي" },
+  "nav.diagnostics": { fr: "Diagnostics RUL", en: "RUL Diagnostics", ar: "تشخيصات العمر المتبقي" },
   "nav.seuils": { fr: "Seuils d'alertes", en: "Alert Thresholds", ar: "عتبات التنبيه" },
   "nav.simulator": { fr: "Simulateur", en: "Simulator", ar: "المحاكي" },
   "nav.experiment": { fr: "Expérience ESP32", en: "ESP32 Experiment", ar: "تجربة ESP32" },
@@ -254,6 +255,8 @@ const TR: Record<string, Record<Lang, string>> = {
   "meta.seuils.sub": { fr: "Configuration des seuils et notifications", en: "Threshold and notification configuration", ar: "إعدادات العتبات والإشعارات" },
   "meta.planner.title": { fr: "Agent IA", en: "AI Planner", ar: "وكيل الذكاء الاصطناعي" },
   "meta.planner.sub": { fr: "Planification autonome de la maintenance par intelligence artificielle", en: "AI-powered autonomous maintenance planning", ar: "تخطيط الصيانة الذاتي بالذكاء الاصطناعي" },
+  "meta.diagnostics.title": { fr: "Diagnostics & Intervalle RUL", en: "Diagnostics & RUL Interval", ar: "تشخيصات العمر المتبقي" },
+  "meta.diagnostics.sub": { fr: "Pronostic avec intervalle de confiance, diagnostics experts (ISO/IEC/IEEE) et explication SHAP", en: "Prognosis with confidence interval, expert diagnostics (ISO/IEC/IEEE), and SHAP explanation", ar: "تنبؤ مع فترة ثقة، تشخيصات خبراء (ISO/IEC/IEEE)، وشرح SHAP" },
 
   // Chat widget
   "chat.title": { fr: "Assistant PrediTeq", en: "PrediTeq Assistant", ar: "مساعد PrediTeq" },

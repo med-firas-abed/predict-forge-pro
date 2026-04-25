@@ -1,9 +1,9 @@
-import { Bell, ChevronLeft, ChevronRight, LayoutDashboard, Cpu, Wrench, Calendar, DollarSign, ShieldCheck, MapPin, Sparkles, SlidersHorizontal, Activity, LogOut, Brain, CircleDot, FileText } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, LayoutDashboard, Cpu, Wrench, Calendar, DollarSign, ShieldCheck, MapPin, Sparkles, SlidersHorizontal, Activity, LogOut, Brain, CircleDot, FileText, Stethoscope } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { UserRole, useAuth } from "@/contexts/AuthContext";
 import { useAlertes } from "@/hooks/useAlertes";
 
-type PageId = 'dashboard' | 'geo' | 'machines' | 'maintenance' | 'calendrier' | 'couts' | 'alertes' | 'rapport-ia' | 'planner' | 'seuils' | 'simulateur' | 'experiment' | 'administration' | 'admin-users';
+type PageId = 'dashboard' | 'geo' | 'machines' | 'maintenance' | 'calendrier' | 'couts' | 'alertes' | 'rapport-ia' | 'planner' | 'diagnostics' | 'seuils' | 'simulateur' | 'experiment' | 'administration' | 'admin-users';
 
 interface AppSidebarProps {
   currentPage: string;
@@ -31,6 +31,7 @@ export function AppSidebar({ currentPage, onNavigate, collapsed, onToggleCollaps
         ...(isAdmin ? [{ id: "machines" as PageId, labelKey: "nav.machines", icon: Cpu }] : []),
         { id: "rapport-ia" as PageId, labelKey: "nav.rapportIA", icon: FileText },
         { id: "planner" as PageId, labelKey: "nav.planner", icon: Brain },
+        { id: "diagnostics" as PageId, labelKey: "nav.diagnostics", icon: Stethoscope },
         { id: "calendrier", labelKey: "nav.calendar", icon: Calendar },
         { id: "maintenance", labelKey: "nav.maintenance", icon: Wrench },
         ...(isAdmin ? [{ id: "couts" as PageId, labelKey: "nav.costs", icon: DollarSign }] : []),

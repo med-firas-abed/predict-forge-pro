@@ -115,7 +115,32 @@ def engineer_features(df):
     f11 = s_humid.rolling(60, min_periods=1).std().fillna(0).values
 
     # 12. corr_t_p — Pearson r(T, P) sur fenêtre glissante 60 min (3600s)
-    f12 = s_temp.rolling(3600, min_periods=60).corr(s_power).fillna(0).values
+    # Certaines versions de pandas retournent une série de longueur irrégulière
+    # lorsqu'une fenêtre présente variance nulle (ex. phase pause prolongée ou
+    # température stable) : on reindexe explicitement sur 0..n-1 puis on
+    # remplace les NaN par 0 (hypothèse neutre = pas de corrélation linéaire).
+    corr_raw = s_temp.rolling(3600, min_periods=60).corr(s_power)
+    f12 = (
+        pd.Series(corr_raw.to_numpy(), index=range(len(corr_raw)))
+        .reindex(range(n))
+        .fillna(0)
+        .to_numpy()
+    )
+
+    # Garde-fou : tous les vecteurs doivent avoir la même longueur n.
+    feats = {
+        'rms_mms': f1, 'drms_dt': f2, 'rms_variability': f3,
+        'p_mean_kw': f4, 'p_rms_kw': f5, 'dp_dt': f6,
+        'e_cycle_kwh': f7, 'duration_ratio': f8,
+        't_mean_c': f9, 'dt_dt': f10, 'hr_std': f11, 'corr_t_p': f12,
+    }
+    for name, arr in feats.items():
+        if len(arr) != n:
+            # Normalisation défensive : tronquer ou padder avec 0.
+            if len(arr) > n:
+                feats[name] = np.asarray(arr)[:n]
+            else:
+                feats[name] = np.concatenate([np.asarray(arr), np.zeros(n - len(arr))])
 
     feat_df = pd.DataFrame({
         'trajectory_id':  df['trajectory_id'].values,
@@ -123,18 +148,7 @@ def engineer_features(df):
         't_seconds':      t,
         'simulated_hi':   df['simulated_hi'].values,
         'phase':          phase,
-        'rms_mms':        f1,
-        'drms_dt':        f2,
-        'rms_variability':f3,
-        'p_mean_kw':      f4,
-        'p_rms_kw':       f5,
-        'dp_dt':          f6,
-        'e_cycle_kwh':    f7,
-        'duration_ratio': f8,
-        't_mean_c':       f9,
-        'dt_dt':          f10,
-        'hr_std':         f11,
-        'corr_t_p':       f12,
+        **feats,
     })
     return feat_df
 

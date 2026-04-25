@@ -37,3 +37,17 @@ npm-debug.log*
 
 # ─── ML plots (regenerable) ──────────────────────────────────────────────────
 prediteq_ml/outputs/plots/*.png
+
+# ─── PFE deliverables (kept local, not for deploy) ───────────────────────────
+PrediTeq_Dossier_Jury.pdf
+PrediTeq_Guide_Encadrant.docx
+PrediTeq_Soutenance_v3.pptx
+final_report/
+aroteq_reports_screens/
+
+# ─── Heavy non-app artifacts (would bloat / break builds) ────────────────────
+rapport_firas/
+rapport_firas.zip
+external-skills/
+.opencode/
+references/

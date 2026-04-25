@@ -210,6 +210,7 @@ from routers.explain import router as explain_router
 from routers.simulator import router as simulator_router
 from routers.chat import router as chat_router
 from routers.planner import router as planner_router
+from routers.diagnostics_rul import router as diagnostics_rul_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -221,3 +222,4 @@ app.include_router(explain_router)
 app.include_router(simulator_router)
 app.include_router(chat_router)
 app.include_router(planner_router)
+app.include_router(diagnostics_rul_router)

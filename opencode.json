@@ -1,0 +1,64 @@
+﻿{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "azure/gpt-5.4-1",
+  "skills": {
+    "paths": [
+      "./external-skills/anthropic-skills/skills",
+      "./external-skills/claude-skills/engineering-team",
+      "./external-skills/claude-skills/engineering",
+      "./external-skills/claude-skills/product-team",
+      "./external-skills/claude-skills/marketing-skill",
+      "./external-skills/claude-skills/project-management",
+      "./external-skills/claude-skills/ra-qm-team",
+      "./external-skills/claude-skills/c-level-advisor",
+      "./external-skills/claude-skills/business-growth",
+      "./external-skills/claude-skills/finance"
+    ]
+  },
+  "provider": {
+    "azure": {
+      "options": {
+        "resourceName": "admin-3342-resource",
+        "apiKey": "4yxFtWb7giPdNKiD7xP0jPYVQbUAt112k1P7U3WKPIwMpgx2A5FzJQQJ99BJACfhMk5XJ3w3AAAAACOGWDkz"
+      },
+      "models": {
+        "gpt-5.4-1": {
+          "id": "gpt-5.4-1",
+          "name": "GPT-5.4-1 (Azure deployment, xhigh)",
+          "options": {
+            "reasoningEffort": "xhigh"
+          }
+        },
+        "gpt-5.3-codex": {
+          "id": "gpt-5.3-codex",
+          "name": "GPT-5.3-Codex (Azure deployment, xhigh)",
+          "options": {
+            "reasoningEffort": "xhigh"
+          }
+        },
+        "gpt-5.4-pro": {
+          "id": "gpt-5.4-pro",
+          "name": "GPT-5.4-Pro (Azure deployment, xhigh)",
+          "options": {
+            "reasoningEffort": "xhigh"
+          }
+        }
+      },
+      "env": ["AZURE_RESOURCE_NAME", "AZURE_OPENAI_API_KEY"]
+    },
+    "azure-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Azure OpenAI Chat Completions",
+      "options": {
+        "baseURL": "https://admin-3342-resource.openai.azure.com/openai/v1",
+        "apiKey": "4yxFtWb7giPdNKiD7xP0jPYVQbUAt112k1P7U3WKPIwMpgx2A5FzJQQJ99BJACfhMk5XJ3w3AAAAACOGWDkz"
+      },
+      "models": {
+        "Kimi-K2.6": {
+          "id": "Kimi-K2.6",
+          "name": "Kimi-K2.6 (Chat Completions)"
+        }
+      }
+    }
+  }
+}
