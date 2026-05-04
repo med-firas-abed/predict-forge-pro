@@ -6,7 +6,7 @@ statistical analysis and rule-based recommendations.
 
 Supports:
   - Per-machine or all-machines reports
-  - Weekly / monthly periods
+  - 7 / 15 / 30-day periods
   - FR / EN / AR languages
 """
 
@@ -14,18 +14,22 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Literal
 
+from core.decision_snapshot import build_machine_decision_snapshot
 from core.supabase_client import get_supabase
+from ml.engine_manager import get_manager
 from routers.seuils import get_thresholds
 
 logger = logging.getLogger(__name__)
 
 Lang = Literal["fr", "en", "ar"]
-Period = Literal["weekly", "monthly"]
+Period = Literal["7d", "15d", "30d"]
+Audience = Literal["jury", "technician", "dual"]
 
 
 # ── i18n helpers ──────────────────────────────────────────────────────────────
 
 _T = {
+    "title_report":     {"fr": "Rapport IA", "en": "AI Report", "ar": "تقرير الذكاء الاصطناعي"},
     "title_weekly":     {"fr": "Rapport Hebdomadaire", "en": "Weekly Report", "ar": "تقرير أسبوعي"},
     "title_monthly":    {"fr": "Rapport Mensuel", "en": "Monthly Report", "ar": "تقرير شهري"},
     "generated":        {"fr": "Généré le", "en": "Generated on", "ar": "تم الإنشاء في"},
@@ -84,13 +88,30 @@ def _t(key: str, lang: Lang) -> str:
 
 # ── Data fetching ─────────────────────────────────────────────────────────────
 
+_PERIOD_DAYS: dict[Period, int] = {
+    "7d": 7,
+    "15d": 15,
+    "30d": 30,
+}
+
+
+def _period_days(period: Period) -> int:
+    return _PERIOD_DAYS[period]
+
+
+def _period_label(period: Period, lang: Lang) -> str:
+    days = _period_days(period)
+    if lang == "fr":
+        return f"{days} jours"
+    if lang == "en":
+        return f"{days} days"
+    return f"{days} يوما"
+
+
 def _get_period_bounds(period: Period) -> tuple[str, str]:
     """Return (start_iso, end_iso) for the given period."""
     now = datetime.now(timezone.utc)
-    if period == "weekly":
-        start = now - timedelta(days=7)
-    else:
-        start = now - timedelta(days=30)
+    start = now - timedelta(days=_period_days(period))
     return start.isoformat(), now.isoformat()
 
 
@@ -220,12 +241,208 @@ def _hi_trend_label(delta: float, lang: Lang) -> str:
     return _t("stable", lang)
 
 
+def _audience_label(audience: Audience, lang: Lang) -> str:
+    labels = {
+        "jury": {"fr": "Vue jury", "en": "Jury view", "ar": "Jury view"},
+        "technician": {"fr": "Vue technicien", "en": "Technician view", "ar": "Technician view"},
+        "dual": {"fr": "Vue double", "en": "Dual view", "ar": "Dual view"},
+    }
+    return labels[audience][lang]
+
+
+def _effective_status(
+    machine: dict,
+    hi_stats: dict,
+    rul_stats: dict,
+    thresholds: dict,
+    decision: dict | None = None,
+) -> str:
+    if decision and decision.get("status") in {"ok", "degraded", "critical", "maintenance"}:
+        return str(decision["status"])
+
+    status = str(machine.get("statut") or "").lower()
+    if status in {"critical", "degraded", "ok", "maintenance"}:
+        return status
+
+    latest_rul = rul_stats.get("latest")
+    if latest_rul is not None and latest_rul < thresholds.get("rul_critical_days", 7):
+        return "critical"
+
+    latest_hi = hi_stats.get("latest")
+    if latest_hi is not None:
+        if latest_hi < thresholds.get("hi_critical", 0.3):
+            return "critical"
+        if latest_hi < thresholds.get("hi_surveillance", 0.6):
+            return "degraded"
+        return "ok"
+
+    return "unknown"
+
+
+def _simple_machine_brief(
+    machine: dict,
+    hi_stats: dict,
+    rul_stats: dict,
+    alert_stats: dict,
+    thresholds: dict,
+    lang: Lang,
+    decision: dict | None = None,
+) -> dict[str, str]:
+    if decision:
+        state = decision.get("summary") or ""
+        impact = decision.get("impact") or ""
+        action = decision.get("recommended_action") or ""
+        evidence = "; ".join(decision.get("evidence") or [])
+        trust = decision.get("trust_note") or ""
+        return {
+            "state": state,
+            "impact": impact,
+            "action": action,
+            "evidence": evidence,
+            "trust": trust,
+        }
+
+    status = _effective_status(machine, hi_stats, rul_stats, thresholds)
+    latest_hi = hi_stats.get("latest")
+    latest_rul = rul_stats.get("latest")
+    total_alerts = alert_stats.get("total", 0)
+
+    if status == "critical":
+        state = {
+            "fr": "La machine montre une dégradation avancée et la marge restante devient faible.",
+            "en": "The machine shows advanced degradation and the remaining margin is low.",
+            "ar": "The machine shows advanced degradation and the remaining margin is low.",
+        }[lang]
+        impact = {
+            "fr": "Le risque d'arrêt ou de perturbation devient concret si rien n'est planifié rapidement.",
+            "en": "The risk of stoppage or disruption becomes tangible if nothing is planned quickly.",
+            "ar": "The risk of stoppage or disruption becomes tangible if nothing is planned quickly.",
+        }[lang]
+        action = {
+            "fr": "Prioriser une intervention courte, vérifier les organes critiques et préparer les pièces.",
+            "en": "Prioritize a short intervention, inspect critical assemblies, and prepare spare parts.",
+            "ar": "Prioritize a short intervention, inspect critical assemblies, and prepare spare parts.",
+        }[lang]
+    elif status == "degraded":
+        state = {
+            "fr": "La machine reste opérationnelle, mais les signaux montrent une usure ou une sollicitation à surveiller.",
+            "en": "The machine remains operational, but the signals show wear or stress that deserves attention.",
+            "ar": "The machine remains operational, but the signals show wear or stress that deserves attention.",
+        }[lang]
+        impact = {
+            "fr": "Il n'y a pas forcément d'urgence immédiate, mais la marge de confort diminue.",
+            "en": "There is not necessarily an immediate emergency, but the safety margin is shrinking.",
+            "ar": "There is not necessarily an immediate emergency, but the safety margin is shrinking.",
+        }[lang]
+        action = {
+            "fr": "Planifier une maintenance préventive ciblée avant que la situation ne glisse vers le critique.",
+            "en": "Plan targeted preventive maintenance before the situation drifts toward critical.",
+            "ar": "Plan targeted preventive maintenance before the situation drifts toward critical.",
+        }[lang]
+    elif status == "maintenance":
+        state = {
+            "fr": "La machine est déjà dans une phase de maintenance ou de vérification.",
+            "en": "The machine is already in a maintenance or verification phase.",
+            "ar": "The machine is already in a maintenance or verification phase.",
+        }[lang]
+        impact = {
+            "fr": "L'enjeu principal est de confirmer le retour à un fonctionnement stable après intervention.",
+            "en": "The main challenge is to confirm a stable return to service after intervention.",
+            "ar": "The main challenge is to confirm a stable return to service after intervention.",
+        }[lang]
+        action = {
+            "fr": "Valider les contrôles de remise en service et suivre les premiers cycles.",
+            "en": "Validate return-to-service checks and monitor the first operating cycles.",
+            "ar": "Validate return-to-service checks and monitor the first operating cycles.",
+        }[lang]
+    else:
+        state = {
+            "fr": "La machine évolue dans une zone saine, sans signal fort de dégradation.",
+            "en": "The machine stays in a healthy zone without a strong degradation signal.",
+            "ar": "The machine stays in a healthy zone without a strong degradation signal.",
+        }[lang]
+        impact = {
+            "fr": "Aucun arrêt à court terme n'est suggéré par les données récentes.",
+            "en": "No short-term stoppage is suggested by the recent data.",
+            "ar": "No short-term stoppage is suggested by the recent data.",
+        }[lang]
+        action = {
+            "fr": "Conserver la surveillance normale et vérifier seulement les routines planifiées.",
+            "en": "Keep normal monitoring and only review planned routines.",
+            "ar": "Keep normal monitoring and only review planned routines.",
+        }[lang]
+
+    evidence_parts: list[str] = []
+    if latest_hi is not None:
+        if lang == "fr":
+            evidence_parts.append(f"HI actuel {latest_hi * 100:.1f}%")
+        elif lang == "en":
+            evidence_parts.append(f"Current HI {latest_hi * 100:.1f}%")
+        else:
+            evidence_parts.append(f"Current HI {latest_hi * 100:.1f}%")
+
+    if latest_rul is not None:
+        if lang == "fr":
+            evidence_parts.append(f"RUL estimé {latest_rul:.1f} jours")
+        elif lang == "en":
+            evidence_parts.append(f"Estimated RUL {latest_rul:.1f} days")
+        else:
+            evidence_parts.append(f"Estimated RUL {latest_rul:.1f} days")
+    elif latest_hi is not None and latest_hi >= thresholds.get("hi_surveillance", 0.6):
+        if lang == "fr":
+            evidence_parts.append("pas de RUL chiffré forcé tant que la machine reste saine")
+        elif lang == "en":
+            evidence_parts.append("no forced numeric RUL while the machine remains healthy")
+        else:
+            evidence_parts.append("no forced numeric RUL while the machine remains healthy")
+
+    if total_alerts > 0:
+        if lang == "fr":
+            evidence_parts.append(f"{total_alerts} alerte(s) sur la période")
+        elif lang == "en":
+            evidence_parts.append(f"{total_alerts} alert(s) during the period")
+        else:
+            evidence_parts.append(f"{total_alerts} alert(s) during the period")
+    else:
+        if lang == "fr":
+            evidence_parts.append("aucune alerte récente")
+        elif lang == "en":
+            evidence_parts.append("no recent alerts")
+        else:
+            evidence_parts.append("no recent alerts")
+
+    if hi_stats:
+        trend = _hi_trend_label(hi_stats.get("delta", 0), lang)
+        if lang == "fr":
+            trust = f"Lecture appuyée par la tendance HI : {trend}."
+        elif lang == "en":
+            trust = f"Assessment supported by the HI trend: {trend}."
+        else:
+            trust = f"Assessment supported by the HI trend: {trend}."
+    else:
+        trust = {
+            "fr": "Lecture prudente : l'historique récent est limité.",
+            "en": "Conservative reading: recent history is limited.",
+            "ar": "Conservative reading: recent history is limited.",
+        }[lang]
+
+    return {
+        "status": status,
+        "state": state,
+        "impact": impact,
+        "action": action,
+        "evidence": "; ".join(evidence_parts),
+        "trust": trust,
+    }
+
+
 # ── Report generation ─────────────────────────────────────────────────────────
 
 def generate_report(
     machine_code: str | None = None,
-    period: Period = "weekly",
+    period: Period = "7d",
     lang: Lang = "fr",
+    audience: Audience = "dual",
 ) -> str:
     """
     Generate a structured Markdown report from Supabase data.
@@ -238,7 +455,7 @@ def generate_report(
     if not machines:
         return _t("no_data", lang)
 
-    title = _t(f"title_{period}", lang)
+    title = f"{_t('title_report', lang)} - {_period_label(period, lang)} - {_audience_label(audience, lang)}"
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     try:
         thresholds = get_thresholds()
@@ -255,6 +472,11 @@ def generate_report(
     _a("---\n")
 
     # Gather per-machine data
+    try:
+        manager = get_manager()
+    except Exception:
+        manager = None
+
     all_machine_data = []
     total_alerts_all = 0
     machines_critical = []
@@ -272,9 +494,22 @@ def generate_report(
         hi_stats = _compute_hi_stats(hi_history)
         alert_stats = _compute_alert_stats(alerts)
         rul_stats = _compute_rul_stats(rul_preds)
+        decision = None
+        if manager is not None:
+            try:
+                decision = build_machine_decision_snapshot(
+                    m,
+                    manager,
+                    alerts_24h=alert_stats["total"],
+                    open_tasks=sum(1 for task in tasks if task.get("statut") in ("planifiee", "en_cours")),
+                )
+            except Exception as exc:
+                logger.warning("Report decision snapshot failed for %s: %s", code, exc)
+                decision = None
+
+        statut = _effective_status(m, hi_stats, rul_stats, thresholds, decision=decision)
 
         total_alerts_all += alert_stats['total']
-        statut = m.get('statut', 'unknown')
         if statut == 'critical':
             machines_critical.append(code)
         elif statut == 'degraded':
@@ -287,6 +522,8 @@ def generate_report(
             "rul_stats": rul_stats,
             "tasks": tasks,
             "costs": costs,
+            "status": statut,
+            "decision": decision,
         })
 
     # ── Executive Summary ─────────────────────────────────────────────────
@@ -296,7 +533,7 @@ def generate_report(
 
     if lang == "fr":
         _a(f"Ce rapport couvre **{total_machines} machine(s)** sur la période "
-           f"{'des 7 derniers jours' if period == 'weekly' else 'des 30 derniers jours'}.\n")
+           f"des {_period_days(period)} derniers jours.\n")
         _a(f"- 🟢 **{ok_count}** machine(s) opérationnelle(s)")
         _a(f"- 🟡 **{len(machines_degraded)}** machine(s) dégradée(s)" +
            (f" ({', '.join(machines_degraded)})" if machines_degraded else ""))
@@ -305,7 +542,7 @@ def generate_report(
         _a(f"- 🔔 **{total_alerts_all}** alerte(s) totale(s) sur la période\n")
     elif lang == "en":
         _a(f"This report covers **{total_machines} machine(s)** over the "
-           f"{'past 7 days' if period == 'weekly' else 'past 30 days'}.\n")
+           f"past {_period_days(period)} days.\n")
         _a(f"- 🟢 **{ok_count}** operational machine(s)")
         _a(f"- 🟡 **{len(machines_degraded)}** degraded machine(s)" +
            (f" ({', '.join(machines_degraded)})" if machines_degraded else ""))
@@ -314,7 +551,7 @@ def generate_report(
         _a(f"- 🔔 **{total_alerts_all}** total alert(s) in this period\n")
     else:
         _a(f"يغطي هذا التقرير **{total_machines} آلة** خلال "
-           f"{'الأيام السبعة الماضية' if period == 'weekly' else 'الثلاثين يوماً الماضية'}.\n")
+           f"آخر {_period_days(period)} يوما.\n")
         _a(f"- 🟢 **{ok_count}** آلة تعمل بشكل جيد")
         _a(f"- 🟡 **{len(machines_degraded)}** آلة متدهورة" +
            (f" ({', '.join(machines_degraded)})" if machines_degraded else ""))
@@ -325,19 +562,73 @@ def generate_report(
     _a("---\n")
 
     # ── Per-machine sections ──────────────────────────────────────────────
-    for idx, md in enumerate(all_machine_data, start=1):
+    section_cursor = 2
+
+    if audience in ("jury", "dual"):
+        simple_title = {
+            "fr": "Lecture simple par machine",
+            "en": "Simple reading by machine",
+            "ar": "Simple reading by machine",
+        }[lang]
+        _a(f"## {section_cursor}. {simple_title}\n")
+        section_cursor += 1
+
+        for md in all_machine_data:
+            m = md["machine"]
+            code = m['code']
+            nom = m.get('nom', code)
+            brief = _simple_machine_brief(
+                machine=m,
+                hi_stats=md["hi_stats"],
+                rul_stats=md["rul_stats"],
+                alert_stats=md["alert_stats"],
+                thresholds=thresholds,
+                lang=lang,
+                decision=md.get("decision"),
+            )
+            _a(f"### {code} - {nom}\n")
+            if m.get("region"):
+                _a(f"- {_t('location', lang)}: **{m.get('region')}**")
+            _a(f"- {_t('status', lang)}: **{brief['state']}**")
+            if lang == "fr":
+                _a(f"- Impact exploitation: {brief['impact']}")
+                _a(f"- Action recommandée: {brief['action']}")
+                _a(f"- Indices observés: {brief['evidence']}")
+                _a(f"- Lecture de confiance: {brief['trust']}")
+            else:
+                _a(f"- Operational impact: {brief['impact']}")
+                _a(f"- Recommended action: {brief['action']}")
+                _a(f"- Observed evidence: {brief['evidence']}")
+                _a(f"- Confidence note: {brief['trust']}")
+            _a("")
+
+        _a("---\n")
+
+    if audience == "dual":
+        appendix_title = {
+            "fr": "Annexe technique",
+            "en": "Technical appendix",
+            "ar": "Technical appendix",
+        }[lang]
+        _a(f"## {section_cursor}. {appendix_title}\n")
+        section_cursor += 1
+
+    technical_machine_data = all_machine_data if audience in ("technician", "dual") else []
+
+    for md in technical_machine_data:
         m = md["machine"]
         code = m['code']
         nom = m.get('nom', code)
         region = m.get('region', '')
-        statut = m.get('statut', 'unknown')
+        statut = md["status"]
         hi_stats = md["hi_stats"]
         alert_stats = md["alert_stats"]
         rul_stats = md["rul_stats"]
         tasks = md["tasks"]
         costs = md["costs"]
 
-        section_num = idx + 1
+        section_num = section_cursor
+        section_cursor += 1
         _a(f"## {section_num}. {_t('machine', lang)}: {code} — {nom}\n")
         _a(f"**{_t('location', lang)}**: {region} | **{_t('status', lang)}**: `{statut}`\n")
 
@@ -433,19 +724,23 @@ def generate_report(
         _a("---\n")
 
     # ── Recommendations ───────────────────────────────────────────────────
-    section_num = len(all_machine_data) + 2
-    _a(f"## {section_num}. {_t('recommendations', lang)}\n")
+    _a(f"## {section_cursor}. {_t('recommendations', lang)}\n")
 
     rec_idx = 1
     for md in all_machine_data:
         m = md["machine"]
         code = m['code']
-        statut = m.get('statut', 'unknown')
+        statut = md["status"]
+        decision = md.get("decision") or {}
         hi_stats = md["hi_stats"]
         rul_stats = md["rul_stats"]
         alert_stats = md["alert_stats"]
 
         _a(f"### {code}\n")
+
+        if decision.get("recommended_action"):
+            _a(f"{rec_idx}. {decision.get('recommended_action')}")
+            rec_idx += 1
 
         if statut == 'critical':
             _a(f"{rec_idx}. 🔴 {_t('rec_critical', lang)}")

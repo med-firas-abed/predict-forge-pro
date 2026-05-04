@@ -1,25 +1,42 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Download, Plus, Pencil, Trash2, Search, X, Save, BarChart3 } from "lucide-react";
+import { toast } from "sonner";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Machine, STATUS_CONFIG } from "@/data/machines";
-import { MachineCard } from "@/components/industrial/MachineCard";
 import { MachineModal } from "@/components/industrial/MachineModal";
 import { useMachines } from "@/hooks/useMachines";
-import { Download, Plus, Pencil, Trash2, X, Save } from "lucide-react";
-import { toast } from "sonner";
+import {
+  formatMachineFloorLabel,
+  formatMachineModelValue,
+} from "@/lib/machinePresentation";
 
 const EMPTY_MACHINE: Machine = {
-  id: "", name: "", loc: "", city: "", lat: 36.8, lon: 10.18,
-  hi: 0, rul: null, rulci: null, status: "ok",
-  vib: 0, curr: 0, temp: 0, anom: 0, cycles: 0,
-  model: "", floors: 0, last: new Date().toISOString().slice(0, 10),
+  id: "",
+  name: "",
+  loc: "",
+  city: "",
+  lat: 36.8,
+  lon: 10.18,
+  hi: 0,
+  rul: null,
+  rulci: null,
+  status: "ok",
+  vib: 0,
+  curr: 0,
+  temp: 0,
+  anom: 0,
+  cycles: 0,
+  model: "",
+  floors: 0,
+  last: new Date().toISOString().slice(0, 10),
 };
 
 interface MachineFormProps {
   machine: Machine;
   isNew: boolean;
   existingIds: string[];
-  onSave: (m: Machine) => void;
+  onSave: (machine: Machine) => void;
   onCancel: () => void;
 }
 
@@ -28,54 +45,132 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
   const [form, setForm] = useState<Machine>({ ...machine });
   const [error, setError] = useState("");
 
-  const set = (key: keyof Machine, value: any) => setForm(prev => ({ ...prev, [key]: value }));
+  const setField = <K extends keyof Machine>(key: K, value: Machine[K]) =>
+    setForm((previous) => ({ ...previous, [key]: value }));
+
+  const inputClassName =
+    "w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30";
+  const labelClassName = "mb-1.5 block text-xs font-semibold text-muted-foreground";
 
   const handleSave = () => {
-    if (!form.id.trim()) { setError(t("mach.idRequired")); return; }
-    if (isNew && existingIds.includes(form.id)) { setError(t("mach.idExists")); return; }
+    if (!form.id.trim()) {
+      setError(t("mach.idRequired"));
+      return;
+    }
+    if (isNew && existingIds.includes(form.id)) {
+      setError(t("mach.idExists"));
+      return;
+    }
     onSave(form);
   };
 
-  const inputCls = "w-full bg-surface-3 border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground";
-  const labelCls = "text-xs font-semibold text-muted-foreground mb-1.5 block";
-
   return (
-    <div className="bg-card border border-border rounded-lg p-6 animate-fade-in">
-      <div className="flex items-center justify-between mb-5">
-        <div className="section-title">{isNew ? t("mach.addMachine") : `${t("mach.edit")} — ${machine.id}`}</div>
-        <button onClick={onCancel} className="w-8 h-8 rounded-lg bg-surface-3 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+    <div className="rounded-lg border border-border bg-card p-6 animate-fade-in">
+      <div className="mb-5 flex items-center justify-between">
+        <div className="section-title">{isNew ? "Ajouter une machine" : `Modifier ${machine.id}`}</div>
+        <button
+          onClick={onCancel}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-3 text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
-      {error && <div className="text-destructive text-sm font-semibold mb-4 bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2.5">{error}</div>}
+      {error && (
+        <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-2.5 text-sm font-semibold text-destructive">
+          {error}
+        </div>
+      )}
 
-      {/* Machine Info */}
-      <div className="section-title mb-3 text-xs">{t("mach.machineInfo")}</div>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div><label className={labelCls}>{t("mach.id")}</label><input className={inputCls} value={form.id} onChange={e => set("id", e.target.value)} disabled={!isNew} /></div>
-        <div><label className={labelCls}>{t("mach.client")}</label><input className={inputCls} value={form.name} onChange={e => set("name", e.target.value)} /></div>
-        <div><label className={labelCls}>{t("mach.city")}</label><input className={inputCls} value={form.city} onChange={e => set("city", e.target.value)} /></div>
-        <div><label className={labelCls}>{t("mach.model")}</label><input className={inputCls} value={form.model} onChange={e => set("model", e.target.value)} /></div>
-        <div><label className={labelCls}>{t("mach.floors")}</label><input className={inputCls} type="number" value={form.floors} onChange={e => set("floors", +e.target.value)} /></div>
-        <div><label className={labelCls}>{t("mach.status")}</label>
-          <select className={inputCls} value={form.status} onChange={e => set("status", e.target.value)}>
-            {(["ok", "degraded", "critical", "maintenance"] as const).map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
+      <div className="mb-3 section-title text-xs">Informations machine</div>
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div>
+          <label className={labelClassName}>ID machine</label>
+          <input
+            className={inputClassName}
+            value={form.id}
+            onChange={(event) => setField("id", event.target.value)}
+            disabled={!isNew}
+          />
+        </div>
+        <div>
+          <label className={labelClassName}>Nom / client</label>
+          <input className={inputClassName} value={form.name} onChange={(event) => setField("name", event.target.value)} />
+        </div>
+        <div>
+          <label className={labelClassName}>Ville</label>
+          <input className={inputClassName} value={form.city} onChange={(event) => setField("city", event.target.value)} />
+        </div>
+        <div>
+          <label className={labelClassName}>Modele</label>
+          <input className={inputClassName} value={form.model} onChange={(event) => setField("model", event.target.value)} />
+        </div>
+        <div>
+          <label className={labelClassName}>Etages</label>
+          <input
+            className={inputClassName}
+            type="number"
+            value={form.floors}
+            onChange={(event) => setField("floors", Number(event.target.value))}
+          />
+        </div>
+        <div>
+          <label className={labelClassName}>Statut</label>
+          <select
+            className={inputClassName}
+            value={form.status}
+            onChange={(event) => setField("status", event.target.value as Machine["status"])}
+          >
+            {(["ok", "degraded", "critical", "maintenance"] as const).map((status) => (
+              <option key={status} value={status}>
+                {STATUS_CONFIG[status].label}
+              </option>
+            ))}
           </select>
         </div>
-        <div><label className={labelCls}>{t("mach.location")}</label><input className={inputCls} value={form.loc} onChange={e => set("loc", e.target.value)} /></div>
+        <div className="col-span-2 lg:col-span-3">
+          <label className={labelClassName}>Emplacement</label>
+          <input className={inputClassName} value={form.loc} onChange={(event) => setField("loc", event.target.value)} />
+        </div>
       </div>
 
-      {/* GPS */}
-      <div className="section-title mb-3 text-xs">{t("mach.gpsLocation")}</div>
-      <div className="grid grid-cols-2 gap-4 mb-2">
-        <div><label className={labelCls}>{t("mach.latitude")}</label><input className={inputCls} type="number" step="0.001" value={form.lat} onChange={e => set("lat", +e.target.value)} /></div>
-        <div><label className={labelCls}>{t("mach.longitude")}</label><input className={inputCls} type="number" step="0.001" value={form.lon} onChange={e => set("lon", +e.target.value)} /></div>
+      <div className="mb-3 section-title text-xs">Localisation GPS</div>
+      <div className="mb-6 grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelClassName}>Latitude</label>
+          <input
+            className={inputClassName}
+            type="number"
+            step="0.001"
+            value={form.lat}
+            onChange={(event) => setField("lat", Number(event.target.value))}
+          />
+        </div>
+        <div>
+          <label className={labelClassName}>Longitude</label>
+          <input
+            className={inputClassName}
+            type="number"
+            step="0.001"
+            value={form.lon}
+            onChange={(event) => setField("lon", Number(event.target.value))}
+          />
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground mb-6">{t("mach.gpsTipClean")}</p>
 
       <div className="flex justify-end gap-3">
-        <button onClick={onCancel} className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-border text-secondary-foreground hover:bg-surface-3">{t("mach.cancel")}</button>
-        <button onClick={handleSave} className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary to-teal text-primary-foreground shadow-lg shadow-primary/20">
-          <Save className="w-4 h-4" /> {t("mach.save")}
+        <button
+          onClick={onCancel}
+          className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-secondary-foreground hover:bg-surface-3"
+        >
+          Annuler
+        </button>
+        <button
+          onClick={handleSave}
+          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-teal px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20"
+        >
+          <Save className="h-4 w-4" />
+          Enregistrer
         </button>
       </div>
     </div>
@@ -83,129 +178,244 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
 }
 
 export function MachinesPage() {
-  const { t } = useApp();
   const { currentUser } = useAuth();
-  const { machines, addMachine: addMachineMut, updateMachine: updateMachineMut, deleteMachine: deleteMachineMut } = useMachines(currentUser?.machineId);
-  const addMachine = (m: Partial<Machine>) => addMachineMut.mutate(m);
-  const updateMachine = (id: string, m: Partial<Machine>) => updateMachineMut.mutate({ id, updates: m });
-  const deleteMachine = (id: string) => deleteMachineMut.mutate(id);
+  const { machines, addMachine: addMachineMut, updateMachine: updateMachineMut, deleteMachine: deleteMachineMut } =
+    useMachines(currentUser?.machineId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Machine["status"] | "all">("all");
 
-  const selectedMachine = machines.find(m => m.id === selectedId) || null;
+  const selectedMachine = machines.find((machine) => machine.id === selectedId) || null;
+
+  const filteredMachines = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return machines.filter((machine) => {
+      if (statusFilter !== "all" && machine.status !== statusFilter) return false;
+      if (!normalizedQuery) return true;
+      return (
+        machine.id.toLowerCase().includes(normalizedQuery) ||
+        machine.name.toLowerCase().includes(normalizedQuery) ||
+        machine.city.toLowerCase().includes(normalizedQuery) ||
+        machine.loc.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [machines, query, statusFilter]);
+
+  const exportCsv = () => {
+    const escapeCsv = (value: unknown) => {
+      const rendered = String(value ?? "");
+      return rendered.includes(",") || rendered.includes('"') || rendered.includes("\n")
+        ? `"${rendered.replace(/"/g, '""')}"`
+        : rendered;
+    };
+
+    const header = "Code,Nom,Ville,Statut,HI,Modèle,Emplacement,Dernière MAJ\n";
+    const csv = filteredMachines
+      .map((machine) =>
+        [
+          machine.id,
+          machine.name,
+          machine.city,
+          machine.status,
+          machine.hi,
+          machine.model,
+          machine.loc,
+          machine.last,
+        ]
+          .map(escapeCsv)
+          .join(","),
+      )
+      .join("\n");
+
+    const blob = new Blob(["\uFEFF" + header + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `machines_${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success("Export CSV pret");
+  };
 
   if (showAdd) {
     return (
       <MachineForm
         machine={EMPTY_MACHINE}
         isNew
-        existingIds={machines.map(m => m.id)}
-        onSave={m => { addMachine({ ...m, last: new Date().toISOString().slice(0, 10), anom: 0, cycles: 0 }); setShowAdd(false); }}
+        existingIds={machines.map((machine) => machine.id)}
+        onSave={(machine) => {
+          addMachineMut.mutate({
+            ...machine,
+            last: new Date().toISOString().slice(0, 10),
+            anom: 0,
+            cycles: 0,
+          });
+          setShowAdd(false);
+        }}
         onCancel={() => setShowAdd(false)}
       />
     );
   }
 
   if (editingId) {
-    const machine = machines.find(m => m.id === editingId);
-    if (!machine) { setEditingId(null); return null; }
+    const machine = machines.find((entry) => entry.id === editingId);
+    if (!machine) {
+      setEditingId(null);
+      return null;
+    }
+
     return (
       <MachineForm
         machine={machine}
         isNew={false}
-        existingIds={machines.map(m => m.id)}
-        onSave={m => { updateMachine(editingId, m); setEditingId(null); }}
+        existingIds={machines.map((entry) => entry.id)}
+        onSave={(updatedMachine) => {
+          updateMachineMut.mutate({ id: editingId, updates: updatedMachine });
+          setEditingId(null);
+        }}
         onCancel={() => setEditingId(null)}
       />
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-5">
-        <div className="section-title">{t("mach.management")}</div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="section-title">Gestion des machines</div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Métadonnées, statut et accès aux analyses détaillées.
+          </p>
+        </div>
         <div className="flex gap-2">
-          <button onClick={() => {
-            const escapeCsv = (v: unknown) => {
-              const s = String(v ?? "");
-              return s.includes(",") || s.includes('"') || s.includes("\n")
-                ? `"${s.replace(/"/g, '""')}"` : s;
-            };
-            const header = "Code,Nom,Ville,Statut,HI,RUL,Mod\u00e8le,Derni\u00e8re MAJ\n";
-            const csv = machines.map(m => [m.id, m.name, m.city, m.status, m.hi, m.rul ?? "\u2014", m.model, m.last].map(escapeCsv).join(",")).join("\n");
-            const bom = "\uFEFF";
-            const blob = new Blob([bom + header + csv], { type: "text/csv;charset=utf-8;" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `machines_${new Date().toISOString().slice(0, 10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-            toast.success(t("mach.export") + " CSV");
-          }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-surface-3 border border-border text-foreground hover:bg-border-subtle transition-all">
-            <Download className="w-3.5 h-3.5" /> {t("mach.export")}
+          <button
+            onClick={exportCsv}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-3 px-4 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exporter
           </button>
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-primary-foreground">
-            <Plus className="w-3.5 h-3.5" /> {t("mach.addMachine")}
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Ajouter machine
           </button>
         </div>
       </div>
 
-      {/* Machine list with CRUD */}
+      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-border bg-card p-5 shadow-premium md:grid-cols-[1.5fr_220px]">
+        <label className="flex items-center gap-2 rounded-xl border border-border bg-surface-3 px-3.5 py-2.5">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Rechercher par code, nom, ville ou emplacement"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as Machine["status"] | "all")}
+          className="rounded-xl border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="all">Tous les statuts</option>
+          <option value="ok">Opérationnel</option>
+          <option value="degraded">Surveillance</option>
+          <option value="critical">Critique</option>
+          <option value="maintenance">Maintenance</option>
+        </select>
+      </div>
+
       <div className="space-y-4">
-        {machines.map(m => {
-          const mcfg = STATUS_CONFIG[m.status];
+        {filteredMachines.map((machine) => {
+          const statusConfig = STATUS_CONFIG[machine.status];
+          const hiPct = typeof machine.hi === "number" ? Math.round(machine.hi * 100) : null;
           return (
-            <div key={m.id} className="bg-card border border-border rounded-lg overflow-hidden transition-all hover:shadow-lg">
+            <div key={machine.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-premium">
               <div className="flex items-stretch">
-                {/* Color accent */}
-                <div className="w-1.5 flex-shrink-0" style={{ background: mcfg.hex }} />
-
-                {/* Content */}
-                <div className="flex-1 p-5 flex items-center gap-5 cursor-pointer" onClick={() => setSelectedId(m.id)}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className="font-mono text-sm font-bold text-foreground">{m.id}</span>
-                      <span className={`status-pill ${mcfg.pillClass} text-[0.6rem]`}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: "currentColor" }} />
-                        {mcfg.label}
-                      </span>
+                <div className="w-1.5 flex-shrink-0" style={{ background: statusConfig.hex }} />
+                <div className="flex flex-1 flex-wrap items-center gap-5 p-5">
+                  <div className="min-w-[220px] flex-1">
+                    <div className="mb-1 flex items-center gap-3">
+                      <span className="font-mono text-sm font-bold text-foreground">{machine.id}</span>
+                      <span className={`status-pill ${statusConfig.pillClass} text-[0.6rem]`}>{statusConfig.label}</span>
                     </div>
-                    <div className="text-sm text-secondary-foreground">{m.name}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{m.city} · {m.loc}</div>
-                  </div>
-
-                  {/* HI Card */}
-                  <div className="text-center px-4">
-                    <div className="industrial-label">HI</div>
-                    <div className="font-mono text-2xl font-bold mt-1" style={{ color: mcfg.hex }}>{Math.round(m.hi * 100)}%</div>
-                    <div className="h-1 bg-muted rounded-full overflow-hidden mt-1.5 w-16">
-                      <div className="hi-fill h-full" style={{ width: `${Math.round(m.hi * 100)}%` }} />
+                    <div className="text-sm text-secondary-foreground">{machine.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {machine.city} · {machine.loc}
                     </div>
                   </div>
 
-                  {/* RUL */}
-                  <div className="text-center px-4">
-                    <div className="industrial-label">RUL</div>
-                    <div className="font-mono text-2xl font-bold mt-1 text-foreground">{m.rul ?? "—"}<span className="text-sm text-muted-foreground">j</span></div>
+                  <div className="min-w-[120px] text-center">
+                    <div className="industrial-label">Health Index</div>
+                    <div className="mt-1 font-mono text-2xl font-bold" style={{ color: statusConfig.hex }}>
+                      {hiPct != null ? `${hiPct}%` : "—"}
+                    </div>
+                    <div className="mt-1.5 h-1 rounded-full bg-muted">
+                      <div className="hi-fill h-full" style={{ width: `${hiPct ?? 0}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="min-w-[180px]">
+                    <div className="industrial-label">Métadonnées</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {formatMachineModelValue(machine.model, "-")}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {formatMachineFloorLabel(machine.floors, {
+                        singular: "étage",
+                        plural: "étages",
+                        fallback: "Étages non renseignés",
+                      })} · Mise à jour {machine.last}
+                    </div>
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex flex-col justify-center gap-2 pr-4">
-                  <button onClick={() => setEditingId(m.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-all">
-                    <Pencil className="w-3.5 h-3.5" /> {t("mach.edit")}
+                <div className="flex flex-col justify-center gap-2 px-4 py-5">
+                  <button
+                    onClick={() => setSelectedId(machine.id)}
+                    className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-all hover:bg-primary/20"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    Voir analyse
                   </button>
-                  {confirmDeleteId === m.id ? (
+                  <button
+                    onClick={() => setEditingId(machine.id)}
+                    className="flex items-center gap-1.5 rounded-lg bg-surface-3 px-3 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Modifier
+                  </button>
+                  {confirmDeleteId === machine.id ? (
                     <div className="flex gap-1.5">
-                      <button onClick={() => { deleteMachine(m.id); setConfirmDeleteId(null); }} className="px-3 py-2 rounded-xl text-xs font-semibold bg-destructive text-destructive-foreground">{t("mach.yes")}</button>
-                      <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-2 rounded-xl text-xs font-semibold border border-border text-secondary-foreground">{t("mach.no")}</button>
+                      <button
+                        onClick={() => {
+                          deleteMachineMut.mutate(machine.id);
+                          setConfirmDeleteId(null);
+                        }}
+                        className="rounded-xl bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground"
+                      >
+                        Oui
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-secondary-foreground"
+                      >
+                        Non
+                      </button>
                     </div>
                   ) : (
-                    <button onClick={() => setConfirmDeleteId(m.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all">
-                      <Trash2 className="w-3.5 h-3.5" /> {t("mach.delete")}
+                    <button
+                      onClick={() => setConfirmDeleteId(machine.id)}
+                      className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive transition-all hover:bg-destructive/20"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Supprimer
                     </button>
                   )}
                 </div>
@@ -213,6 +423,12 @@ export function MachinesPage() {
             </div>
           );
         })}
+
+        {filteredMachines.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
+            Aucune machine ne correspond aux filtres.
+          </div>
+        )}
       </div>
 
       {selectedMachine && <MachineModal machine={selectedMachine} onClose={() => setSelectedId(null)} />}

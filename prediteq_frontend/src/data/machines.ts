@@ -1,3 +1,91 @@
+export interface DemoScenario {
+  site?: string;
+  health_state?: string;
+  health_label?: string;
+  usage_case?: string;
+  explanation?: string;
+  profile?: string;
+  base_load_kg?: number;
+  load_pattern?: string;
+  load_band_kg?: [number, number];
+  target_hi?: number;
+  public_ticks?: number;
+  cycles_per_day?: number;
+  power_avg_30j_kw?: number;
+  temp_bias_c?: number;
+  humidity_bias_rh?: number;
+  usage_intensity?: number;
+  wear_level?: number;
+  thermal_stress?: number;
+  humidity_stress?: number;
+  load_variability?: number;
+  vibration_bias_mms?: number;
+  overload_bias?: number;
+  reference_rul_days?: number | null;
+}
+
+export type PredictiveUrgencyBand = "stable" | "watch" | "priority" | "critical";
+export type MachinePredictionMode = "no_prediction" | "warming_up" | "prediction";
+export type MachineStressBand = "low" | "moderate" | "high" | "critical";
+export type MachineReferenceKind = "demo_reference" | "last_valid";
+export type MachineCurrentSource = "measured" | "estimated_from_power" | "missing";
+export type MachineDataSource =
+  | "live_runtime"
+  | "simulator_demo"
+  | "persisted_reference"
+  | "no_data";
+
+export interface MachineDecisionTaskTemplate {
+  type: "preventive" | "corrective" | "inspection";
+  leadDays: number;
+  title: string;
+  summary: string;
+}
+
+export interface MachineDecisionBudgetModel {
+  multiplier: number;
+  delayMultiplier: number;
+}
+
+export interface MachineDecision {
+  status: "ok" | "degraded" | "critical" | "maintenance";
+  zone: string | null;
+  hi: number | null;
+  rulDays: number | null;
+  predictionMode: MachinePredictionMode | null;
+  confidence: "high" | "medium" | "low" | null;
+  maintenanceWindow: string | null;
+  stopRecommended: boolean;
+  alerts24h: number;
+  openTasks: number;
+  stressValue: number | null;
+  stressBand: MachineStressBand | null;
+  stressLabel: string;
+  dominantAxis: string | null;
+  topDriver: string | null;
+  urgencyScore: number;
+  urgencyBand: PredictiveUrgencyBand;
+  urgencyLabel: string;
+  urgencyHex: string;
+  summary: string;
+  plainReason: string;
+  impact: string;
+  recommendedAction: string;
+  trustNote: string;
+  technicalStory: string;
+  evidence: string[];
+  fieldChecks: string[];
+  taskTemplate: MachineDecisionTaskTemplate;
+  budgetModel: MachineDecisionBudgetModel;
+  diagnosisCount: number;
+  diagnoses: Array<Record<string, unknown>>;
+  dataSource: MachineDataSource;
+  updatedAt: string | null;
+  ageSeconds: number | null;
+  isStale: boolean;
+  freshnessState: string;
+}
+
 export interface Machine {
   id: string;
   uuid?: string;
@@ -6,18 +94,29 @@ export interface Machine {
   city: string;
   lat: number;
   lon: number;
-  hi: number;
+  hi: number | null;
   rul: number | null;
   rulci: number | null;
+  rulMode?: MachinePredictionMode;
+  rulIntervalLow?: number | null;
+  rulIntervalHigh?: number | null;
+  rulIntervalLabel?: string | null;
+  l10Years?: number | null;
+  rulReferenceDays?: number | null;
+  rulReferenceKind?: MachineReferenceKind | null;
+  stopRecommended?: boolean;
   status: 'ok' | 'degraded' | 'critical' | 'maintenance';
-  vib: number;
-  curr: number;
-  temp: number;
+  vib: number | null;
+  curr: number | null;
+  currSource?: MachineCurrentSource;
+  temp: number | null;
   anom: number;
-  cycles: number;
+  cycles: number | null;
   model: string;
   floors: number;
   last: string;
+  decision?: MachineDecision | null;
+  demoScenario?: DemoScenario | null;
 }
 
 export const MACHINES: Machine[] = [

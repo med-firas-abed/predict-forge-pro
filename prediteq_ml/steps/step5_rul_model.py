@@ -33,6 +33,10 @@ import os
 import sys
 import datetime
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import *
 from sklearn.ensemble import RandomForestRegressor
@@ -250,10 +254,12 @@ if __name__ == '__main__':
     # ── Hyperparamètres RF ────────────────────────────────────────────────────
     # 300 arbres : bon plateau empirique (Breiman 2001, Probst et al. 2019
     # "Tunability: Importance of Hyperparameters of Machine Learning Algorithms")
-    # max_depth=12 : compromis biais/variance pour 17 features × ~N×400 échantillons
-    # min_samples_leaf=10 : évite le sur-apprentissage sur petites cohortes
+    # max_depth=16 : laisse le RF exploiter la dynamique HI sans relâcher la régularisation.
+    # max_features='sqrt' : réduit la corrélation entre arbres sur des features HI très liées.
+    # min_samples_leaf=10 : évite le sur-apprentissage sur petites cohortes locales.
     rf_params = dict(
-        n_estimators=300, max_depth=12, min_samples_leaf=10,
+        n_estimators=300, max_depth=16, min_samples_leaf=10,
+        max_features='sqrt',
         random_state=42, n_jobs=-1
     )
 
@@ -269,6 +275,39 @@ if __name__ == '__main__':
               f"RMSE = {cv_rmse_mean:.2f} ± {cv_rmse_std:.2f} jours")
     else:
         cv_r2_mean = cv_r2_std = cv_rmse_mean = cv_rmse_std = None
+
+    # ── Justification empirique de n_estimators=300 (courbe OOB) ──────────────
+    # On entraîne 5 RFs avec n_estimators ∈ {50, 100, 200, 300, 500} et on
+    # mesure le score OOB (out-of-bag, propre au bootstrap RF — Breiman 2001
+    # §3.1, équivalent à une CV interne sans coût supplémentaire).
+    #
+    # Lecture : si la courbe OOB plateause à n_estimators=300 (gain marginal
+    # < 1% en doublant à 600), alors 300 est justifié empiriquement et pas
+    # seulement par citation Probst & Boulesteix 2018.
+    print("\n── Courbe OOB : justification empirique n_estimators ──")
+    oob_curve = {}
+    for n_est in [50, 100, 200, 300, 500]:
+        m = RandomForestRegressor(
+            n_estimators=n_est, max_depth=16, min_samples_leaf=10,
+            max_features='sqrt',
+            oob_score=True, bootstrap=True,
+            random_state=42, n_jobs=-1,
+        )
+        m.fit(X_train, y_train)
+        oob_curve[n_est] = float(m.oob_score_)
+        print(f"  n_estimators = {n_est:3d}  ->  OOB R^2 = {m.oob_score_:+.4f}")
+
+    gain_100_to_300 = oob_curve[300] - oob_curve[100]
+    gain_300_to_500 = oob_curve[500] - oob_curve[300]
+    print(f"  Gain 100->300 : {gain_100_to_300:+.4f}  |  "
+          f"Gain 300->500 : {gain_300_to_500:+.4f}")
+    if abs(gain_300_to_500) < 0.01:
+        print("  -> Plateau confirme a n_estimators=300 "
+              "(gain <1% en doublant les arbres jusqu'à 500). "
+              "Choix RF_N_ESTIMATORS=300 défendu empiriquement.")
+    else:
+        print(f"  -> Plateau NON atteint a 300 (gain 300->500 = "
+              f"{gain_300_to_500:+.4f}). Considérer n_estimators=500.")
 
     # ── Modèle final sur l'ensemble train complet ─────────────────────────────
     print("\nEntraînement du modèle RandomForest final (train complet) ...")
@@ -303,9 +342,24 @@ if __name__ == '__main__':
     print(f"  R² train (cohérence) : {r2_train:.4f}")
 
     # ── Baselines : prouver que Random Forest est nécessaire ─────────────────
+    # Le RF n'est justifié QUE s'il bat ces baselines de difficulté croissante.
+    #
     # Baseline #1 : DummyRegressor (moyenne constante) — plancher absolu.
-    # Baseline #2 : Régression linéaire multivariée — plancher « simple ».
-    # Un modèle Random Forest n'est justifié que s'il bat ces deux baselines.
+    # Baseline #2 : Régression linéaire multivariée sur les 17 features.
+    # Baseline #3 : Extrapolation linéaire HI — RUL_min = (hi_now - HI_CRITICAL)
+    #               / max(-hi_slope_per_min, ε). C'est la baseline DURE :
+    #               elle ne demande qu'une règle physique simple (« combien
+    #               de minutes pour que la pente actuelle nous fasse atteindre
+    #               le seuil critique »). Si le RF ne bat pas ÇA, il n'apporte
+    #               rien au-delà d'une extrapolation triviale.
+    #
+    # Index dans le vecteur features (cf. build_rul_dataset ligne 146) :
+    #   [0..11]  → 12 features capteurs normalisées (NORM_COLS)
+    #   [12]     → hi_now
+    #   [13]     → hi_mean
+    #   [14]     → hi_std
+    #   [15]     → hi_min
+    #   [16]     → hi_slope (HI/min, polyfit sur lookback 60 min)
     print("\n── Baselines (justification du choix Random Forest) ──")
     baseline_results = {}
     for name, est in [
@@ -326,8 +380,76 @@ if __name__ == '__main__':
         }
         print(f"  {name:20s} : R²={r2_b:+.4f}  RMSE={rmse_b/RUL_MIN_TO_DAY:6.2f} j  "
               f"MAE={mae_b/RUL_MIN_TO_DAY:5.2f} j")
+
+    # Baseline #3 — extrapolation linéaire HI (règle physique simple)
+    hi_now_test    = X_test[:, 12]
+    hi_slope_test  = X_test[:, 16]
+    eps = 1e-6
+    rul_lin_min = np.maximum(
+        (hi_now_test - HI_CRITICAL) / np.maximum(-hi_slope_test, eps),
+        0.0
+    )
+    r2_lin   = float(r2_score(y_test, rul_lin_min))
+    rmse_lin = float(np.sqrt(mean_squared_error(y_test, rul_lin_min)))
+    mae_lin  = float(mean_absolute_error(y_test, rul_lin_min))
+    baseline_results['linear_hi_extrapolation'] = {
+        'r2':        r2_lin,
+        'rmse_min':  rmse_lin,
+        'rmse_days': rmse_lin / RUL_MIN_TO_DAY,
+        'mae_min':   mae_lin,
+        'mae_days':  mae_lin  / RUL_MIN_TO_DAY,
+        'note':      'RUL = (hi_now - HI_CRITICAL) / max(-hi_slope, eps)',
+    }
+    print(f"  {'linear_hi_extrapol.':20s} : R²={r2_lin:+.4f}  "
+          f"RMSE={rmse_lin/RUL_MIN_TO_DAY:6.2f} j  MAE={mae_lin/RUL_MIN_TO_DAY:5.2f} j  "
+          f"← BASELINE DURE (règle physique)")
+
     print(f"  {'random_forest':20s} : R²={r2:+.4f}  RMSE={rmse/RUL_MIN_TO_DAY:6.2f} j  "
           f"MAE={mae/RUL_MIN_TO_DAY:5.2f} j  ← modèle final")
+
+    # ── Ablation study : RF SANS les 5 features dérivées de HI ───────────────
+    # Question scientifique : le R² élevé du RF vient-il de la richesse des
+    # features capteurs (12 normalisées) ou de l'extrapolation triviale du
+    # HI (5 features de stats sur le HI lui-même : now, mean, std, min,
+    # slope) ? Cette ablation isole la contribution des capteurs.
+    #
+    # Si R²(12 features) ≈ R²(17 features) → les capteurs portent toute
+    # l'info, le HI n'ajoute rien.
+    # Si R²(12 features) << R²(17 features) → le RF est essentiellement
+    # un extrapolateur HI, et on doit le présenter comme tel honnêtement.
+    print("\n── Ablation : RF sans les 5 features HI (12 features capteurs seules) ──")
+    X_train_sensors = X_train[:, :12]
+    X_test_sensors  = X_test[:, :12]
+    model_sensors = RandomForestRegressor(**rf_params)
+    model_sensors.fit(X_train_sensors, y_train)
+    pred_sensors = model_sensors.predict(X_test_sensors)
+    r2_sensors   = float(r2_score(y_test, pred_sensors))
+    rmse_sensors = float(np.sqrt(mean_squared_error(y_test, pred_sensors)))
+    mae_sensors  = float(mean_absolute_error(y_test, pred_sensors))
+    ablation_results = {
+        'rf_full_17_features': {
+            'r2': r2,
+            'rmse_days': rmse / RUL_MIN_TO_DAY,
+            'mae_days':  mae  / RUL_MIN_TO_DAY,
+        },
+        'rf_sensors_only_12_features': {
+            'r2': r2_sensors,
+            'rmse_days': rmse_sensors / RUL_MIN_TO_DAY,
+            'mae_days':  mae_sensors  / RUL_MIN_TO_DAY,
+        },
+        'delta_r2_from_hi_features': r2 - r2_sensors,
+    }
+    print(f"  RF 17 features (capteurs + HI stats) : R²={r2:+.4f}  "
+          f"RMSE={rmse/RUL_MIN_TO_DAY:.2f} j")
+    print(f"  RF 12 features (capteurs SEULS)      : R²={r2_sensors:+.4f}  "
+          f"RMSE={rmse_sensors/RUL_MIN_TO_DAY:.2f} j")
+    print(f"  Δ R² apporté par les 5 features HI  : {r2 - r2_sensors:+.4f}")
+    if (r2 - r2_sensors) < 0.05:
+        print("  -> Les capteurs portent l'essentiel de l'info (HI ajoute peu)")
+    elif (r2 - r2_sensors) > 0.20:
+        print("  -> Le RF est domine par l'extrapolation HI - a presenter comme tel")
+    else:
+        print("  -> Contribution equilibree capteurs + HI (sain)")
 
     # ── Métriques par profil ──────────────────────────────────────────────────
     print("\n── Métriques par profil (test) ──")
@@ -400,7 +522,9 @@ if __name__ == '__main__':
             'r2_test':           r2,
             'r2_train':          r2_train,
         },
-        'baselines_holdout': baseline_results,  # dummy + linear, preuve que RF > plancher
+        'baselines_holdout': baseline_results,  # dummy + linear + HI extrapol., preuve RF > plancher
+        'ablation_hi_features': ablation_results,  # RF 12 vs 17 features (contribution HI)
+        'oob_curve_n_estimators': oob_curve,    # justification empirique n_estimators=300
         'profile_balance':    profile_balance,  # répartition A/B/C/D train/test + retenues
         'cross_validation_groupkfold': {
             'n_splits':     RUL_CV_FOLDS,
@@ -414,9 +538,9 @@ if __name__ == '__main__':
     with open(OUT_CV, 'w') as f:
         json.dump(cv_summary, f, indent=2)
 
-    print(f"\n✅ Prédictions RUL sauvegardées → {OUT_PREDS}")
-    print(f"✅ Modèle RF sauvegardé         → {OUT_MODEL}")
-    print(f"✅ Résumé CV sauvegardé         → {OUT_CV}")
+    print(f"\nOK: Predictions RUL sauvegardees -> {OUT_PREDS}")
+    print(f"OK: Modele RF sauvegarde        -> {OUT_MODEL}")
+    print(f"OK: Resume CV sauvegarde        -> {OUT_CV}")
     if len(rul_days) > 0:
         print(f"   Exemple : RUL = {rul_days[0]:.1f} jours "
               f"[{ci_low_days[0]:.1f} – {ci_high_days[0]:.1f}]")

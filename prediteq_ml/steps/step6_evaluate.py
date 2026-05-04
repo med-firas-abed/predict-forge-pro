@@ -15,6 +15,10 @@ import joblib
 import datetime
 import subprocess
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import *
 from sklearn.metrics import precision_score, recall_score, f1_score
@@ -355,6 +359,9 @@ if __name__ == '__main__':
     except Exception:
         commit = 'n/a'
 
+    train_pct = int(round(TRAIN_RATIO * 100))
+    test_pct = 100 - train_pct
+
     metrics = {
         'generated_at_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'pipeline_version': '2.0-no-leakage',
@@ -362,7 +369,7 @@ if __name__ == '__main__':
         'methodology': {
             'rul_target_source': 'hi_smooth (signal observable, franchissement persistant)',
             'rul_crossing_persistence': RUL_CROSSING_PERSISTENCE,
-            'train_test_split':  f"{int(TRAIN_RATIO*100)}/{int((1-TRAIN_RATIO)*100)} group-based (no leakage)",
+            'train_test_split':  f"{train_pct}/{test_pct} group-based (no leakage)",
             'iso_reference':     'ISO 10816-3:2009 — severity zones A/B/C/D',
             'prognostic_reference': 'IEEE Std 1856-2017 — Prognostics for Systems',
         },
@@ -409,7 +416,7 @@ if __name__ == '__main__':
 
     with open(OUT_METRICS, 'w') as f:
         json.dump(metrics, f, indent=2)
-    print(f'\n✅ Metrics saved -> {OUT_METRICS}')
+    print(f'\nOK: Metrics saved -> {OUT_METRICS}')
 
     # ── Plots 1-3 (use hi_df, preds_df, scores_df) ───────────────────────────
     print('\nGenerating plots ...')
@@ -477,4 +484,4 @@ if __name__ == '__main__':
     plt.close()
     print(f'  Saved: {path}')
 
-    print(f'\n✅ Step 6 done — all plots in {PLOTS_DIR}')
+    print(f'\nOK: Step 6 done - all plots in {PLOTS_DIR}')

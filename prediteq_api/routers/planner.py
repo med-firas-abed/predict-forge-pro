@@ -1,267 +1,37 @@
 """
-Autonomous Maintenance Planner — AI agent that:
-1. Analyses RUL trends + HI for all machines
-2. Cross-references open GMAO tasks & historical costs
-3. Proposes an optimal maintenance schedule (minimize downtime + cost)
-4. Can auto-create GMAO tasks in Supabase when approved
+Structured maintenance planner.
 
-POST /planner/generate  — AI generates an optimal plan
-POST /planner/approve   — approve a proposed task → insert into gmao_taches
-GET  /planner/status    — fleet risk ranking
+The planner now relies on the shared decision snapshot used elsewhere in the
+app. It returns a deterministic JSON payload for risk ranking and proposed
+tasks, so the frontend no longer has to parse free-form AI markdown.
 """
 
-import json
+from __future__ import annotations
+
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from core.config import settings
+from core.auth import CurrentUser, require_admin
+from core.decision_snapshot import (
+    build_machine_decision_snapshot,
+    fetch_alert_counts,
+    fetch_open_task_counts,
+)
 from core.supabase_client import get_supabase
-from core.auth import CurrentUser, require_admin, get_machine_filter
-from core.rate_limit import check_user_rate
 from ml.engine_manager import get_manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/planner", tags=["planner"])
 
-PLANNER_SYSTEM_PROMPT = (
-    "Tu es un planificateur de maintenance prédictive autonome pour PrediTeq. "
-    "Tu analyses les données de la flotte d'ascenseurs industriels (SITI FC100L1-4) "
-    "et tu proposes un plan de maintenance optimal.\n\n"
-    "IMPORTANT: Les données de TOUTES les machines sont disponibles (certaines en temps réel, "
-    "d'autres avec des données référentielles statiques). Ne dis JAMAIS 'info indisponible' ou "
-    "'données non disponibles'. Utilise les données fournies pour chaque machine.\n\n"
-    "Ton objectif: **minimiser le temps d'arrêt et les coûts** tout en assurant la sécurité.\n\n"
-    "Format de réponse OBLIGATOIRE en Markdown:\n"
-    "1. **Résumé exécutif** — état de la flotte en 2-3 phrases\n"
-    "2. **Classement des risques** — tableau des machines par priorité\n"
-    "3. **Plan d'action** — pour chaque machine à risque:\n"
-    "   - Action recommandée (inspection, maintenance préventive, remplacement pièce)\n"
-    "   - Fenêtre d'intervention optimale (date/heure)\n"
-    "   - Coût estimé (basé sur l'historique)\n"
-    "   - Justification (RUL, HI trend, SHAP factors)\n"
-    "4. Propose des tâches concrètes au format ci-dessous (elles seront affichées séparément, "
-    "NE LES METS PAS sous un titre '### Tâches GMAO'):\n"
-    "   ```task\n"
-    "   machine: ASC-XX\n"
-    "   titre: Description courte\n"
-    "   type: preventive|corrective|inspection\n"
-    "   priorite: haute|moyenne|basse\n"
-    "   date_planifiee: YYYY-MM-DD\n"
-    "   cout_estime: XXXX\n"
-    "   description: Justification détaillée\n"
-    "   ```\n"
-    "5. **Prévision budgétaire** — coût total estimé et comparaison préventif vs correctif\n\n"
-    "Sois concret, quantifié, et actionnable. Utilise les données réelles fournies."
-)
-
-
-def _gather_fleet_context(user: CurrentUser) -> dict:
-    """Collect all data needed for the planner from all machines."""
-    manager = get_manager()
-    sb = get_supabase()
-    machine_filter = get_machine_filter(user)
-
-    fleet_data = []
-    for code, info in manager.machine_cache.items():
-        if machine_filter and info['id'] != machine_filter:
-            continue
-
-        machine_uuid = info['id']
-        last = manager.last_results.get(code, {})
-        rul = manager.predict_rul(code)
-        raw = manager.last_raw.get(code, {})
-
-        # Recent alerts
-        alerts = []
-        try:
-            res = sb.table('alertes').select('titre, severite, created_at') \
-                .eq('machine_id', machine_uuid) \
-                .order('created_at', desc=True).limit(5).execute()
-            alerts = res.data or []
-        except Exception:
-            pass
-
-        # Open GMAO tasks
-        open_tasks = []
-        try:
-            res = sb.table('gmao_taches').select('titre, statut, type, date_planifiee, cout_estime') \
-                .eq('machine_id', machine_uuid) \
-                .in_('statut', ['planifiee', 'en_cours']) \
-                .order('created_at', desc=True).execute()
-            open_tasks = res.data or []
-        except Exception:
-            pass
-
-        # Cost history (last 6 months)
-        costs = []
-        try:
-            res = sb.table('couts').select('mois, annee, main_oeuvre, pieces, total') \
-                .eq('machine_id', machine_uuid) \
-                .order('annee', desc=True).order('mois', desc=True) \
-                .limit(6).execute()
-            costs = res.data or []
-        except Exception:
-            pass
-
-        # HI history (last 30 points)
-        hi_history = []
-        try:
-            res = sb.table('historique_hi').select('valeur_hi, created_at') \
-                .eq('machine_id', machine_uuid) \
-                .order('created_at', desc=True).limit(30).execute()
-            hi_history = res.data or []
-        except Exception:
-            pass
-
-        fleet_data.append({
-            "machine_code": code,
-            "nom": info.get('nom', ''),
-            "region": info.get('region', ''),
-            "hi_smooth": last.get('hi_smooth'),
-            "zone": last.get('zone'),
-            "rul": {
-                "days": rul.get('rul_days') if rul else None,
-                "ci_low": rul.get('ci_low') if rul else None,
-                "ci_high": rul.get('ci_high') if rul else None,
-            },
-            "sensors": {k: round(v, 3) for k, v in raw.items()} if raw else None,
-            "recent_alerts": alerts,
-            "open_gmao_tasks": open_tasks,
-            "cost_history": costs,
-            "hi_trend": hi_history[:10],  # last 10 points for trend
-        })
-
-    # Current thresholds
-    from routers.seuils import get_thresholds
-    thresholds = get_thresholds()
-
-    return {
-        "fleet": fleet_data,
-        "thresholds": thresholds,
-        "date": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-# ─── Fleet risk ranking (no LLM needed) ──────────────────────────────────────
-
-@router.get("/status")
-async def fleet_risk_status(user: CurrentUser = Depends(require_admin)):
-    """
-    GET /planner/status
-    Real-time fleet risk ranking — no AI needed, pure data.
-    Returns machines sorted by risk (lowest HI first). Admin only.
-    """
-    manager = get_manager()
-    sb = get_supabase()
-    machine_filter = None  # Admin sees all machines
-    fleet = []
-
-    for code, info in manager.machine_cache.items():
-        if machine_filter and info['id'] != machine_filter:
-            continue
-
-        last = manager.last_results.get(code, {})
-        rul = manager.predict_rul(code)
-
-        hi = last.get('hi_smooth')
-        rul_days = rul.get('rul_days') if rul else None
-
-        # Risk score: lower = more urgent (0-100)
-        risk_score = 100
-        if hi is not None:
-            risk_score = min(risk_score, hi * 100)
-        if rul_days is not None:
-            risk_score = min(risk_score, rul_days / 90 * 100)
-
-        # Open task count
-        open_tasks = 0
-        try:
-            res = sb.table('gmao_taches').select('id') \
-                .eq('machine_id', info['id']) \
-                .in_('statut', ['planifiee', 'en_cours']).execute()
-            open_tasks = len(res.data or [])
-        except Exception:
-            pass
-
-        fleet.append({
-            "machine_code": code,
-            "nom": info.get('nom', ''),
-            "region": info.get('region', ''),
-            "hi": round(hi, 4) if hi is not None else None,
-            "rul_days": round(rul_days, 1) if rul_days is not None else None,
-            "zone": last.get('zone'),
-            "risk_score": round(risk_score, 1),
-            "risk_level": "critique" if risk_score < 30 else "surveillance" if risk_score < 60 else "ok",
-            "open_tasks": open_tasks,
-        })
-
-    fleet.sort(key=lambda m: m['risk_score'])
-    return fleet
-
-
-# ─── AI plan generation ──────────────────────────────────────────────────────
 
 class PlanRequest(BaseModel):
-    focus_machine: str | None = None  # Focus on specific machine, or None for all
+    focus_machine: str | None = None
 
-
-@router.post("/generate")
-async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_admin)):
-    """
-    POST /planner/generate
-    AI-powered maintenance plan: analyses fleet data, proposes optimal schedule.
-    Streams Markdown with embedded task proposals.
-    """
-    if not settings.GROQ_API_KEY:
-        raise HTTPException(503, "GROQ_API_KEY not configured")
-    if not check_user_rate(user.id, limit=10, window=3600):
-        raise HTTPException(429, "Limite atteinte — max 10 plans IA par heure")
-
-    context = _gather_fleet_context(user)
-
-    focus_str = ""
-    if body.focus_machine:
-        focus_str = f"\nFocus particulier sur la machine {body.focus_machine}."
-
-    user_prompt = (
-        f"Génère un plan de maintenance optimal pour la flotte PrediTeq.{focus_str}\n\n"
-        f"Données de la flotte:\n```json\n{json.dumps(context, indent=2, default=str)}\n```\n\n"
-        "Propose des tâches GMAO concrètes avec dates et coûts estimés. "
-        "Justifie chaque recommandation par les données RUL, HI et historique."
-    )
-
-    from groq import AsyncGroq
-    client = AsyncGroq(api_key=settings.GROQ_API_KEY, timeout=30.0)
-
-    async def event_stream():
-        try:
-            stream = await client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                max_tokens=2500,
-                messages=[
-                    {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                stream=True,
-            )
-            async for chunk in stream:
-                text = chunk.choices[0].delta.content or ""
-                if text:
-                    yield text
-        except Exception as e:
-            logger.error("Planner Groq error: %s", e)
-            yield "\n\n---\nErreur lors de la génération du plan. Veuillez réessayer."
-
-    return StreamingResponse(event_stream(), media_type="text/plain; charset=utf-8")
-
-
-# ─── Approve proposed task → insert into GMAO ────────────────────────────────
 
 class ApproveTaskRequest(BaseModel):
     machine_code: str
@@ -274,13 +44,253 @@ class ApproveTaskRequest(BaseModel):
     technicien: str = ""
 
 
+def _load_machines(focus_machine: str | None = None) -> list[dict]:
+    sb = get_supabase()
+    try:
+        query = sb.table("machines").select("*").order("code")
+        if focus_machine:
+            query = query.eq("code", focus_machine)
+        result = query.execute()
+        return result.data or []
+    except Exception as exc:
+        logger.error("Planner machine load failed: %s", exc)
+        raise HTTPException(502, "Erreur de base de données")
+
+
+def _load_avg_costs(machine_ids: list[str]) -> dict[str, float]:
+    if not machine_ids:
+        return {}
+
+    sb = get_supabase()
+    averages: dict[str, list[float]] = {machine_id: [] for machine_id in machine_ids}
+    try:
+        res = sb.table("couts").select("machine_id, total").in_("machine_id", machine_ids).execute()
+        for row in res.data or []:
+            machine_id = row.get("machine_id")
+            total = row.get("total")
+            if machine_id and total is not None:
+                averages.setdefault(machine_id, []).append(float(total))
+    except Exception as exc:
+        logger.warning("Planner cost load failed: %s", exc)
+
+    return {
+        machine_id: (sum(values) / len(values) if values else 320.0)
+        for machine_id, values in averages.items()
+    }
+
+
+def _suggested_date(days_from_now: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=max(days_from_now, 0))).date().isoformat()
+
+
+def _priority_from_band(band: str) -> str:
+    if band == "critical":
+        return "haute"
+    if band == "priority":
+        return "moyenne"
+    return "basse"
+
+
+def _projected_cost(avg_cost: float, decision: dict) -> tuple[int, int]:
+    budget = decision.get("budget_model") or {}
+    multiplier = float(budget.get("multiplier") or 1.0)
+    delay_multiplier = float(budget.get("delay_multiplier") or 1.05)
+    projected = int(round(max(avg_cost, 320.0) * multiplier))
+    delayed = int(round(projected * delay_multiplier))
+    return projected, delayed
+
+
+def _build_planner_rows(machines: list[dict]) -> list[dict]:
+    manager = get_manager()
+    machine_ids = [machine["id"] for machine in machines]
+    alert_counts = fetch_alert_counts(machine_ids)
+    open_task_counts = fetch_open_task_counts(machine_ids)
+    avg_costs = _load_avg_costs(machine_ids)
+
+    rows: list[dict] = []
+    for machine in machines:
+        decision = build_machine_decision_snapshot(
+            machine,
+            manager,
+            alerts_24h=alert_counts.get(machine["id"], 0),
+            open_tasks=open_task_counts.get(machine["id"], 0),
+        )
+
+        task_template = decision.get("task_template") or {}
+        avg_cost = float(avg_costs.get(machine["id"], 320.0))
+        projected_cost, delayed_cost = _projected_cost(avg_cost, decision)
+
+        rows.append(
+            {
+                "machine_code": machine["code"],
+                "nom": machine.get("nom", ""),
+                "region": machine.get("region", ""),
+                "status": decision.get("status"),
+                "zone": decision.get("zone"),
+                "hi": decision.get("hi"),
+                "rul_days": decision.get("rul_days"),
+                "prediction_mode": decision.get("prediction_mode"),
+                "confidence": decision.get("confidence"),
+                "urgency_score": decision.get("urgency_score"),
+                "urgency_band": decision.get("urgency_band"),
+                "urgency_label": decision.get("urgency_label"),
+                "urgency_hex": decision.get("urgency_hex"),
+                "summary": decision.get("summary"),
+                "plain_reason": decision.get("plain_reason"),
+                "impact": decision.get("impact"),
+                "recommended_action": decision.get("recommended_action"),
+                "maintenance_window": decision.get("maintenance_window"),
+                "field_checks": decision.get("field_checks", []),
+                "evidence": decision.get("evidence", []),
+                "data_source": decision.get("data_source"),
+                "updated_at": decision.get("updated_at"),
+                "age_seconds": decision.get("age_seconds"),
+                "is_stale": decision.get("is_stale"),
+                "alerts_24h": alert_counts.get(machine["id"], 0),
+                "open_tasks": open_task_counts.get(machine["id"], 0),
+                "projected_cost": projected_cost,
+                "delayed_cost": delayed_cost,
+                "delay_penalty": delayed_cost - projected_cost,
+                "task_template": task_template,
+                "task_suggestion": {
+                    "machine_code": machine["code"],
+                    "titre": task_template.get("title", f"Intervention {machine['code']}"),
+                    "type": task_template.get("type", "inspection"),
+                    "priorite": _priority_from_band(str(decision.get("urgency_band") or "watch")),
+                    "date_planifiee": _suggested_date(int(task_template.get("lead_days") or 0)),
+                    "cout_estime": projected_cost,
+                    "description": (
+                        f"{decision.get('recommended_action', '')} "
+                        f"Motif: {decision.get('plain_reason', '')}"
+                    ).strip(),
+                    "technicien": "",
+                },
+            }
+        )
+
+    rows.sort(key=lambda row: row.get("urgency_score") or 0, reverse=True)
+    return rows
+
+
+def _render_markdown(rows: list[dict], focus_machine: str | None = None) -> str:
+    lines: list[str] = []
+    now = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+    priority_rows = [row for row in rows if row["urgency_band"] in {"critical", "priority"}]
+    watch_rows = [row for row in rows if row["urgency_band"] == "watch"]
+    uncertain_rows = [row for row in rows if row["data_source"] in {"persisted_reference", "no_data"}]
+
+    lines.append("# Plan de maintenance structuré")
+    lines.append(f"*Généré le {now}*")
+    lines.append("")
+    lines.append("## 1. Résumé exécutif")
+    if focus_machine:
+        lines.append(f"- Focus demande sur **{focus_machine}**.")
+    lines.append(f"- **{len(priority_rows)}** machine(s) à traiter rapidement.")
+    lines.append(f"- **{len(watch_rows)}** machine(s) à suivre de près.")
+    if uncertain_rows:
+        lines.append(
+            f"- **{len(uncertain_rows)}** machine(s) s'appuient sur une référence figée ou un flux incomplet : "
+            + ", ".join(row["machine_code"] for row in uncertain_rows)
+            + "."
+        )
+    lines.append("")
+    lines.append("## 2. Classement des risques")
+    lines.append("| Machine | Priorité | HI | RUL | Action |")
+    lines.append("|---|---|---:|---:|---|")
+    for row in rows:
+        hi = f"{round(float(row['hi']) * 100)}%" if row.get("hi") is not None else "-"
+        rul = f"{row['rul_days']} j" if row.get("rul_days") is not None else "-"
+        lines.append(
+            f"| {row['machine_code']} | {row['urgency_label']} | {hi} | {rul} | {row['recommended_action']} |"
+        )
+    lines.append("")
+    lines.append("## 3. Plan d'action")
+    for row in rows:
+        task = row["task_suggestion"]
+        lines.append(f"### {row['machine_code']} - {row['nom']}")
+        lines.append(f"- **État**: {row['summary']}")
+        lines.append(f"- **Pourquoi**: {row['plain_reason']}")
+        lines.append(f"- **Impact**: {row['impact']}")
+        lines.append(f"- **Action recommandée**: {row['recommended_action']}")
+        lines.append(
+            f"- **Tâche proposée**: {task['titre']} ({task['type']}) le {task['date_planifiee']} - {task['cout_estime']} TND"
+        )
+        if row["evidence"]:
+            lines.append(f"- **Preuves**: {' ; '.join(row['evidence'])}")
+        if row["field_checks"]:
+            lines.append("- **Contrôles terrain**:")
+            for check in row["field_checks"][:3]:
+                lines.append(f"  - {check}")
+        lines.append("")
+    lines.append("## 4. Budget prévisionnel")
+    total_projected = sum(int(row["projected_cost"]) for row in rows)
+    total_penalty = sum(int(row["delay_penalty"]) for row in rows)
+    lines.append(f"- Coût total projeté des prochaines interventions : **{total_projected} TND**")
+    lines.append(f"- Surcoût potentiel si la fenêtre suivante est manquée : **{total_penalty} TND**")
+    if uncertain_rows:
+        lines.append("")
+        lines.append("## 5. Incertitudes et données")
+        lines.append(
+            "Les machines ci-dessous n'ont pas toutes le même niveau de fraîcheur de données. "
+            "La recommandation reste utile, mais doit être confirmée sur le terrain :"
+        )
+        for row in uncertain_rows:
+            source = row["data_source"]
+            updated = row["updated_at"] or "indisponible"
+            lines.append(f"- {row['machine_code']} : source `{source}`, dernière lecture `{updated}`")
+    return "\n".join(lines)
+
+
+@router.get("/status")
+async def fleet_risk_status(user: CurrentUser = Depends(require_admin)):
+    rows = _build_planner_rows(_load_machines())
+    return [
+        {
+            "machine_code": row["machine_code"],
+            "nom": row["nom"],
+            "region": row["region"],
+            "hi": row["hi"],
+            "rul_days": row["rul_days"],
+            "zone": row["zone"],
+            "risk_score": row["urgency_score"],
+            "risk_level": row["urgency_band"],
+            "risk_label": row["urgency_label"],
+            "summary": row["summary"],
+            "recommended_action": row["recommended_action"],
+            "maintenance_window": row["maintenance_window"],
+            "open_tasks": row["open_tasks"],
+            "data_source": row["data_source"],
+            "updated_at": row["updated_at"],
+            "is_stale": row["is_stale"],
+        }
+        for row in rows
+    ]
+
+
+@router.post("/generate")
+async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_admin)):
+    machines = _load_machines(body.focus_machine)
+    if body.focus_machine and not machines:
+        raise HTTPException(404, f"Machine '{body.focus_machine}' introuvable")
+
+    rows = _build_planner_rows(machines)
+    markdown = _render_markdown(rows, body.focus_machine)
+    tasks = [row["task_suggestion"] for row in rows if row["urgency_band"] != "stable"]
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "focus_machine": body.focus_machine,
+        "markdown": markdown,
+        "tasks": tasks,
+        "fleet": rows,
+    }
+
+
 @router.post("/approve")
-async def approve_task(body: ApproveTaskRequest,
-                       user: CurrentUser = Depends(require_admin)):
-    """
-    POST /planner/approve
-    Admin approves a planner-proposed task → creates GMAO entry in Supabase.
-    """
+async def approve_task(
+    body: ApproveTaskRequest,
+    user: CurrentUser = Depends(require_admin),
+):
     manager = get_manager()
     sb = get_supabase()
 
@@ -288,42 +298,49 @@ async def approve_task(body: ApproveTaskRequest,
     if not uuid:
         raise HTTPException(404, f"Machine '{body.machine_code}' not found")
 
-    # Check for duplicate open tasks with similar title
     try:
-        existing = sb.table('gmao_taches').select('id, titre') \
-            .eq('machine_id', uuid) \
-            .in_('statut', ['planifiee', 'en_cours']).execute()
-        for t in (existing.data or []):
-            if t.get('titre', '').lower() == body.titre.lower():
-                raise HTTPException(409, f"Tâche similaire déjà ouverte: {t['titre']}")
+        existing = (
+            sb.table("gmao_taches")
+            .select("id, titre")
+            .eq("machine_id", uuid)
+            .in_("statut", ["planifiee", "en_cours"])
+            .execute()
+        )
+        for task in existing.data or []:
+            if task.get("titre", "").lower() == body.titre.lower():
+                raise HTTPException(409, f"Tâche similaire déjà ouverte : {task['titre']}")
     except HTTPException:
         raise
     except Exception:
         pass
 
     insert_data = {
-        'machine_id': uuid,
-        'titre': body.titre,
-        'description': f"[Agent IA] {body.description}",
-        'statut': 'planifiee',
-        'type': body.type,
-        'priorite': body.priorite,
+        "machine_id": uuid,
+        "titre": body.titre,
+        "description": f"[Agent planificateur] {body.description}",
+        "statut": "planifiee",
+        "type": body.type,
+        "priorite": body.priorite,
     }
     if body.date_planifiee:
-        insert_data['date_planifiee'] = body.date_planifiee
+        insert_data["date_planifiee"] = body.date_planifiee
     if body.cout_estime is not None:
-        insert_data['cout_estime'] = body.cout_estime
+        insert_data["cout_estime"] = body.cout_estime
     if body.technicien:
-        insert_data['technicien'] = body.technicien
+        insert_data["technicien"] = body.technicien
 
     try:
-        sb.table('gmao_taches').insert(insert_data).execute()
-    except Exception as e:
-        logger.error("GMAO insert error: %s", e)
+        sb.table("gmao_taches").insert(insert_data).execute()
+    except Exception as exc:
+        logger.error("GMAO insert error: %s", exc)
         raise HTTPException(500, "Échec de créer la tâche")
 
-    logger.info("Planner: approved task '%s' for %s by %s",
-                body.titre, body.machine_code, user.email)
+    logger.info(
+        "Planner approved task '%s' for %s by %s",
+        body.titre,
+        body.machine_code,
+        user.email,
+    )
 
     return {
         "status": "ok",

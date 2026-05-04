@@ -14,6 +14,10 @@ import os
 import sys
 import urllib.request
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import TRAIN_RATIO, CMAPSS_N_ESTIMATORS
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
@@ -378,5 +382,5 @@ if __name__ == '__main__':
         json.dump(metrics, f, indent=2)
     print(f"  Métriques sauvegardées : {OUT_METRICS}")
 
-    print("\n✅ Validation croisée CMAPSS terminée.")
+    print("\nOK: Validation croisee CMAPSS terminee.")
     print("   Utilisez ces chiffres dans votre rapport comme validation benchmark.")

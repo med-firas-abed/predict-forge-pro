@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 interface SVGGaugeProps {
-  value: number;
+  value: number | null | undefined;
   max: number;
   color: string;
   label: string;
@@ -9,9 +9,24 @@ interface SVGGaugeProps {
 }
 
 export function SVGGauge({ value, max, color, unit }: SVGGaugeProps) {
-  const pct = Math.max(0, Math.min(value / max, 1));
+  const hasValue = typeof value === "number" && Number.isFinite(value);
+  const safeValue = hasValue ? value : 0;
+  const pct = Math.max(0, Math.min(safeValue / max, 1));
   const R = 46, cx = 60, cy = 60, stroke = 8;
   const id = useId();
+
+  function formatScalar(num: number) {
+    if (unit === "%") return `${Math.round(num * 100)}%`;
+    if (max < 1) return `${num.toFixed(3)} ${unit}`;
+    if (max < 10) return `${num.toFixed(2)} ${unit}`;
+    return `${num.toFixed(1)} ${unit}`;
+  }
+
+  function formatTickLabel(num: number) {
+    if (max <= 1) return num.toFixed(2);
+    if (max < 10) return num.toFixed(1);
+    return `${Math.round(num)}`;
+  }
 
   function ptArc(angleDeg: number, r = R) {
     const a = angleDeg * Math.PI / 180;
@@ -28,7 +43,7 @@ export function SVGGauge({ value, max, color, unit }: SVGGaugeProps) {
   const nLen = R - 6;
   const tip = ptArc(needleAngle, nLen);
   const back = ptArc(needleAngle + 180, 6);
-  const valText = unit === '%' ? `${Math.round(value * 100)}%` : `${Number(value).toFixed(1)} ${unit}`;
+  const valText = hasValue ? formatScalar(safeValue) : "—";
 
   // Zone segments: green (0-50%), amber (50-75%), red (75-100%)
   const zones = [
@@ -43,7 +58,7 @@ export function SVGGauge({ value, max, color, unit }: SVGGaugeProps) {
     const inner = ptArc(angle, R - stroke / 2 - 1);
     const outer = ptArc(angle, R + stroke / 2 + 2);
     const labelPt = ptArc(angle, R + 17);
-    return { inner, outer, labelPt, labelVal: Math.round(f * max), angle };
+    return { inner, outer, labelPt, labelVal: f * max, angle };
   });
 
   const minorTicks = Array.from({ length: 21 }, (_, i) => i * 0.05)
@@ -105,16 +120,20 @@ export function SVGGauge({ value, max, color, unit }: SVGGaugeProps) {
         {/* Tick labels */}
         {majorTicks.map((tk, i) => (
           <text key={`l${i}`} x={tk.labelPt.x} y={tk.labelPt.y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={6.5} fill="hsl(215,12%,50%)" fontFamily="system-ui" fontWeight={500}>
-            {tk.labelVal}
+            {formatTickLabel(tk.labelVal)}
           </text>
         ))}
 
-        {/* Needle shadow */}
-        <line x1={cx + 0.5} y1={cy + 1} x2={tip.x + 0.5} y2={tip.y + 1} stroke="rgba(0,0,0,0.12)" strokeWidth={3} strokeLinecap="round" />
-        {/* Needle counterweight */}
-        <line x1={cx} y1={cy} x2={back.x} y2={back.y} stroke="hsl(220,14%,65%)" strokeWidth={3} strokeLinecap="round" />
-        {/* Needle body */}
-        <line x1={cx} y1={cy} x2={tip.x} y2={tip.y} stroke="hsl(220,14%,20%)" strokeWidth={2} strokeLinecap="round" filter={`url(#${id}-ndl)`} />
+        {hasValue ? (
+          <>
+            {/* Needle shadow */}
+            <line x1={cx + 0.5} y1={cy + 1} x2={tip.x + 0.5} y2={tip.y + 1} stroke="rgba(0,0,0,0.12)" strokeWidth={3} strokeLinecap="round" />
+            {/* Needle counterweight */}
+            <line x1={cx} y1={cy} x2={back.x} y2={back.y} stroke="hsl(220,14%,65%)" strokeWidth={3} strokeLinecap="round" />
+            {/* Needle body */}
+            <line x1={cx} y1={cy} x2={tip.x} y2={tip.y} stroke="hsl(220,14%,20%)" strokeWidth={2} strokeLinecap="round" filter={`url(#${id}-ndl)`} />
+          </>
+        ) : null}
 
         {/* Center hub — layered for 3D effect */}
         <circle cx={cx} cy={cy} r={7} fill="hsl(220,14%,95%)" stroke="hsl(220,14%,78%)" strokeWidth={1} />
@@ -124,7 +143,7 @@ export function SVGGauge({ value, max, color, unit }: SVGGaugeProps) {
         <circle cx={cx - 1} cy={cy - 1.5} r={1} fill="white" opacity={0.5} />
 
         {/* Value text */}
-        <text x={cx} y={cy + 20} textAnchor="middle" fontSize={12} fontWeight={800} fill={color} fontFamily="JetBrains Mono, monospace" letterSpacing={0.5}>
+        <text x={cx} y={cy + 20} textAnchor="middle" fontSize={12} fontWeight={800} fill={hasValue ? color : "hsl(215,12%,55%)"} fontFamily="JetBrains Mono, monospace" letterSpacing={0.5}>
           {valText}
         </text>
       </svg>

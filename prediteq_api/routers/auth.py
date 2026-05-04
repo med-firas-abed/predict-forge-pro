@@ -11,6 +11,7 @@ PATCH /admin/users/{id}/reject  — admin
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
@@ -68,18 +69,54 @@ class PendingUser(BaseModel):
     created_at: Optional[str] = None
 
 
+class PublicMachine(BaseModel):
+    id: str
+    code: str
+    nom: str
+
+
+def _validate_machine_id(machine_id: Optional[str]) -> Optional[str]:
+    if machine_id in (None, ""):
+        return None
+    try:
+        return str(UUID(machine_id))
+    except ValueError:
+        raise HTTPException(400, "machine_id must be a valid UUID")
+
+
+@router.get("/auth/machines", response_model=list[PublicMachine])
+async def list_signup_machines():
+    """Public machine list for the signup form."""
+    sb = get_supabase()
+    try:
+        res = sb.table("machines").select("id, code, nom").order("code").execute()
+    except Exception as e:
+        logger.error("Signup machines fetch error: %s", e)
+        raise HTTPException(502, "Erreur base de données")
+    return res.data or []
+
+
 # ─── POST /auth/signup ────────────────────────────────────────────────────────
 
 @router.post("/auth/signup")
 def signup(body: SignupRequest):
     """Create account with status=pending. First approved admin bootstraps."""
     sb = get_supabase()
+    machine_id = _validate_machine_id(body.machine_id)
 
     # Security: always force role=user on signup — admins promote via separate endpoint
     if body.role not in ("user", "admin"):
         raise HTTPException(400, "Role must be 'user' or 'admin'")
-    if body.role == "user" and not body.machine_id:
+    if body.role == "user" and not machine_id:
         raise HTTPException(400, "machine_id is required for role=user")
+    if body.role == "user":
+        try:
+            machine_res = sb.table("machines").select("id").eq("id", machine_id).limit(1).execute()
+        except Exception as e:
+            logger.error("Machine lookup on signup: %s", e)
+            raise HTTPException(502, "Erreur base de données")
+        if not machine_res.data:
+            raise HTTPException(400, "Machine inconnue")
     # Block admin self-registration in production: only allow via first-bootstrap
     if body.role == "admin":
         try:
@@ -108,7 +145,7 @@ def signup(body: SignupRequest):
             "user_metadata": {
                 "full_name": body.full_name,
                 "role": body.role,
-                "machine_id": body.machine_id,
+                "machine_id": machine_id,
             },
         })
         user_id = res.user.id
@@ -126,7 +163,7 @@ def signup(body: SignupRequest):
             "full_name": body.full_name,
             "role": body.role,
             "status": "pending",
-            "machine_id": body.machine_id,
+            "machine_id": machine_id,
         }).execute()
     except Exception as e:
         logger.error("Profile upsert error: %s", e)
@@ -390,3 +427,127 @@ async def reject_user(user_id: str, admin: CurrentUser = Depends(require_admin))
     log_audit(admin.id, admin.email, "user.reject", {"target_user_id": user_id})
 
     return {"status": "rejected", "user_id": user_id}
+
+
+# ─── DELETE /admin/users/{id} ─────────────────────────────────────────────────
+# Suppression définitive d'un compte (utilisateur ou administrateur).
+#
+# Pourquoi un endpoint DELETE séparé et pas un simple "reject" ?
+#   - reject ne change que profile.status="rejected" : la ligne reste en base
+#     et l'utilisateur Supabase Auth existe toujours. Cela suffit pour bloquer
+#     un signup, mais ne permet pas de "nettoyer" un compte fantôme (e2e,
+#     test, doublon, ex-employé, etc.).
+#   - DELETE supprime à la fois la ligne 'profiles' ET l'utilisateur Supabase
+#     Auth, donc l'email redevient libre (réinscription possible) et la table
+#     reste lisible pour l'admin.
+#
+# Garde-fous (sécurité — voir norme OWASP A01:2021 "Broken Access Control") :
+#   1. Auth-admin requis (require_admin dépendance FastAPI).
+#   2. Un admin ne peut pas se supprimer lui-même → empêche un lock-out
+#      accidentel où un admin supprimerait son propre compte par erreur.
+#   3. On refuse de supprimer le DERNIER admin approuvé restant → garantit
+#      qu'il y a toujours au moins un admin pour gérer les comptes (sinon
+#      impossible d'approuver de nouveaux utilisateurs ou modifier les seuils).
+#   4. Trace d'audit (log_audit) — exigence §6.5 du rapport (traçabilité
+#      RGPD-compatible des actions sensibles sur les comptes).
+
+@router.delete("/admin/users/{user_id}")
+async def delete_user(user_id: str, admin: CurrentUser = Depends(require_admin)):
+    """Supprime définitivement un compte (profil + utilisateur Supabase Auth).
+
+    Garde-fous :
+        - 400 si l'admin tente de se supprimer lui-même
+        - 409 si on essaie de supprimer le dernier admin approuvé restant
+        - 404 si l'utilisateur n'existe pas
+    """
+    sb = get_supabase()
+
+    # 1. Garde-fou anti-self-delete
+    if user_id == admin.id:
+        raise HTTPException(
+            400,
+            "Un administrateur ne peut pas supprimer son propre compte.",
+        )
+
+    # 2. Vérifier que la cible existe
+    res = sb.table("profiles").select("*").eq("id", user_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Utilisateur introuvable")
+    target = res.data[0]
+
+    # 3. Garde-fou anti-last-admin
+    #    On compte le nombre d'admins approuvés ; si la cible en fait partie
+    #    et que c'est le dernier, on refuse la suppression.
+    if target.get("role") == "admin" and target.get("status") == "approved":
+        try:
+            count_res = (
+                sb.table("profiles")
+                .select("id", count="exact")
+                .eq("role", "admin")
+                .eq("status", "approved")
+                .execute()
+            )
+            remaining = (count_res.count or 0) - 1
+            if remaining < 1:
+                raise HTTPException(
+                    409,
+                    "Impossible de supprimer le dernier administrateur approuvé. "
+                    "Promouvez un autre utilisateur en admin avant cette suppression.",
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Last-admin check failed: %s", e)
+            raise HTTPException(500, "Erreur lors de la vérification des admins restants")
+
+    # 4. Récupérer l'email pour l'email de notification (avant suppression Auth)
+    target_email: Optional[str] = None
+    try:
+        auth_user = sb.auth.admin.get_user_by_id(user_id)
+        if auth_user and auth_user.user:
+            target_email = auth_user.user.email
+    except Exception as e:
+        logger.warning("Could not resolve email of user %s before delete: %s", user_id, e)
+
+    # 5. Supprimer la ligne profiles d'abord (clé étrangère dépend de auth.users
+    #    via ON DELETE CASCADE ; on supprime explicitement par sécurité au cas où
+    #    la migration n'aurait pas posé la cascade).
+    try:
+        sb.table("profiles").delete().eq("id", user_id).execute()
+    except Exception as e:
+        logger.error("Profile delete error for %s: %s", user_id, e)
+        raise HTTPException(502, "Erreur lors de la suppression du profil")
+
+    # 6. Supprimer l'utilisateur Supabase Auth (libère l'email pour ré-inscription)
+    try:
+        sb.auth.admin.delete_user(user_id)
+    except Exception as e:
+        # Le profil est déjà supprimé, mais l'utilisateur Auth peut subsister.
+        # On loggue mais on n'échoue pas — l'admin verra une cellule "ghost"
+        # disparaître côté UI. Un job de nettoyage périodique peut purger ces
+        # auth-users orphelins si nécessaire.
+        logger.warning("Auth user delete failed for %s (profile already removed): %s", user_id, e)
+
+    # 7. Email de notification (best-effort)
+    if target_email:
+        try:
+            html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                <h2 style="color: #e74c3c;">Compte supprimé — PrediTeq</h2>
+                <p>Bonjour <b>{target.get('full_name', '')}</b>,</p>
+                <p>Votre compte PrediTeq a été supprimé par un administrateur.
+                Si vous pensez qu'il s'agit d'une erreur, contactez votre responsable.</p>
+            </div>
+            """
+            send_alert_email(target_email, "Compte supprimé — PrediTeq", html)
+        except Exception as e:
+            logger.warning("Could not send deletion email: %s", e)
+
+    log_audit(admin.id, admin.email, "user.delete", {
+        "target_user_id": user_id,
+        "target_email": target_email,
+        "target_role": target.get("role"),
+        "target_status": target.get("status"),
+    })
+
+    return {"status": "deleted", "user_id": user_id}

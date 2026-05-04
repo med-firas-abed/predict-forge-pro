@@ -3,12 +3,18 @@ import json
 import logging
 import asyncio
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from core.config import settings
+from core.decision_snapshot import (
+    build_machine_decision_snapshot,
+    fetch_alert_counts,
+    fetch_open_task_counts,
+)
 from core.supabase_client import get_supabase
 from core.auth import CurrentUser, require_auth, get_machine_filter
 from core.rate_limit import check_user_rate
@@ -18,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/report", tags=["report"])
 
+ReportAudience = Literal["jury", "technician", "dual"]
+
 SYSTEM_PROMPT = (
     "Tu es un expert en maintenance prédictive industrielle. "
     "Génère un rapport technique structuré en français. "
@@ -26,11 +34,43 @@ SYSTEM_PROMPT = (
 )
 
 
+def _audience_prompt(audience: ReportAudience) -> str:
+    if audience == "jury":
+        return (
+            "Audience cible: jury non technique. Commence par une lecture simple, "
+            "explique HI et RUL en mots courants, limite le jargon et fais ressortir "
+            "l'impact operationnel puis l'action a prendre."
+        )
+    if audience == "technician":
+        return (
+            "Audience cible: techniciens Aroteq. Sois precis, exploitable et chiffre. "
+            "Mets en avant HI, RUL, alertes, tendance, causes probables et action terrain."
+        )
+    return (
+        "Audience cible: jury non technique et techniciens Aroteq a la fois. "
+        "Structure la reponse en deux couches: 1) resume executif simple, "
+        "2) annexe technique avec les chiffres et preuves."
+    )
+
+
+def _audience_label(audience: ReportAudience) -> str:
+    return {
+        "jury": "Vue jury",
+        "technician": "Vue technicien",
+        "dual": "Vue double",
+    }[audience]
+
+
 class ReportRequest(BaseModel):
     machine_id: str  # machine code (e.g. ASC-A1)
+    audience: ReportAudience = "dual"
 
 
-def _gather_context(code: str, user: CurrentUser) -> tuple[dict, dict, str]:
+def _gather_context(
+    code: str,
+    user: CurrentUser,
+    audience: ReportAudience = "dual",
+) -> tuple[dict, dict, str]:
     """Fetch all data needed for a report. Returns (machine, context_data, user_prompt)."""
     sb = get_supabase()
 
@@ -77,6 +117,14 @@ def _gather_context(code: str, user: CurrentUser) -> tuple[dict, dict, str]:
     last_result = manager.last_results.get(code)
     rul_result = manager.predict_rul(code)
     engine_status = manager.get_status(code)
+    alert_count = fetch_alert_counts([machine_uuid]).get(machine_uuid, 0)
+    open_task_count = fetch_open_task_counts([machine_uuid]).get(machine_uuid, 0)
+    decision_snapshot = build_machine_decision_snapshot(
+        machine,
+        manager,
+        alerts_24h=alert_count,
+        open_tasks=open_task_count,
+    )
 
     context_data = {
         "machine": machine,
@@ -86,11 +134,13 @@ def _gather_context(code: str, user: CurrentUser) -> tuple[dict, dict, str]:
         "hi_live": last_result,
         "rul_live": rul_result,
         "engine_status": engine_status,
+        "decision_snapshot": decision_snapshot,
     }
 
     user_prompt = (
         f"Génère un rapport de maintenance prédictive pour la machine {code} "
         f"({machine.get('nom', '')}) située à {machine.get('region', '')}.\n\n"
+        f"Consigne d'audience:\n{_audience_prompt(audience)}\n\n"
         f"Données complètes :\n```json\n{json.dumps(context_data, indent=2, default=str)}\n```\n\n"
         "Le rapport doit inclure :\n"
         "1. Résumé de l'état de santé actuel\n"
@@ -104,6 +154,29 @@ def _gather_context(code: str, user: CurrentUser) -> tuple[dict, dict, str]:
     return machine, context_data, user_prompt
 
 
+def _resolve_scoped_machine_code(machine_code: str | None, user: CurrentUser) -> str | None:
+    requested_code = machine_code.strip() if machine_code else None
+    machine_filter = get_machine_filter(user)
+    if not machine_filter:
+        return requested_code
+
+    sb = get_supabase()
+    try:
+        machine_res = sb.table("machines").select("code").eq("id", machine_filter).limit(1).execute()
+    except Exception as e:
+        logger.error("DB error resolving scoped machine code: %s", e)
+        raise HTTPException(502, "Erreur base de données")
+
+    if not machine_res.data:
+        raise HTTPException(403, "Machine assignée introuvable")
+
+    allowed_code = machine_res.data[0]["code"]
+    if requested_code and requested_code != allowed_code:
+        raise HTTPException(403, "Accès interdit à cette machine")
+
+    return allowed_code
+
+
 @router.post("/generate")
 async def generate_report(body: ReportRequest, user: CurrentUser = Depends(require_auth)):
     """
@@ -115,7 +188,7 @@ async def generate_report(body: ReportRequest, user: CurrentUser = Depends(requi
     if not check_user_rate(user.id, limit=10, window=3600):
         raise HTTPException(429, "Limite atteinte — max 10 rapports IA par heure")
 
-    machine, context_data, user_prompt = _gather_context(body.machine_id, user)
+    machine, context_data, user_prompt = _gather_context(body.machine_id, user, body.audience)
 
     from groq import AsyncGroq
     client = AsyncGroq(api_key=settings.GROQ_API_KEY, timeout=30.0)
@@ -155,7 +228,7 @@ async def generate_pdf_report(body: ReportRequest,
     if not check_user_rate(user.id, limit=10, window=3600):
         raise HTTPException(429, "Limite atteinte — max 10 rapports IA par heure")
 
-    machine, context_data, user_prompt = _gather_context(body.machine_id, user)
+    machine, context_data, user_prompt = _gather_context(body.machine_id, user, body.audience)
     code = body.machine_id
 
     # Generate full report (non-streaming) — run in thread to avoid blocking event loop
@@ -272,17 +345,25 @@ async def generate_pdf_report(body: ReportRequest,
 # FREE template-based endpoints (no LLM required)
 # ══════════════════════════════════════════════════════════════════════════════
 
-from typing import Literal
-
 class AutoReportRequest(BaseModel):
     machine_id: str | None = None  # None = all machines
-    period: Literal["weekly", "monthly"] = "weekly"
+    period: Literal["7d", "15d", "30d"] = "7d"
     lang: Literal["fr", "en", "ar"] = "fr"
+    audience: ReportAudience = "dual"
+
+
+def _period_label(period: Literal["7d", "15d", "30d"], lang: Literal["fr", "en", "ar"]) -> str:
+    labels = {
+        "7d": {"fr": "7 jours", "en": "7 days", "ar": "7 ايام"},
+        "15d": {"fr": "15 jours", "en": "15 days", "ar": "15 يوما"},
+        "30d": {"fr": "30 jours", "en": "30 days", "ar": "30 يوما"},
+    }
+    return labels[period][lang]
 
 
 @router.post("/auto/generate")
 async def auto_generate_report(body: AutoReportRequest,
-                                user: CurrentUser = Depends(require_auth)):
+                                 user: CurrentUser = Depends(require_auth)):
     """
     POST /report/auto/generate
     Free template-based report — no API key needed.
@@ -291,11 +372,14 @@ async def auto_generate_report(body: AutoReportRequest,
     """
     from report_engine import generate_report
 
+    machine_code = _resolve_scoped_machine_code(body.machine_id, user)
+
     try:
         md = generate_report(
-            machine_code=body.machine_id,
+            machine_code=machine_code,
             period=body.period,
             lang=body.lang,
+            audience=body.audience,
         )
     except Exception as e:
         logger.error("Auto report generation error: %s", e)
@@ -305,11 +389,12 @@ async def auto_generate_report(body: AutoReportRequest,
     try:
         sb = get_supabase()
         now = datetime.now(timezone.utc)
-        machine_part = body.machine_id or "Toutes"
-        period_label = "Hebdomadaire" if body.period == "weekly" else "Mensuel"
+        machine_part = machine_code or "Toutes"
+        period_label = _period_label(body.period, body.lang)
+        period_label = f"{period_label} - {_audience_label(body.audience)}"
         titre = f"Rapport {period_label} — {machine_part} — {now.strftime('%d/%m/%Y %H:%M')}"
         sb.table('rapports').insert({
-            'machine_code': body.machine_id,
+            'machine_code': machine_code,
             'period': body.period,
             'lang': body.lang,
             'titre': titre,
@@ -326,26 +411,29 @@ async def auto_generate_report(body: AutoReportRequest,
 
 @router.post("/auto/pdf")
 async def auto_generate_pdf(body: AutoReportRequest,
-                             user: CurrentUser = Depends(require_auth)):
+                              user: CurrentUser = Depends(require_auth)):
     """
     POST /report/auto/pdf
     Free template-based PDF — no API key needed.
     """
     from report_engine import generate_report, generate_pdf_bytes
 
+    machine_code = _resolve_scoped_machine_code(body.machine_id, user)
+
     try:
         md = generate_report(
-            machine_code=body.machine_id,
+            machine_code=machine_code,
             period=body.period,
             lang=body.lang,
+            audience=body.audience,
         )
-        pdf_bytes = generate_pdf_bytes(md, title=f"Rapport PrediTeq — {body.period}", lang=body.lang)
+        pdf_bytes = generate_pdf_bytes(md, title=f"Rapport PrediTeq — {_period_label(body.period, body.lang)}", lang=body.lang)
     except Exception as e:
         logger.error("Auto PDF generation error: %s", e)
         raise HTTPException(500, "PDF generation failed")
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
-    machine_part = body.machine_id or "all"
+    machine_part = machine_code or "all"
     filename = f"rapport_{machine_part}_{body.period}_{timestamp}.pdf"
 
     return Response(

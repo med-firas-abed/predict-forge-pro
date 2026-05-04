@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
+import { repairText } from "@/lib/repairText";
+
 export type Lang = "fr" | "en" | "ar";
 export type Theme = "dark" | "light";
 
@@ -27,20 +29,39 @@ export function useApp() {
   return ctx;
 }
 
+function safeStorageGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures so the app can still render.
+  }
+}
+
 const TR: Record<string, Record<Lang, string>> = {
   // Nav
   "nav.dashboard": { fr: "Tableau de bord", en: "Dashboard", ar: "لوحة القيادة" },
   "nav.logout": { fr: "Déconnexion", en: "Sign Out", ar: "تسجيل الخروج" },
-  "nav.machines": { fr: "Machines", en: "Machines", ar: "الآلات" },
-  "nav.maintenance": { fr: "Maintenance", en: "Maintenance", ar: "الصيانة" },
+  "nav.machines": { fr: "Gestion des machines", en: "Machine Management", ar: "إدارة الآلات" },
+  "nav.maintenance": { fr: "Calendrier de maintenance", en: "Maintenance Calendar", ar: "تقويم الصيانة" },
   "nav.calendar": { fr: "Calendrier", en: "Calendar", ar: "التقويم" },
   "nav.costs": { fr: "Coûts & Budget", en: "Costs & Budget", ar: "التكاليف والميزانية" },
-  "nav.alerts": { fr: "Alertes", en: "Alerts", ar: "التنبيهات" },
+  "nav.alerts": { fr: "Centre d'alertes", en: "Alert Center", ar: "مركز التنبيهات" },
   "nav.geo": { fr: "Géolocalisation", en: "Geolocation", ar: "الموقع الجغرافي" },
   "nav.admin": { fr: "Administration", en: "Administration", ar: "الإدارة" },
+  "nav.ia": { fr: "Analyse & Rapport IA", en: "AI Analysis & Reporting", ar: "تحليل وتقارير الذكاء الاصطناعي" },
   "nav.rapportIA": { fr: "Rapport IA", en: "AI Report", ar: "تقرير الذكاء الاصطناعي" },
-  "nav.planner": { fr: "Agent IA", en: "AI Planner", ar: "وكيل الذكاء الاصطناعي" },
-  "nav.diagnostics": { fr: "Diagnostics RUL", en: "RUL Diagnostics", ar: "تشخيصات العمر المتبقي" },
+  "nav.planner": { fr: "Assistant IA", en: "AI Planner", ar: "وكيل الذكاء الاصطناعي" },
+  "nav.diagnostics": { fr: "Diagnostic avancé", en: "Advanced diagnostics", ar: "التشخيص المتقدم" },
   "nav.seuils": { fr: "Seuils d'alertes", en: "Alert Thresholds", ar: "عتبات التنبيه" },
   "nav.simulator": { fr: "Simulateur", en: "Simulator", ar: "المحاكي" },
   "nav.experiment": { fr: "Expérience ESP32", en: "ESP32 Experiment", ar: "تجربة ESP32" },
@@ -50,9 +71,9 @@ const TR: Record<string, Record<Lang, string>> = {
   "meta.adminusers.title": { fr: "Gestion des comptes", en: "Account Management", ar: "إدارة الحسابات" },
   "meta.adminusers.sub": { fr: "Approbation et gestion des utilisateurs", en: "User approval and management", ar: "الموافقة على المستخدمين وإدارتهم" },
   "meta.simulator.title": { fr: "Simulateur", en: "Simulator", ar: "المحاكي" },
-  "meta.simulator.sub": { fr: "Rejouer les trajectoires de test et observer le pipeline ML en temps réel", en: "Replay test trajectories and observe the ML pipeline in real time", ar: "إعادة تشغيل مسارات الاختبار ومراقبة خط أنابيب ML في الوقت الفعلي" },
+  "meta.simulator.sub": { fr: "Lancer la démo et suivre l'évolution des indicateurs machine en temps réel", en: "Launch the demo and follow machine indicators in real time", ar: "إطلاق العرض التجريبي ومتابعة مؤشرات الآلات في الوقت الفعلي" },
   "meta.experiment.title": { fr: "Expérience ESP32", en: "ESP32 Experiment", ar: "تجربة ESP32" },
-  "meta.experiment.sub": { fr: "Capteur vibration temps réel — ESP32 + MPU6050 → MQTT → Pipeline ML", en: "Real-time vibration sensor — ESP32 + MPU6050 → MQTT → ML Pipeline", ar: "مستشعر اهتزاز في الوقت الحقيقي — ESP32 + MPU6050 → MQTT → خط أنابيب ML" },
+  "meta.experiment.sub": { fr: "Banc d'essai ESP32 — capteur de vibration + capteur de courant + pipeline ML", en: "ESP32 bench test — vibration sensor + current sensor + ML pipeline", ar: "منصة اختبار ESP32 — مستشعر اهتزاز + مستشعر تيار + خط أنابيب ML" },
 
   // Dashboard
   "dash.activeMachines": { fr: "Machines actives", en: "Active Machines", ar: "الآلات النشطة" },
@@ -88,6 +109,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "dash.hiTrend7d": { fr: "Tendance HI — 7 derniers jours", en: "HI Trend — Last 7 Days", ar: "اتجاه HI — آخر 7 أيام" },
   "dash.loadingSensors": { fr: "Chargement des capteurs…", en: "Loading sensors…", ar: "جاري تحميل المستشعرات…" },
   "dash.awaitingSensors": { fr: "En attente de données capteurs — démarrez le simulateur", en: "Awaiting sensor data — start the simulator", ar: "في انتظار بيانات المستشعرات — ابدأ المحاكي" },
+  "dash.noData": { fr: "Aucune donnée disponible", en: "No data available", ar: "لا توجد بيانات متاحة" },
 
   // Geo
   "geo.title": { fr: "Déploiement Tunisie — 2026", en: "Tunisia Deployment — 2026", ar: "نشر تونس — 2026" },
@@ -235,28 +257,30 @@ const TR: Record<string, Record<Lang, string>> = {
   // Page meta
   "meta.dashboard.title": { fr: "Tableau de bord", en: "Dashboard", ar: "لوحة القيادة" },
   "meta.dashboard.sub": { fr: "Vue d'ensemble de la flotte", en: "Fleet overview", ar: "نظرة عامة على الأسطول" },
-  "meta.machines.title": { fr: "Machines", en: "Machines", ar: "الآلات" },
-  "meta.machines.sub": { fr: "Parc d'ascenseurs de stockage", en: "Storage elevator fleet", ar: "أسطول مصاعد التخزين" },
-  "meta.maintenance.title": { fr: "Maintenance", en: "Maintenance", ar: "الصيانة" },
-  "meta.maintenance.sub": { fr: "Gestion des tâches et interventions", en: "Task and intervention management", ar: "إدارة المهام والتدخلات" },
+  "meta.machines.title": { fr: "Gestion des machines", en: "Machine Management", ar: "إدارة الآلات" },
+  "meta.machines.sub": { fr: "Gestion du parc d'ascenseurs de stockage", en: "Storage elevator fleet management", ar: "إدارة أسطول مصاعد التخزين" },
+  "meta.maintenance.title": { fr: "Calendrier de maintenance", en: "Maintenance Calendar", ar: "تقويم الصيانة" },
+  "meta.maintenance.sub": { fr: "Calendrier et suivi des interventions", en: "Calendar and intervention tracking", ar: "تقويم ومتابعة التدخلات" },
   "meta.calendar.title": { fr: "Calendrier", en: "Calendar", ar: "التقويم" },
   "meta.calendar.sub": { fr: "Planification maintenance", en: "Maintenance planning", ar: "تخطيط الصيانة" },
   "meta.costs.title": { fr: "Coûts & Budget", en: "Costs & Budget", ar: "التكاليف والميزانية" },
   "meta.costs.sub": { fr: "Suivi budgétaire maintenance", en: "Maintenance budget tracking", ar: "متابعة ميزانية الصيانة" },
-  "meta.alerts.title": { fr: "Alertes", en: "Alerts", ar: "التنبيهات" },
+  "meta.alerts.title": { fr: "Centre d'alertes", en: "Alert Center", ar: "مركز التنبيهات" },
   "meta.alerts.sub": { fr: "Centre de notifications et d'alertes", en: "Notification and alert center", ar: "مركز الإشعارات والتنبيهات" },
   "meta.geo.title": { fr: "Géolocalisation", en: "Geolocation", ar: "الموقع الجغرافي" },
   "meta.geo.sub": { fr: "Déploiement Tunisie — Carte interactive", en: "Tunisia deployment — Interactive map", ar: "نشر تونس — خريطة تفاعلية" },
   "meta.admin.title": { fr: "Administration", en: "Administration", ar: "الإدارة" },
   "meta.admin.sub": { fr: "Gestion de la plateforme", en: "Platform management", ar: "إدارة المنصة" },
+  "meta.ia.title": { fr: "Analyse & Rapport IA", en: "AI Analysis & Reporting", ar: "تحليل وتقارير الذكاء الاصطناعي" },
+  "meta.ia.sub": { fr: "Analyse assistée, décision et rapports intelligents", en: "Assisted analysis, decision support, and smart reports", ar: "تحليل مساعد ودعم القرار وتقارير ذكية" },
   "meta.rapportia.title": { fr: "Rapport IA", en: "AI Report", ar: "تقرير الذكاء الاصطناعي" },
-  "meta.rapportia.sub": { fr: "Génération de rapports intelligents", en: "Intelligent report generation", ar: "إنشاء تقارير ذكية" },
+  "meta.rapportia.sub": { fr: "Rapports intelligents et plan d'action IA", en: "Smart reports and AI action planning", ar: "تقارير ذكية وخطة عمل بالذكاء الاصطناعي" },
   "meta.seuils.title": { fr: "Seuils d'alertes", en: "Alert Thresholds", ar: "عتبات التنبيه" },
   "meta.seuils.sub": { fr: "Configuration des seuils et notifications", en: "Threshold and notification configuration", ar: "إعدادات العتبات والإشعارات" },
   "meta.planner.title": { fr: "Agent IA", en: "AI Planner", ar: "وكيل الذكاء الاصطناعي" },
   "meta.planner.sub": { fr: "Planification autonome de la maintenance par intelligence artificielle", en: "AI-powered autonomous maintenance planning", ar: "تخطيط الصيانة الذاتي بالذكاء الاصطناعي" },
   "meta.diagnostics.title": { fr: "Diagnostics & Intervalle RUL", en: "Diagnostics & RUL Interval", ar: "تشخيصات العمر المتبقي" },
-  "meta.diagnostics.sub": { fr: "Pronostic avec intervalle de confiance, diagnostics experts (ISO/IEC/IEEE) et explication SHAP", en: "Prognosis with confidence interval, expert diagnostics (ISO/IEC/IEEE), and SHAP explanation", ar: "تنبؤ مع فترة ثقة، تشخيصات خبراء (ISO/IEC/IEEE)، وشرح SHAP" },
+  "meta.diagnostics.sub": { fr: "Lecture détaillée de la machine : durée de vie restante, alertes techniques et facteurs explicatifs", en: "Detailed machine view: remaining life, technical alerts, and explanatory factors", ar: "قراءة مفصلة للآلة: العمر المتبقي والتنبيهات التقنية والعوامل التفسيرية" },
 
   // Chat widget
   "chat.title": { fr: "Assistant PrediTeq", en: "PrediTeq Assistant", ar: "مساعد PrediTeq" },
@@ -268,7 +292,7 @@ const TR: Record<string, Record<Lang, string>> = {
 
   // Planner
   "planner.title": { fr: "Agent de Planification IA", en: "AI Planning Agent", ar: "وكيل التخطيط الذكي" },
-  "planner.subtitle": { fr: "Analyse la flotte, propose un plan de maintenance optimal et crée les tâches GMAO", en: "Analyses your fleet, proposes optimal maintenance plan, and creates GMAO tasks", ar: "يحلل الأسطول ويقترح خطة صيانة مثالية وينشئ مهام GMAO" },
+  "planner.subtitle": { fr: "Analyse la flotte, propose les prochaines actions et prépare les tâches de maintenance", en: "Analyses the fleet, suggests next actions, and prepares maintenance tasks", ar: "يحلل الأسطول ويقترح الخطوات التالية ويحضّر مهام الصيانة" },
   "planner.fleetRisk": { fr: "Classement des risques", en: "Risk Ranking", ar: "تصنيف المخاطر" },
   "planner.loadingRisk": { fr: "Chargement...", en: "Loading...", ar: "جاري التحميل..." },
   "planner.noData": { fr: "Aucune donnée — démarrez le simulateur", en: "No data — start the simulator", ar: "لا توجد بيانات — ابدأ المحاكي" },
@@ -277,7 +301,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "planner.generate": { fr: "Générer le plan", en: "Generate Plan", ar: "إنشاء الخطة" },
   "planner.generating": { fr: "Génération...", en: "Generating...", ar: "جاري الإنشاء..." },
   "planner.clickGenerate": { fr: "Cliquez sur Générer pour lancer l'agent IA", en: "Click Generate to run the AI agent", ar: "انقر على إنشاء لتشغيل وكيل الذكاء الاصطناعي" },
-  "planner.proposedTasks": { fr: "Tâches GMAO proposées", en: "Proposed GMAO Tasks", ar: "مهام GMAO المقترحة" },
+  "planner.proposedTasks": { fr: "Tâches proposées", en: "Proposed tasks", ar: "المهام المقترحة" },
   "planner.approve": { fr: "Approuver", en: "Approve", ar: "الموافقة" },
 
   // Status
@@ -320,6 +344,8 @@ const TR: Record<string, Record<Lang, string>> = {
   "modal.current": { fr: "Courant moteur", en: "Motor Current", ar: "تيار المحرك" },
   "modal.temperature": { fr: "Température moteur", en: "Motor Temperature", ar: "حرارة المحرك" },
   "modal.rulEstimated": { fr: "RUL estimé", en: "Estimated RUL", ar: "العمر المتبقي المقدّر" },
+  "modal.rulSurveillance": { fr: "Surveillance", en: "Monitoring", ar: "مراقبة" },
+  "modal.rulNoPrecursor": { fr: "Aucun précurseur détecté", en: "No precursor detected", ar: "لا توجد إشارات تنبؤية" },
 
   // Auth pages
   "auth.signIn": { fr: "Connexion", en: "Sign In", ar: "تسجيل الدخول" },
@@ -328,7 +354,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "auth.noAccount": { fr: "Pas encore de compte ?", en: "No account yet?", ar: "ليس لديك حساب؟" },
   "auth.signUp": { fr: "S'inscrire", en: "Sign Up", ar: "إنشاء حساب" },
   "auth.loginError": { fr: "Erreur de connexion.", en: "Login error.", ar: "خطأ في تسجيل الدخول." },
-  "auth.subtitle": { fr: "Système de Maintenance Prédictive basé sur l'AIoT", en: "AIoT-based Predictive Maintenance System", ar: "نظام الصيانة التنبؤية القائم على AIoT" },
+  "auth.subtitle": { fr: "Système de maintenance prédictive industrielle", en: "Industrial predictive maintenance system", ar: "نظام صيانة تنبؤية صناعي" },
   "auth.loading": { fr: "Connexion en cours...", en: "Connecting...", ar: "جاري الاتصال..." },
   "auth.createAccount": { fr: "Créer un compte", en: "Create Account", ar: "إنشاء حساب" },
   "auth.fullName": { fr: "Nom complet", en: "Full Name", ar: "الاسم الكامل" },
@@ -418,7 +444,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "dash.decreasingTrendShort": { fr: "tendance décroissante", en: "decreasing trend", ar: "اتجاه تنازلي" },
 
   // Footer
-  "footer.text": { fr: "© 2026 AroTeq. PrediTeq Pro — Tous droits réservés. | Système de Maintenance Prédictive Industrielle basé sur l'AIoT", en: "© 2026 AroTeq. PrediTeq Pro — All rights reserved. | Industrial Predictive Maintenance System based on AIoT", ar: "© 2026 AroTeq. PrediTeq Pro — جميع الحقوق محفوظة. | نظام الصيانة التنبؤية الصناعية القائم على AIoT" },
+  "footer.text": { fr: "© 2026 AroTeq. PrediTeq Pro — Tous droits réservés. | Système de maintenance prédictive industrielle", en: "© 2026 AroTeq. PrediTeq Pro — All rights reserved. | Industrial predictive maintenance system", ar: "© 2026 AroTeq. PrediTeq Pro — جميع الحقوق محفوظة. | نظام صيانة تنبؤية صناعي" },
 
   // Not Found
   "notfound.title": { fr: "Oops ! Page introuvable", en: "Oops! Page not found", ar: "عذرًا! الصفحة غير موجودة" },
@@ -441,14 +467,14 @@ const TR: Record<string, Record<Lang, string>> = {
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("pl-lang") as Lang) || "fr");
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("pl-theme") as Theme) || "light");
+  const [lang, setLang] = useState<Lang>(() => (safeStorageGet("pl-lang") as Lang) || "fr");
+  const [theme, setTheme] = useState<Theme>(() => (safeStorageGet("pl-theme") as Theme) || "light");
   const [alertEmails, setAlertEmails] = useState(() => {
-    const saved = localStorage.getItem("pl-alert-emails");
+    const saved = safeStorageGet("pl-alert-emails");
     if (saved) try { return JSON.parse(saved); } catch { /* ignore */ }
     return { manager: "", technician: "" };
   });
-  useEffect(() => { localStorage.setItem("pl-alert-emails", JSON.stringify(alertEmails)); }, [alertEmails]);
+  useEffect(() => { safeStorageSet("pl-alert-emails", JSON.stringify(alertEmails)); }, [alertEmails]);
   const [thresholds, setThresholds] = useState<AlertThresholds>({ hiCrit: 0.3, hiSurv: 0.6 });
 
   // Fetch global thresholds from backend on mount
@@ -469,21 +495,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { controller.abort(); clearTimeout(timeoutId); };
   }, []);
 
-  useEffect(() => { localStorage.setItem("pl-lang", lang); }, [lang]);
+  useEffect(() => { safeStorageSet("pl-lang", lang); }, [lang]);
   useEffect(() => {
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
     document.documentElement.lang = lang;
   }, [lang]);
   useEffect(() => {
-    localStorage.setItem("pl-theme", theme);
+    safeStorageSet("pl-theme", theme);
     document.documentElement.classList.toggle("light", theme === "light");
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
   const t = (key: string): string => {
+    if (key === "meta.diagnostics.title") {
+      return repairText(
+        {
+          fr: "Diagnostic avancé",
+          en: "Advanced Diagnostics",
+          ar: "Advanced Diagnostics",
+        }[lang] || "Diagnostic avancé"
+      );
+    }
+
+    if (key === "meta.diagnostics.sub") {
+      return repairText(
+        {
+          fr: "Lecture technique claire pour la machine sélectionnée : maintenance, RUL, stress et alertes.",
+          en: "Clear technical reading for the selected machine: maintenance, RUL, stress, and alerts.",
+          ar: "Clear technical reading for the selected machine: maintenance, RUL, stress, and alerts.",
+        }[lang] ||
+        "Lecture technique claire pour la machine selectionnee : maintenance, RUL, stress et alertes."
+      );
+    }
+
     const entry = TR[key];
     if (!entry) return key;
-    return entry[lang] || entry.fr || key;
+    return repairText(entry[lang] || entry.fr || key);
   };
 
   return (

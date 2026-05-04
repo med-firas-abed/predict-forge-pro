@@ -4,6 +4,7 @@ Verifies Supabase JWT tokens, extracts user profile.
 """
 
 import logging
+import asyncio
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Header
@@ -33,6 +34,19 @@ class CurrentUser:
         return self.status == "approved"
 
 
+def _metadata_value(user: object, *keys: str) -> Optional[str]:
+    metadata = getattr(user, "user_metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return None
+
+
 async def _get_user_from_token(authorization: str = Header(...)) -> CurrentUser:
     """
     Validate Supabase JWT and load profile.
@@ -57,15 +71,42 @@ async def _get_user_from_token(authorization: str = Header(...)) -> CurrentUser:
         raise HTTPException(401, "Invalid or expired token")
 
     # Fetch profile from profiles table
-    try:
-        profile_res = sb.table("profiles").select("*").eq("id", user.id).execute()
-        if not profile_res.data:
-            raise HTTPException(403, "Profile not found")
-        profile = profile_res.data[0]
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Profile fetch error: %s", e)
+    profile = None
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            profile_res = sb.table("profiles").select("*").eq("id", user.id).execute()
+            if not profile_res.data:
+                raise HTTPException(403, "Profile not found")
+            profile = profile_res.data[0]
+            break
+        except HTTPException:
+            raise
+        except Exception as e:
+            last_error = e
+            logger.warning("Profile fetch error (attempt %s/2) for %s: %s", attempt + 1, user.id, e)
+            if attempt == 0:
+                await asyncio.sleep(0.15)
+
+    if profile is None:
+        fallback_role = _metadata_value(user, "role") or "user"
+        fallback_machine_id = _metadata_value(user, "machine_id")
+
+        if fallback_role in {"admin", "user"}:
+            logger.warning(
+                "Falling back to auth metadata for %s after profile fetch failure: %s",
+                user.id,
+                last_error,
+            )
+            return CurrentUser(
+                id=user.id,
+                email=user.email or "",
+                role=fallback_role,
+                status="approved",
+                machine_id=fallback_machine_id,
+            )
+
+        logger.error("Profile fetch error without fallback for %s: %s", user.id, last_error)
         raise HTTPException(500, "Could not fetch profile")
 
     return CurrentUser(

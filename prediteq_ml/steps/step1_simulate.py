@@ -13,8 +13,11 @@ Chaîne de dégradation (d'après technicien Aroteq, confirmée par IEC 60034-1 
 
 Profils de dégradation (familles standard en PHM, cf. Saxena & Goebel 2008) :
   A_linear       : dégradation uniforme, usure abrasive simple
-  B_exponential  : profil à deux temps (lent puis accéléré), formule quadratique
-                   inspirée de Paris-Erdogan sur fissure sous-critique
+  B_quadratic    : profil à deux temps (lent puis accéléré), formule HI(t)
+                   = 1 - k·(t/t_fail)². Inspirée de la propagation de fissure
+                   sous-critique (loi de Paris-Erdogan simplifiée). Renommé
+                   en avril 2026 (anciennement « B_exponential ») pour refléter
+                   exactement la formule mathématique implémentée.
   C_stepwise     : défauts successifs discrets (dents d'engrenage, écaillage)
   D_noisy_linear : linéaire + bruit mesure (cas réaliste avec capteurs bruités)
 """
@@ -24,6 +27,10 @@ import pandas as pd
 import sys
 import os
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from config import *
 
@@ -31,13 +38,13 @@ np.random.seed(42)
 
 # Noms internes des profils (clés des CSV, compatibilité descendante avec
 # le backend/frontend qui consomment la colonne 'profile').
-PROFILE_NAMES = ['A_linear', 'B_exponential', 'C_stepwise', 'D_noisy_linear']
+PROFILE_NAMES = ['A_linear', 'B_quadratic', 'C_stepwise', 'D_noisy_linear']
 
 # Correspondance nom interne → nom scientifique d'affichage (pour rapports/plots
 # uniquement — n'altère pas les données persistées).
 PROFILE_DISPLAY_NAMES = {
     'A_linear':       'A — Linéaire (usure uniforme)',
-    'B_exponential':  'B — Quadratique (accélération progressive)',
+    'B_quadratic':    'B — Quadratique (accélération progressive)',
     'C_stepwise':     'C — Par paliers (défauts discrets)',
     'D_noisy_linear': 'D — Linéaire bruité (capteurs réalistes)',
 }
@@ -50,22 +57,29 @@ def compute_hi(profile, t_arr, t_fail):
     """Famille de profils de dégradation (HI(t) ∈ [0,1]).
     Inspirée des profils standards en PHM : Saxena et al., "Damage Propagation
     Modeling for Aircraft Engine Run-to-Failure Simulation", PHM 2008 (CMAPSS).
+
+    v2.1 — coefficient passé de 0.7 à 0.95 pour que HI(t_fail) ≈ 0.05 au lieu
+    de 0.3. Avant cette correction, les trajectoires plafonnaient à HI=0.3
+    (= seuil critique) et la zone D (HI<0.3) était sous-représentée dans le
+    train. Désormais chaque trajectoire traverse complètement la zone D
+    avant la coupure (cf. ligne 199 : t_end = t_fail × 1.10).
     """
     ratio = t_arr / t_fail
     if profile == 'A_linear':
         # HI(t) = 1 - k·(t/t_fail) — usure abrasive uniforme (Archard 1953)
-        return np.clip(1 - 0.7 * ratio, 0, 1)
-    elif profile == 'B_exponential':
-        # HI(t) = 1 - k·(t/t_fail)² — nom historique « exponential »,
-        # formule effective = QUADRATIQUE. Analogue à la propagation de
-        # fissure sous-critique (loi de Paris-Erdogan simplifiée) :
-        # lent au début, accéléré près de la fin de vie.
-        return np.clip(1 - 0.7 * ratio**2, 0, 1)
+        return np.clip(1 - 0.95 * ratio, 0, 1)
+    elif profile == 'B_quadratic':
+        # HI(t) = 1 - k·(t/t_fail)² — formule QUADRATIQUE (renommé v2.1).
+        # Analogue à la propagation de fissure sous-critique (loi de
+        # Paris-Erdogan simplifiée) : lent au début, accéléré près de
+        # la fin de vie.
+        return np.clip(1 - 0.95 * ratio**2, 0, 1)
     elif profile == 'C_stepwise':
         # Défauts discrets à intervalles réguliers (écaillage successif de
         # dents d'engrenage, cf. Wang & Makis, Mech. Syst. Signal Process. 2009)
+        # Coefficient 0.95 (5 paliers de 0.19) → 5e palier = HI 0.05 atteint.
         step = np.floor(5 * ratio) / 5
-        return np.clip(1 - 0.85 * step, 0, 1)
+        return np.clip(1 - 0.95 * step, 0, 1)
     elif profile == 'D_noisy_linear':
         # Dégradation linéaire identique au profil A — le caractère « bruyant »
         # est matérialisé au NIVEAU CAPTEUR (hi_to_rms et compute_power_and_current
@@ -73,7 +87,7 @@ def compute_hi(profile, t_arr, t_fail):
         # Justification : le bruit doit porter sur les mesures, pas sur la
         # vérité physique du vieillissement. Simule un capteur VT-V122 dégradé
         # ou un environnement électromagnétique perturbé.
-        return np.clip(1 - 0.7 * ratio, 0, 1)
+        return np.clip(1 - 0.95 * ratio, 0, 1)
 
 # ─── RMS à partir du HI ──────────────────────────────────────────────────────
 
@@ -180,20 +194,36 @@ def compute_temp_humidity(t_seconds, power):
 # ─── Simuler une trajectoire ──────────────────────────────────────────────────
 
 def simulate_trajectory(traj_id, profile, load_kg):
-    # Les charges plus lourdes accélèrent la dégradation (plus de courant → plus d'échauffement)
-    # Le taux de dégradation varie avec I² par rapport au I² nominal
+    # ── Taux de dégradation conditionné par la charge ─────────────────────
+    # Charge lourde → courant plus élevé → échauffement I²R bobines plus
+    # important (loi de Joule). On modélise donc le taux de dégradation
+    # comme proportionnel à I², soit (charge/max)² puisque I est linéaire
+    # en charge à tension constante.
+    #   Pleine charge : i_ratio_sq = 1.0      → deg_rate = 1.0
+    #   Demi-charge   : i_ratio_sq = 0.25     → deg_rate = 0.475
+    #   À vide        : i_ratio_sq = 0.0      → deg_rate = 0.3 (usure de base)
+    # Le plancher 0.3 représente l'usure mécanique non liée à la charge
+    # (frottement, vibrations résiduelles) — calibration empirique pour
+    # éviter les trajectoires infiniment longues à vide.
     i_ratio_sq  = (load_kg / LOAD_MAX_KG) ** 2 if LOAD_MAX_KG > 0 else 1.0
-    # Pleine charge : taux = 1.0, à vide : taux ≈ 0.3 (usure de base)
     deg_rate    = 0.3 + 0.7 * i_ratio_sq
 
-    # t_fail doit rester DANS la trajectoire pour que TOUTES atteignent HI < 0.3.
-    # Les charges lourdes tombent en panne plus tôt (deg_rate ↑ → t_fail ↓).
-    # Les charges légères tombent en panne plus tard mais avant la fin.
+    # ── Tirage du temps de défaillance avec variabilité ───────────────────
+    # On tire un coefficient ∈ [0.75, 0.95] pour introduire une variabilité
+    # inter-spécimens réaliste (machines identiques tombent en panne à des
+    # moments légèrement différents — analogue à la dispersion de Weibull
+    # observée en CMAPSS, β ∈ [0.6, 1.0] selon Saxena & Goebel 2008 §4).
+    # Bornes choisies pour que :
+    #   - 0.95 max → toujours une marge de 5% pour observer la zone D
+    #   - 0.75 min → trajectoires assez longues pour éviter les artefacts
+    #     en début de vie sur la fenêtre lookback de 60 min (RUL_LOOKBACK_MIN)
     t_fail_adj  = T_FAIL_BASE * np.random.uniform(0.75, 0.95) / max(deg_rate, 0.3)
-    # Plafonner t_fail à 95% de la longueur pour garantir la défaillance
+    # Plafond sécurité : t_fail ne dépasse pas 95% de la longueur de la
+    # trajectoire pour garantir une défaillance observable.
     t_max       = T_FAIL_BASE
     t_fail_adj  = min(t_fail_adj, t_max * 0.95)
-    # La trajectoire continue 10% après la défaillance pour capturer la zone critique
+    # La trajectoire continue 10% après la défaillance pour capturer la zone
+    # critique (HI < 0.3) — essentielle pour entraîner le RF sur cette plage.
     t_end       = int(min(t_fail_adj * 1.10, t_max))
     t_seconds   = np.arange(0, t_end, 1, dtype=float)
 
@@ -226,11 +256,11 @@ def simulate_trajectory(traj_id, profile, load_kg):
 if __name__ == '__main__':
     all_dfs  = []
     traj_id  = 0
-    n_each   = N_TRAJECTORIES // N_PROFILES  # 25 par profil
+    n_each   = N_TRAJECTORIES // N_PROFILES  # 200/4 = 50 par profil
 
     # Répartir les cas de charge entre les trajectoires de chaque profil :
-    # 25 trajectoires par profil × 4 profils = 100 au total
-    # 20 cas de charge → 1 trajectoire par cas + 5 cas répétés
+    # 50 trajectoires par profil × 4 profils = 200 au total
+    # 20 cas de charge → 2 trajectoires par cas + 10 cas répétés (50 = 20×2+10)
     load_list = LOAD_CASES_KG * (n_each // N_LOAD_CASES) + \
                 LOAD_CASES_KG[:n_each % N_LOAD_CASES]
     load_list = sorted(load_list)  # ordre déterministe
@@ -252,8 +282,8 @@ if __name__ == '__main__':
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     trajectories.to_csv(out_path, index=False)
 
-    print(f"\n✅ Étape 1 terminée — {traj_id} trajectoires, {len(trajectories):,} lignes")
-    print(f"   Sauvegardé → {out_path}")
+    print(f"\nOK: Etape 1 terminee - {traj_id} trajectoires, {len(trajectories):,} lignes")
+    print(f"   Sauvegarde -> {out_path}")
     print(f"\n   Répartition par profil :")
     print(trajectories.groupby('profile')['trajectory_id'].nunique())
     print(f"\n   Répartition par cas de charge :")

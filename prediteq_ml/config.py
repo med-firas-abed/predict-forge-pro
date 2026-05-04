@@ -101,12 +101,14 @@ IF_N_ESTIMATORS      = 100
 IF_CONTAMINATION     = 0.05
 IF_RANDOM_STATE      = 42
 
-# Ensemble hybride (IF + RMS) — pondération basée sur validation empirique
-#   α=0.6  → IF reçoit 60% du poids, RMS-zscore 40%.
-#   Justification : IF capte la dérive multivariée (12 features), RMS seule
-#   capte l'amplitude vibratoire. L'ensemble pondéré dominé par IF améliore
-#   la précision de détection précoce sans sacrifier le rappel.
-HYBRID_ALPHA         = 0.6
+# Ensemble hybride (IF + RMS) — pondération recalibrée sur le train synthétique
+#   α=0.2  → IF reçoit 20% du poids, RMS-zscore 80%.
+#   Justification : sur PrediTeq, la dégradation simulée reste pilotée surtout
+#   par l'amplitude vibratoire ; RMS porte donc l'essentiel du signal utile,
+#   tandis que IF garde un rôle d'appoint pour la dérive multivariée.
+#   Valeur retenue après calibration train-only sur la corrélation entre
+#   HI lissé et simulated_hi (pas sur le holdout final).
+HYBRID_ALPHA         = 0.2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Indice de santé (Health Index ∈ [0, 1]) — zones inspirées ISO 10816-3
@@ -126,17 +128,29 @@ HI_SMOOTH_WINDOW_S   = 120
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RUL — Remaining Useful Life
-# Convention temporelle (dataset synthétique, analogue à NASA CMAPSS / FEMTO-ST) :
+#
+# Convention temporelle (dataset synthétique, analogue à NASA CMAPSS) :
 #   1 trajectoire simulée = 1 cycle de dégradation accéléré compressé.
 #   TRAJECTORY_LEN_MIN = 800 min-sim (48 000 échantillons à 1 Hz).
-#   Mapping conventionnel d'affichage : 800 min-sim ↔ 90 jours calendaires
-#   d'exploitation réelle (ascenseur 8 h/jour × ~80 cycles/h → ~57 600 cycles,
-#   ordre de grandeur L10 bearing ISO 281 pour SKF 6306 à charge nominale).
-#   → facteur de conversion : 800 / 90 = 8.89, arrondi à 9 pour affichage UI.
-# IMPORTANT : RUL_MIN_TO_DAY est une CONVENTION D'AFFICHAGE, pas une constante
-# physique. Le modèle régresse en minutes-simulation ; la division par 9 sert
-# uniquement à l'interprétation humaine (« 45 jours restants » plutôt que
-# « 405 min »).
+#
+# Mapping d'affichage : 800 min-sim ↔ 90 jours calendaires
+#   → facteur de conversion : 800 / 90 ≈ 8.89, arrondi à 9.
+#
+# ⚠ HONNÊTETÉ MÉTHODOLOGIQUE : ce mapping est une CONVENTION D'AFFICHAGE,
+# PAS une dérivation physique. Le « 90 jours » correspond à un trimestre
+# d'exploitation typique (cycle de maintenance préventive standard CBM,
+# ISO 13374) et donne des chiffres lisibles pour le technicien. Il ne
+# représente pas la vraie durée de vie d'un roulement (qui se chiffre
+# en années via L10 ISO 281, voir prediteq_ml/diagnostics/rul_calibration.py).
+#
+# Le modèle régresse en minutes-simulation ; la division par 9 sert
+# uniquement à l'interprétation humaine. En production, la couche
+# `convert_min_to_days` corrige ce facteur figé par le RYTHME OBSERVÉ
+# de la machine (cycles/jour mesurés sur 7 j), restaurant la cohérence
+# avec l'usage réel.
+#
+# Recalibration empirique prévue après 90 jours d'exploitation Aroteq —
+# cf. disclaimers.RUL_NATURE.
 # ─────────────────────────────────────────────────────────────────────────────
 RUL_LOOKBACK_MIN     = 60        # 60 pts = 1 h historique HI avant l'instant t
 RUL_HOURS_PER_DAY    = 8         # cycle ascenseur résidentiel (hypothèse technicien)

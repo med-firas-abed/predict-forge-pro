@@ -10,12 +10,18 @@ import logging
 import re
 import asyncio
 from datetime import datetime, timezone, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.config import settings
+from core.decision_snapshot import (
+    build_machine_decision_snapshot,
+    fetch_alert_counts,
+    fetch_open_task_counts,
+)
 from core.supabase_client import get_supabase
 from core.auth import CurrentUser, require_auth, get_machine_filter
 from core.rate_limit import check_user_rate
@@ -24,6 +30,8 @@ from ml.engine_manager import get_manager
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chatbot"])
+
+ChatAudience = Literal["jury", "technician", "dual"]
 
 SYSTEM_PROMPT = (
     "Tu es l'assistant IA de PrediTeq, une plateforme de maintenance prédictive "
@@ -41,6 +49,27 @@ SYSTEM_PROMPT = (
 )
 
 # ─── Tool definitions for Groq (OpenAI format) ───────────────────────────────
+
+def _audience_prompt(audience: ChatAudience) -> str:
+    if audience == "jury":
+        return (
+            "Audience cible: jury non technique. Reponds sans jargon, explique HI et RUL en mots "
+            "simples, donne peu de chiffres et mets d'abord la conclusion, le risque et l'action."
+        )
+    if audience == "technician":
+        return (
+            "Audience cible: techniciens Aroteq. Sois direct, operationnel et chiffre: HI, zone, "
+            "RUL si disponible, stress, facteur principal, alertes et action terrain."
+        )
+    return (
+        "Audience cible mixte: jury non technique et techniciens Aroteq. Structure la reponse en "
+        "deux couches: 1) En bref; 2) Details terrain. Explique les acronymes au premier usage."
+    )
+
+
+def _build_system_prompt(audience: ChatAudience) -> str:
+    return f"{SYSTEM_PROMPT}\n\n{_audience_prompt(audience)}"
+
 
 TOOLS = [
     {
@@ -193,17 +222,14 @@ def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
     raw = manager.last_raw.get(machine_code, {})
     status = manager.get_status(machine_code)
     cycles = manager._cycle_counts.get(machine_code, 0)
-
-    # Alert count 24h
-    anom_count = 0
-    try:
-        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-        res = sb.table('alertes').select('id') \
-            .eq('machine_id', machine_info['id']) \
-            .gte('created_at', since).execute()
-        anom_count = len(res.data)
-    except Exception:
-        pass
+    anom_count = fetch_alert_counts([machine_info["id"]]).get(machine_info["id"], 0)
+    open_task_count = fetch_open_task_counts([machine_info["id"]]).get(machine_info["id"], 0)
+    decision = build_machine_decision_snapshot(
+        {**machine_info, "code": machine_code},
+        manager,
+        alerts_24h=anom_count,
+        open_tasks=open_task_count,
+    )
 
     return {
         "machine": machine_code,
@@ -217,7 +243,9 @@ def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
         "sensors": {k: round(v, 3) for k, v in raw.items()} if raw else None,
         "cycles_today": cycles,
         "alerts_24h": anom_count,
+        "open_tasks": open_task_count,
         "engine_uptime_s": status.get('uptime_seconds') if status else None,
+        "decision": decision,
     }
 
 
@@ -337,27 +365,30 @@ def _exec_get_shap(machine_code: str, user: CurrentUser) -> dict:
 
 def _exec_get_fleet(user: CurrentUser) -> list:
     manager = get_manager()
-    sb = get_supabase()
     result = []
 
     machine_filter = get_machine_filter(user)
+    machine_ids = []
+    scoped_machines: list[tuple[str, dict]] = []
 
     for code, info in manager.machine_cache.items():
         if machine_filter and info['id'] != machine_filter:
             continue
+        scoped_machines.append((code, info))
+        machine_ids.append(info["id"])
 
+    alert_counts = fetch_alert_counts(machine_ids)
+    open_task_counts = fetch_open_task_counts(machine_ids)
+
+    for code, info in scoped_machines:
         last = manager.last_results.get(code, {})
         rul = manager.predict_rul(code)
-
-        anom_count = 0
-        try:
-            since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-            res = sb.table('alertes').select('id') \
-                .eq('machine_id', info['id']) \
-                .gte('created_at', since).execute()
-            anom_count = len(res.data)
-        except Exception:
-            pass
+        decision = build_machine_decision_snapshot(
+            {**info, "code": code},
+            manager,
+            alerts_24h=alert_counts.get(info["id"], 0),
+            open_tasks=open_task_counts.get(info["id"], 0),
+        )
 
         result.append({
             "machine": code,
@@ -366,10 +397,16 @@ def _exec_get_fleet(user: CurrentUser) -> list:
             "hi_smooth": last.get('hi_smooth'),
             "zone": last.get('zone'),
             "rul_days": rul.get('rul_days') if rul else None,
-            "alerts_24h": anom_count,
+            "alerts_24h": alert_counts.get(info["id"], 0),
+            "open_tasks": open_task_counts.get(info["id"], 0),
+            "decision": decision,
         })
 
-    return sorted(result, key=lambda m: m.get('hi_smooth') or 999)
+    return sorted(
+        result,
+        key=lambda machine: (machine.get("decision") or {}).get("urgency_score", 0),
+        reverse=True,
+    )
 
 
 def _exec_get_tasks(user: CurrentUser, machine_code: str | None = None) -> list:
@@ -465,6 +502,7 @@ def _dispatch_tool(name: str, args: dict, user: CurrentUser) -> str:
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     history: list[dict] = Field(default_factory=list, max_length=20)
+    audience: ChatAudience = "dual"
 
 
 @router.post("")
@@ -485,7 +523,7 @@ async def chat(body: ChatRequest, user: CurrentUser = Depends(require_auth)):
     client = Groq(api_key=settings.GROQ_API_KEY, timeout=30.0)
 
     # Build messages: system + history + new user message
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": _build_system_prompt(body.audience)}]
     for msg in body.history[-16:]:
         role = msg.get("role", "user")
         if role in ("user", "assistant"):

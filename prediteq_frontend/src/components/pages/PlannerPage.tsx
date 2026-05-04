@@ -1,11 +1,23 @@
-import { useState, useEffect } from "react";
-import { Brain, Shield, AlertTriangle, CheckCircle, Loader2, Play, ThumbsUp, ChevronDown, ChevronUp, Pencil, X, Check, FileText } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import {
+  AlertTriangle,
+  Brain,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Pencil,
+  Play,
+  Shield,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMachines } from "@/hooks/useMachines";
-import { apiFetch, apiStream } from "@/lib/api";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { apiFetch } from "@/lib/api";
+import { repairText } from "@/lib/repairText";
 
 interface RiskEntry {
   machine_code: string;
@@ -15,71 +27,128 @@ interface RiskEntry {
   rul_days: number | null;
   zone: string | null;
   risk_score: number;
-  risk_level: string;
+  risk_level: "critical" | "priority" | "watch" | "stable";
+  risk_label: string;
+  summary: string;
+  recommended_action: string;
+  maintenance_window: string | null;
   open_tasks: number;
+  data_source: string;
+  updated_at: string | null;
+  is_stale: boolean;
 }
 
 interface ProposedTask {
   machine_code: string;
   titre: string;
-  type: string;
-  priorite: string;
+  type: "preventive" | "corrective" | "inspection";
+  priorite: "haute" | "moyenne" | "basse";
   date_planifiee: string;
   cout_estime: number | null;
   description: string;
   technicien: string;
 }
 
-function parseProposedTasks(markdown: string): ProposedTask[] {
-  const tasks: ProposedTask[] = [];
-  const regex = /```task\n([\s\S]*?)```/g;
-  let match;
-  while ((match = regex.exec(markdown)) !== null) {
-    const block = match[1];
-    const get = (key: string) => {
-      const m = block.match(new RegExp(`${key}:\\s*(.+)`));
-      return m ? m[1].trim() : "";
-    };
-    tasks.push({
-      machine_code: get("machine"),
-      titre: get("titre"),
-      type: get("type") || "preventive",
-      priorite: get("priorite") || "moyenne",
-      date_planifiee: get("date_planifiee"),
-      cout_estime: get("cout_estime") ? parseFloat(get("cout_estime")) : null,
-      description: get("description"),
-      technicien: "",
-    });
-  }
-  return tasks;
+interface PlannerFleetRow extends RiskEntry {
+  plain_reason: string;
+  impact: string;
+  evidence: string[];
+  field_checks: string[];
+  projected_cost: number;
+  delayed_cost: number;
+  delay_penalty: number;
 }
 
-const RISK_CONFIG: Record<string, { color: string; bg: string; icon: typeof Shield }> = {
-  critique: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
-  surveillance: { color: "text-warning", bg: "bg-warning/10", icon: Shield },
-  ok: { color: "text-success", bg: "bg-success/10", icon: CheckCircle },
-};
+interface GeneratePlanResponse {
+  generated_at: string;
+  focus_machine: string | null;
+  markdown: string;
+  tasks: ProposedTask[];
+  fleet: PlannerFleetRow[];
+}
+
+const RISK_CONFIG = {
+  critical: {
+    color: "text-destructive",
+    bg: "bg-destructive/10",
+    panel: "border-destructive/20 bg-destructive/5",
+    icon: AlertTriangle,
+  },
+  priority: {
+    color: "text-warning",
+    bg: "bg-warning/10",
+    panel: "border-warning/20 bg-warning/5",
+    icon: AlertTriangle,
+  },
+  watch: {
+    color: "text-primary",
+    bg: "bg-primary/10",
+    panel: "border-primary/20 bg-primary/5",
+    icon: Shield,
+  },
+  stable: {
+    color: "text-success",
+    bg: "bg-success/10",
+    panel: "border-success/20 bg-success/5",
+    icon: CheckCircle,
+  },
+} as const;
+
+function formatHi(hi: number | null) {
+  if (typeof hi !== "number") return "Indisponible";
+  return `HI ${Math.round(hi * 100)}%`;
+}
+
+function formatRul(rulDays: number | null) {
+  if (typeof rulDays !== "number") return "RUL indisponible";
+  return `RUL ${Math.round(rulDays)} j`;
+}
+
+function formatUpdatedAt(value: string | null) {
+  if (!value) return "Lecture en attente";
+  return new Date(value).toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getSourceLabel(source: string) {
+  switch (source) {
+    case "live_runtime":
+      return "Flux en direct";
+    case "simulator_demo":
+      return "Replay démo";
+    case "persisted_reference":
+      return "Référence persistée";
+    default:
+      return "Flux incomplet";
+  }
+}
 
 export function PlannerPage() {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const { currentUser } = useAuth();
+  const location = useLocation();
   const isAdmin = currentUser?.role === "admin";
-  const { machines } = useMachines(currentUser?.machineId);
-  const navigate = useNavigate();
   const [riskData, setRiskData] = useState<RiskEntry[]>([]);
   const [loadingRisk, setLoadingRisk] = useState(false);
   const [planText, setPlanText] = useState("");
+  const [planGeneratedAt, setPlanGeneratedAt] = useState<string | null>(null);
+  const [generatedFleet, setGeneratedFleet] = useState<PlannerFleetRow[]>([]);
   const [generating, setGenerating] = useState(false);
   const [proposedTasks, setProposedTasks] = useState<ProposedTask[]>([]);
   const [approvingIdx, setApprovingIdx] = useState<number | null>(null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [focusMachine, setFocusMachine] = useState<string | null>(null);
   const [showRisk, setShowRisk] = useState(true);
-
-  // Load fleet risk on mount
-  useEffect(() => {
-    loadRisk();
-  }, []);
+  const l = (fr: string, en: string, ar: string) =>
+    repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
+  const requestedFocusMachine = useMemo(
+    () => new URLSearchParams(location.search).get("machine"),
+    [location.search],
+  );
 
   const loadRisk = async () => {
     setLoadingRisk(true);
@@ -87,42 +156,50 @@ export function PlannerPage() {
       const data = await apiFetch<RiskEntry[]>("/planner/status");
       setRiskData(data);
     } catch {
-      // endpoint may be loading
+      setRiskData([]);
     } finally {
       setLoadingRisk(false);
     }
   };
 
+  useEffect(() => {
+    void loadRisk();
+    const intervalId = window.setInterval(() => {
+      void loadRisk();
+    }, 5_000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    setFocusMachine(requestedFocusMachine);
+  }, [requestedFocusMachine]);
+
   const generatePlan = async () => {
     setGenerating(true);
     setPlanText("");
+    setGeneratedFleet([]);
     setProposedTasks([]);
 
     try {
-      const stream = await apiStream("/planner/generate", {
-        focus_machine: focusMachine,
+      const data = await apiFetch<GeneratePlanResponse>("/planner/generate", {
+        method: "POST",
+        body: JSON.stringify({ focus_machine: focusMachine }),
       });
-      if (!stream) throw new Error("No stream");
+      setPlanText(data.markdown);
+      setPlanGeneratedAt(data.generated_at);
+      setGeneratedFleet(data.fleet);
+      setProposedTasks(data.tasks);
 
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let text = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        text += decoder.decode(value, { stream: true });
-        setPlanText(text);
-      }
-
-      // Extract proposed tasks from the markdown
-      const tasks = parseProposedTasks(text);
-      setProposedTasks(tasks);
-      if (tasks.length > 0) {
-        toast.success(`${tasks.length} tâche(s) proposée(s) par l'agent IA`);
-      }
+      toast.success(
+        l(
+          `${data.tasks.length} tâche(s) proposée(s) par le planificateur.`,
+          `${data.tasks.length} task(s) proposed by the planner.`,
+          `تم اقتراح ${data.tasks.length} مهمة بواسطة المخطط.`,
+        ),
+      );
     } catch {
-      toast.error("Erreur lors de la génération du plan");
+      toast.error(l("Erreur lors de la génération du plan", "Failed to generate the plan", "فشل انشاء الخطة"));
     } finally {
       setGenerating(false);
     }
@@ -131,96 +208,142 @@ export function PlannerPage() {
   const approveTask = async (idx: number) => {
     const task = proposedTasks[idx];
     setApprovingIdx(idx);
+
     try {
       await apiFetch("/planner/approve", {
         method: "POST",
         body: JSON.stringify(task),
       });
-      toast.success(`Tâche "${task.titre}" créée dans GMAO`);
-      setProposedTasks((prev) => prev.filter((_, i) => i !== idx));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'approbation");
+      toast.success(
+        l(
+          `Tâche "${task.titre}" créée dans la GMAO`,
+          `Task "${task.titre}" created in the GMAO`,
+          `تم انشاء المهمة "${task.titre}" في نظام GMAO`,
+        ),
+      );
+      setProposedTasks((previous) => previous.filter((_, index) => index !== idx));
+      void loadRisk();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : l("Erreur d'approbation", "Approval failed", "فشلت الموافقة"),
+      );
     } finally {
       setApprovingIdx(null);
     }
   };
 
-  // Strip ```task blocks AND the "Tâches GMAO" heading from display text (shown as cards instead)
-  const displayText = planText
-    .replace(/```task\n[\s\S]*?```/g, "")
-    .replace(/###\s*Tâches GMAO proposées[^\n]*/g, "")
-    .trim();
+  const displayText = planText.trim();
+  const rankedRisk = useMemo(
+    () => [...riskData].sort((left, right) => right.risk_score - left.risk_score),
+    [riskData],
+  );
+  const criticalCount = rankedRisk.filter((entry) => entry.risk_level === "critical").length;
+  const priorityCount = rankedRisk.filter((entry) => entry.risk_level === "priority").length;
+  const staleCount = rankedRisk.filter((entry) => entry.is_stale).length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Brain className="w-5 h-5 text-primary" />
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="mb-1 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+            <Brain className="h-5 w-5 text-primary" />
           </div>
           <div className="flex-1">
             <h2 className="text-lg font-semibold text-foreground">{t("planner.title")}</h2>
             <p className="text-xs text-muted-foreground">{t("planner.subtitle")}</p>
           </div>
+          <span className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.65rem] font-semibold text-muted-foreground">
+            {loadingRisk ? l("Actualisation...", "Refreshing...", "تحديث...") : "Actualisation 5 s"}
+          </span>
         </div>
       </div>
 
-      {/* Fleet Risk Ranking */}
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <button
-          onClick={() => setShowRisk(!showRisk)}
-          className="flex items-center gap-2 w-full text-left"
-        >
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-premium">
+          <div className="industrial-label">{l("À traiter vite", "Treat quickly", "للمعالجة السريعة")}</div>
+          <div className="mt-2 text-3xl font-bold text-destructive">{criticalCount}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{l("Risque critique", "Critical risk", "خطر حرج")}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-premium">
+          <div className="industrial-label">{l("À planifier", "To schedule", "للتخطيط")}</div>
+          <div className="mt-2 text-3xl font-bold text-warning">{priorityCount}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {l("Fenêtre de maintenance proche", "Maintenance window approaching", "نافذة الصيانة قريبة")}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-premium">
+          <div className="industrial-label">{l("À confirmer", "To confirm", "للتأكيد")}</div>
+          <div className="mt-2 text-3xl font-bold text-primary">{staleCount}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {l("Flux à revérifier", "Stream to recheck", "يجب التحقق من التدفق")}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <button type="button" onClick={() => setShowRisk(!showRisk)} className="flex w-full items-center gap-2 text-left">
           <span className="section-title flex-1">{t("planner.fleetRisk")}</span>
-          {showRisk ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          {showRisk ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
         </button>
 
         {showRisk && (
           <div className="mt-4 space-y-2">
             {loadingRisk ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm py-4 justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" />
+              <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
                 {t("planner.loadingRisk")}
               </div>
-            ) : riskData.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                {t("planner.noData")}
-              </p>
+            ) : rankedRisk.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">{t("planner.noData")}</p>
             ) : (
-              riskData.map((r) => {
-                const cfg = RISK_CONFIG[r.risk_level] || RISK_CONFIG.ok;
-                const Icon = cfg.icon;
+              rankedRisk.map((entry) => {
+                const config = RISK_CONFIG[entry.risk_level] || RISK_CONFIG.stable;
+                const Icon = config.icon;
+
                 return (
-                  <div
-                    key={r.machine_code}
-                    onClick={() => setFocusMachine(r.machine_code === focusMachine ? null : r.machine_code)}
-                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                      focusMachine === r.machine_code
+                  <button
+                    key={entry.machine_code}
+                    type="button"
+                    onClick={() => setFocusMachine(entry.machine_code === focusMachine ? null : entry.machine_code)}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all ${
+                      focusMachine === entry.machine_code
                         ? "border-primary bg-primary/5"
-                        : "border-border hover:border-muted-foreground/20"
+                        : `border-border hover:border-muted-foreground/20 ${config.panel}`
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center`}>
-                      <Icon className={`w-4 h-4 ${cfg.color}`} />
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${config.bg}`}>
+                      <Icon className={`h-4 w-4 ${config.color}`} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-foreground">
-                        {r.machine_code} — {r.nom}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold text-foreground">
+                          {entry.machine_code} - {entry.nom}
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-semibold ${config.bg} ${config.color}`}>
+                          {entry.risk_label}
+                        </span>
+                        <span className="rounded-full bg-card px-2 py-0.5 text-[0.6rem] text-muted-foreground">
+                          {getSourceLabel(entry.data_source)}
+                        </span>
                       </div>
-                      <div className="text-[0.65rem] text-muted-foreground">
-                        {r.region} • {r.open_tasks} {t("planner.openTasks")}
+                      <div className="mt-1 text-[0.7rem] text-muted-foreground">
+                        {entry.region} - {entry.open_tasks} {t("planner.openTasks")} - {formatUpdatedAt(entry.updated_at)}
+                      </div>
+                      <div className="mt-2 text-xs text-secondary-foreground">{entry.summary}</div>
+                      <div className="mt-1 text-[0.7rem] text-muted-foreground">
+                        {entry.recommended_action}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className={`text-sm font-bold ${cfg.color}`}>
-                        {r.hi != null ? `HI ${(r.hi * 100).toFixed(0)}%` : "—"}
-                      </div>
-                      <div className="text-[0.65rem] text-muted-foreground">
-                        {r.rul_days != null ? `RUL ${r.rul_days.toFixed(0)}j` : "—"}
-                      </div>
+                      <div className={`text-sm font-bold ${config.color}`}>{entry.risk_score}</div>
+                      <div className="text-[0.65rem] text-muted-foreground">{formatHi(entry.hi)}</div>
+                      <div className="text-[0.65rem] text-muted-foreground">{formatRul(entry.rul_days)}</div>
                     </div>
-                  </div>
+                  </button>
                 );
               })
             )}
@@ -228,213 +351,303 @@ export function PlannerPage() {
         )}
       </div>
 
-      {/* Generate Plan */}
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <div className="flex items-center gap-3 mb-4">
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="mb-4 flex items-center gap-3">
           <span className="section-title flex-1">
-            {focusMachine ? `Plan pour ${focusMachine}` : t("planner.fullPlan")}
+            {focusMachine
+              ? l(`Plan pour ${focusMachine}`, `Plan for ${focusMachine}`, `الخطة الخاصة بـ ${focusMachine}`)
+              : t("planner.fullPlan")}
           </span>
           <button
+            type="button"
             onClick={generatePlan}
             disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
           >
-            {generating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
+            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {generating ? t("planner.generating") : t("planner.generate")}
           </button>
         </div>
 
-        {displayText && (
-          <div className="prose prose-sm dark:prose-invert max-w-none bg-muted/30 rounded-xl p-4 whitespace-pre-wrap text-sm leading-relaxed">
-            {displayText}
-          </div>
-        )}
+        {displayText ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {planGeneratedAt && (
+                <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
+                  {l("Généré le", "Generated on", "تم الانشاء")} {formatUpdatedAt(planGeneratedAt)}
+                </span>
+              )}
+              {focusMachine && (
+                <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
+                  Focus {focusMachine}
+                </span>
+              )}
+            </div>
 
-        {!displayText && !generating && (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            {t("planner.clickGenerate")}
-          </p>
-        )}
+            <div className="prose prose-sm max-w-none whitespace-pre-wrap rounded-xl bg-muted/30 p-4 text-sm leading-relaxed dark:prose-invert">
+              {displayText}
+            </div>
+
+            {generatedFleet.length > 0 && (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {generatedFleet.slice(0, 4).map((row) => {
+                  const config = RISK_CONFIG[row.risk_level] || RISK_CONFIG.stable;
+                  return (
+                    <div key={row.machine_code} className={`rounded-xl border p-4 ${config.panel}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-foreground">{row.machine_code}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{row.summary}</div>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${config.bg} ${config.color}`}>
+                          {row.risk_label}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[0.7rem]">
+                        <span className="rounded-full bg-card px-2.5 py-1 text-foreground">{formatHi(row.hi)}</span>
+                        <span className="rounded-full bg-card px-2.5 py-1 text-foreground">{formatRul(row.rul_days)}</span>
+                        <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
+                          {getSourceLabel(row.data_source)}
+                        </span>
+                        <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
+                          {row.projected_cost.toLocaleString("fr-FR")} TND
+                        </span>
+                      </div>
+                      <div className="mt-3 text-xs text-secondary-foreground">{row.recommended_action}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : !generating ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">{t("planner.clickGenerate")}</p>
+        ) : null}
       </div>
 
-      {/* Proposed GMAO Tasks */}
       {proposedTasks.length > 0 && (
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="section-title mb-4">{t("planner.proposedTasks")}</h3>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <h3 className="section-title mb-1">{t("planner.proposedTasks")}</h3>
+          <p className="mb-4 text-sm text-muted-foreground">
+            {l(
+              "Ces tâches restent en attente tant qu'elles ne sont pas validées. Après validation, elles sont envoyées au calendrier de maintenance.",
+              "These tasks stay pending until approved. Once approved, they are sent to the maintenance calendar.",
+              "تبقى هذه المهام معلقة حتى تتم الموافقة عليها. بعد الموافقة، يتم إرسالها إلى تقويم الصيانة.",
+            )}
+          </p>
           <div className="space-y-3">
             {proposedTasks.map((task, idx) => (
-              <div key={idx} className="p-4 rounded-xl border border-border bg-muted/20">
+              <div key={`${task.machine_code}-${idx}`} className="rounded-xl border border-border bg-muted/20 p-4">
                 {editingIdx === idx ? (
-                  /* ── Inline Edit Mode ── */
                   <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Titre</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Titre", "Title", "العنوان")}
+                        </label>
                         <input
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                           value={task.titre}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, titre: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, titre: value } : entry)),
+                            );
                           }}
                         />
                       </div>
                       <div>
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Machine</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Machine", "Machine", "الآلة")}
+                        </label>
                         <input
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                           value={task.machine_code}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, machine_code: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, machine_code: value } : entry)),
+                            );
                           }}
                         />
                       </div>
                       <div>
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Type</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Type", "Type", "النوع")}
+                        </label>
                         <select
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                           value={task.type}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, type: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value as ProposedTask["type"];
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, type: value } : entry)),
+                            );
                           }}
                         >
-                          <option value="preventive">Préventive</option>
-                          <option value="corrective">Corrective</option>
-                          <option value="inspection">Inspection</option>
+                          <option value="preventive">{l("Préventive", "Preventive", "وقائية")}</option>
+                          <option value="corrective">{l("Corrective", "Corrective", "تصحيحية")}</option>
+                          <option value="inspection">{l("Inspection", "Inspection", "فحص")}</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Priorité</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Priorite", "Priority", "الاولوية")}
+                        </label>
                         <select
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                           value={task.priorite}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, priorite: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value as ProposedTask["priorite"];
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, priorite: value } : entry)),
+                            );
                           }}
                         >
-                          <option value="haute">Haute</option>
-                          <option value="moyenne">Moyenne</option>
-                          <option value="basse">Basse</option>
+                          <option value="haute">{l("Haute", "High", "عالية")}</option>
+                          <option value="moyenne">{l("Moyenne", "Medium", "متوسطة")}</option>
+                          <option value="basse">{l("Basse", "Low", "منخفضة")}</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Date planifiée</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Date planifiee", "Scheduled date", "التاريخ المخطط")}
+                        </label>
                         <input
                           type="date"
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                           value={task.date_planifiee}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, date_planifiee: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, date_planifiee: value } : entry)),
+                            );
                           }}
                         />
                       </div>
                       <div>
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Coût estimé (TND)</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Coût estimé (TND)", "Estimated cost (TND)", "الكلفة التقديرية (TND)")}
+                        </label>
                         <input
                           type="number"
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                           value={task.cout_estime ?? ""}
-                          onChange={(e) => {
-                            const v = e.target.value ? parseFloat(e.target.value) : null;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, cout_estime: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value ? parseFloat(event.target.value) : null;
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, cout_estime: value } : entry)),
+                            );
                           }}
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Assigné à (optionnel)</label>
+                        <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                          {l("Assigne a (optionnel)", "Assigned to (optional)", "مسندة الى (اختياري)")}
+                        </label>
                         <input
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
-                          placeholder="Nom du technicien"
+                          placeholder={l("Nom du technicien", "Technician name", "اسم الفني")}
                           value={task.technicien}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, technicien: v } : t));
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setProposedTasks((previous) =>
+                              previous.map((entry, index) => (index === idx ? { ...entry, technicien: value } : entry)),
+                            );
                           }}
                         />
                       </div>
                     </div>
+
                     <div>
-                      <label className="text-[0.65rem] font-medium text-muted-foreground mb-1 block">Description</label>
+                      <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
+                        {l("Description", "Description", "الوصف")}
+                      </label>
                       <textarea
-                        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm resize-none"
+                        className="w-full resize-none rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                         rows={2}
                         value={task.description}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setProposedTasks((prev) => prev.map((t, i) => i === idx ? { ...t, description: v } : t));
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setProposedTasks((previous) =>
+                            previous.map((entry, index) => (index === idx ? { ...entry, description: value } : entry)),
+                          );
                         }}
                       />
                     </div>
+
                     <div className="flex justify-end gap-2">
                       <button
+                        type="button"
                         onClick={() => setEditingIdx(null)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-all"
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-all hover:bg-muted"
                       >
-                        <X className="w-3 h-3" /> Fermer
+                        <X className="h-3 w-3" />
+                        {l("Fermer", "Close", "اغلاق")}
                       </button>
                       <button
-                        onClick={() => { setEditingIdx(null); toast.success("Modifications enregistrées"); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-all"
+                        type="button"
+                        onClick={() => {
+                          setEditingIdx(null);
+                          toast.success(l("Modifications enregistrees", "Changes saved", "تم حفظ التعديلات"));
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90"
                       >
-                        <Check className="w-3 h-3" /> OK
+                        <Check className="h-3 w-3" />
+                        {l("Enregistrer", "Save", "حفظ")}
                       </button>
                     </div>
                   </div>
                 ) : (
-                  /* ── Display Mode ── */
                   <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2">
                         <span className="text-sm font-semibold text-foreground">{task.titre}</span>
-                        <span className="text-[0.6rem] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.6rem] font-medium text-primary">
                           {task.machine_code}
                         </span>
-                        <span className="text-[0.6rem] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[0.6rem] text-muted-foreground">
                           {task.type}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">{task.description}</p>
-                      <div className="flex items-center gap-3 mt-1.5 text-[0.65rem] text-muted-foreground">
-                        {task.date_planifiee && <span>📅 {task.date_planifiee}</span>}
-                        {task.cout_estime != null && <span>💰 {task.cout_estime} TND</span>}
-                        {task.technicien && <span>👷 {task.technicien}</span>}
-                        <span className={`font-medium ${
-                          task.priorite === "haute" ? "text-destructive" :
-                          task.priorite === "moyenne" ? "text-warning" : "text-success"
-                        }`}>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[0.65rem] text-muted-foreground">
+                        {task.date_planifiee && <span>{l("Date", "Date", "التاريخ")}: {task.date_planifiee}</span>}
+                        {task.cout_estime != null && <span>{l("Coût", "Cost", "الكلفة")}: {task.cout_estime} TND</span>}
+                        {task.technicien && (
+                          <span>{l("Technicien", "Technician", "الفني")}: {task.technicien}</span>
+                        )}
+                        <span
+                          className={`font-medium ${
+                            task.priorite === "haute"
+                              ? "text-destructive"
+                              : task.priorite === "moyenne"
+                                ? "text-warning"
+                                : "text-success"
+                          }`}
+                        >
                           {task.priorite}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex flex-col gap-2">
                       <button
+                        type="button"
                         onClick={() => setEditingIdx(idx)}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-xs font-medium hover:bg-muted transition-all"
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-all hover:bg-muted"
                       >
-                        <Pencil className="w-3 h-3" /> Modifier
+                        <Pencil className="h-3 w-3" />
+                        {l("Editer", "Edit", "تعديل")}
                       </button>
-                      {isAdmin && (
-                        <button
-                          onClick={() => approveTask(idx)}
-                          disabled={approvingIdx === idx}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-success/10 text-success text-xs font-medium hover:bg-success/20 disabled:opacity-50 transition-all"
-                        >
-                          {approvingIdx === idx ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <ThumbsUp className="w-3 h-3" />
-                          )}
-                          {t("planner.approve")}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => void approveTask(idx)}
+                        disabled={approvingIdx === idx || !isAdmin}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {approvingIdx === idx ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        {l("Valider et envoyer au calendrier", "Approve and send to calendar", "اعتماد وإرسال إلى التقويم")}
+                      </button>
                     </div>
                   </div>
                 )}

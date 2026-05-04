@@ -29,11 +29,14 @@ Utilisation recommandée côté frontend :
 # Disclaimer principal — à afficher sous la carte « RUL ESTIMÉ »
 # ──────────────────────────────────────────────────────────────────────────────
 RUL_NATURE: str = (
-    "Estimation démonstrative calibrée sur 200 trajectoires synthétiques "
-    "(convention CMAPSS — Saxena & Goebel 2008). Le facteur de conversion "
-    "800 min-sim ↔ 90 jours calendaires est une hypothèse d'affichage, "
-    "non une prévision physique certifiée. Une recalibration empirique est "
-    "prévue après 90 jours d'exploitation réelle sur la flotte Aroteq."
+    "Estimation démonstrative dérivée d'un Random Forest entraîné sur 200 "
+    "trajectoires synthétiques (convention CMAPSS — Saxena & Goebel 2008). "
+    "La conversion sim-min → jours utilise le rythme d'usage réel de la "
+    "machine (moyenne 7 j glissants), avec fallback sur la convention "
+    "800 min-sim ↔ 90 jours en l'absence de données. Aucun multiplicateur "
+    "zone-conditionnel n'est appliqué : l'affichage reflète exactement la "
+    "sortie modèle. Une recalibration empirique est prévue après 90 jours "
+    "d'exploitation réelle sur la flotte Aroteq."
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -42,11 +45,15 @@ RUL_NATURE: str = (
 RUL_TOOLTIP: str = (
     "Comment lire cette valeur\n"
     "───────────────────────────\n"
-    "Le modèle Random Forest prédit la durée restante en minutes-simulation "
-    "puis la divise par 9 pour un affichage en jours.\n\n"
+    "Le Random Forest prédit la durée restante en minutes-simulation, puis "
+    "elle est traduite en jours selon le rythme d'usage observé sur 7 j "
+    "(facteur ÷9 par défaut si historique insuffisant — convention dataset).\n\n"
     "L'intervalle « 60–85 j » correspond aux percentiles 10 et 90 des "
     "prédictions individuelles des 300 arbres — zone où les 80 % d'arbres "
-    "centraux convergent.\n\n"
+    "centraux convergent (Meinshausen 2006, Quantile Regression Forests).\n\n"
+    "Aucun multiplicateur zone-conditionnel : si HI ≥ 0.80, le pronostic "
+    "chiffré est masqué (FPT, IEEE 1856-2017 §6.2) et la durée de vie "
+    "statistique du roulement (L10, ISO 281) est affichée à la place.\n\n"
     "Au-delà de l'intervalle, l'incertitude augmente. Pour une décision "
     "de maintenance critique, consulter la section Diagnostic qui identifie "
     "les causes probables sur la base des normes ISO 10816-3 et IEC 60034-1."

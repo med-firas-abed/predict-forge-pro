@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
-import { Sun, Moon, Globe, Shield, Lock, Award } from "lucide-react";
+import { Sun, Moon, Globe, Shield, Lock, Award, Eye, EyeOff } from "lucide-react";
 
 interface LoginPageProps {
   onNavigate: (route: string) => void;
@@ -15,20 +15,41 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
-  const validateEmail = (v: string) => {
-    if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v))
-      return lang === "fr" ? "Email invalide" : lang === "en" ? "Invalid email" : "بريد إلكتروني غير صالح";
+  const validateEmail = (value: string) => {
+    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
+      return lang === "fr"
+        ? "Email invalide"
+        : lang === "en"
+          ? "Invalid email"
+          : "بريد إلكتروني غير صالح";
+    }
     return "";
   };
+
+  const togglePasswordLabel =
+    showPassword
+      ? lang === "fr"
+        ? "Masquer le mot de passe"
+        : lang === "en"
+          ? "Hide password"
+          : "إخفاء كلمة المرور"
+      : lang === "fr"
+        ? "Afficher le mot de passe"
+        : lang === "en"
+          ? "Show password"
+          : "إظهار كلمة المرور";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
     if (validateEmail(email)) {
       setFieldErrors({ email: validateEmail(email) });
       return;
     }
+
     setSubmitting(true);
     try {
       const result = await login(email, password);
@@ -45,7 +66,6 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
-      {/* Top-right controls */}
       <div className="absolute top-4 right-4 flex items-center gap-2">
         <button
           onClick={() => setLang(lang === "fr" ? "en" : lang === "en" ? "ar" : "fr")}
@@ -63,39 +83,55 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
       </div>
 
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-6 w-full">
           <img
-            src={theme === 'dark' ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
+            src={theme === "dark" ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
             alt="PrediTeq"
             className="h-20 max-w-full object-contain animate-float"
           />
           <p className="text-sm text-muted-foreground mt-3 text-center">
-            {lang === "fr" ? "SaaS de Maintenance Prédictive propulsé par l'IA" : lang === "en" ? "AI-Powered Predictive Maintenance SaaS" : "منصة SaaS للصيانة التنبؤية بالذكاء الاصطناعي"}
+            {lang === "fr"
+              ? "SaaS de maintenance prédictive propulsé par l'IA"
+              : lang === "en"
+                ? "AI-Powered Predictive Maintenance SaaS"
+                : "منصة SaaS للصيانة التنبؤية بالذكاء الاصطناعي"}
           </p>
         </div>
 
-        {/* Form card with gradient border */}
-        <div className="relative rounded-2xl p-[1px] auth-card-shadow" style={{ backgroundImage: theme === 'dark' ? 'linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))' : 'linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)' }}>
+        <div
+          className="relative rounded-2xl p-[1px] auth-card-shadow"
+          style={{
+            backgroundImage: theme === "dark"
+              ? "linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))"
+              : "linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)",
+          }}
+        >
           <div className="bg-card rounded-2xl p-8 space-y-6">
             <div className="text-center">
               <h1 className="text-lg font-semibold text-foreground">
                 {lang === "fr" ? "Connexion" : lang === "en" ? "Sign In" : "تسجيل الدخول"}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {lang === "fr" ? "Accédez au SaaS de maintenance prédictive" : lang === "en" ? "Access the AI-powered predictive maintenance SaaS" : "الوصول إلى منصة SaaS للصيانة التنبؤية"}
+                {lang === "fr"
+                  ? "Accédez au SaaS de maintenance prédictive"
+                  : lang === "en"
+                    ? "Access the AI-powered predictive maintenance SaaS"
+                    : "الوصول إلى منصة SaaS للصيانة التنبؤية"}
               </p>
             </div>
+
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">Email</label>
+                <label className="block text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
+                  Email
+                </label>
                 <input
                   type="email"
                   required
                   value={email}
-                  onChange={e => {
+                  onChange={(e) => {
                     setEmail(e.target.value);
-                    setFieldErrors(prev => ({ ...prev, email: validateEmail(e.target.value) }));
+                    setFieldErrors((prev) => ({ ...prev, email: validateEmail(e.target.value) }));
                   }}
                   className={`w-full h-12 rounded-xl border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
                     fieldErrors.email ? "border-destructive focus:ring-destructive/40" : "border-input focus:ring-ring"
@@ -104,18 +140,30 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
                 />
                 {fieldErrors.email && <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>}
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
                   {t("auth.password")}
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full h-12 rounded-xl border border-input bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full h-12 rounded-xl border border-input bg-background px-4 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                    placeholder="********"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground transition-all hover:text-foreground"
+                    aria-label={togglePasswordLabel}
+                    title={togglePasswordLabel}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               {error && (
@@ -127,8 +175,8 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
               <button
                 type="submit"
                 disabled={submitting}
-                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === 'dark' ? 'bg-primary hover:bg-primary/90' : 'shadow-lg'}`}
-                style={theme !== 'dark' ? { backgroundImage: 'linear-gradient(to right, #0f766e, #14b8a6)' } : undefined}
+                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === "dark" ? "bg-primary hover:bg-primary/90" : "shadow-lg"}`}
+                style={theme !== "dark" ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" } : undefined}
               >
                 {submitting ? "..." : t("auth.signInBtn")}
               </button>
@@ -137,13 +185,12 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
             <div className="text-center">
               <button
                 onClick={() => onNavigate("/forgot-password")}
-                className={`text-xs hover:underline ${theme === 'dark' ? 'text-primary/80 hover:text-primary' : 'text-teal-600 hover:text-teal-800'}`}
+                className={`text-xs hover:underline ${theme === "dark" ? "text-primary/80 hover:text-primary" : "text-teal-600 hover:text-teal-800"}`}
               >
                 {lang === "fr" ? "Mot de passe oublié ?" : lang === "en" ? "Forgot password?" : "نسيت كلمة المرور؟"}
               </button>
             </div>
 
-            {/* Gradient divider */}
             <div className="flex items-center gap-4">
               <div className="section-divider flex-1" />
               <span className="text-xs text-muted-foreground">{lang === "fr" ? "ou" : lang === "en" ? "or" : "أو"}</span>
@@ -152,14 +199,16 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
 
             <p className="text-sm text-muted-foreground text-center">
               {t("auth.noAccount")}{" "}
-              <button onClick={() => onNavigate("/signup")} className={`hover:underline font-medium ${theme === 'dark' ? 'text-primary' : 'text-teal-700'}`}>
+              <button
+                onClick={() => onNavigate("/signup")}
+                className={`hover:underline font-medium ${theme === "dark" ? "text-primary" : "text-teal-700"}`}
+              >
                 {t("auth.signUp")}
               </button>
             </p>
           </div>
         </div>
 
-        {/* Trust badges */}
         <div className="flex items-center justify-center gap-6 mt-6">
           <span className="trust-badge"><Shield className="w-3 h-3" /> SSL</span>
           <span className="trust-badge"><Lock className="w-3 h-3" /> AES-256</span>

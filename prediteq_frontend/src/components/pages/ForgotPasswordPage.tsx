@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useApp } from "@/contexts/AppContext";
+﻿import { useState } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
+
+import { useApp } from "@/contexts/AppContext";
+import { sendPasswordResetEmail } from "@/lib/authClient";
+import { repairText } from "@/lib/repairText";
 
 interface Props {
   onNavigate: (route: string) => void;
@@ -13,37 +15,41 @@ export function ForgotPasswordPage({ onNavigate }: Props) {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const l = (fr: string, en: string, ar: string) =>
+    repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
 
   const labels = {
-    title: lang === "fr" ? "Mot de passe oublié" : lang === "en" ? "Forgot Password" : "نسيت كلمة المرور",
-    desc: lang === "fr"
-      ? "Entrez votre email et nous vous enverrons un lien de réinitialisation."
-      : lang === "en"
-        ? "Enter your email and we'll send you a reset link."
-        : "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين.",
-    send: lang === "fr" ? "Envoyer le lien" : lang === "en" ? "Send Reset Link" : "إرسال الرابط",
-    sent: lang === "fr"
-      ? "Un email de réinitialisation a été envoyé. Vérifiez votre boîte de réception."
-      : lang === "en"
-        ? "A reset email has been sent. Check your inbox."
-        : "تم إرسال بريد إلكتروني لإعادة التعيين. تحقق من صندوق الوارد.",
-    back: lang === "fr" ? "Retour à la connexion" : lang === "en" ? "Back to login" : "العودة لتسجيل الدخول",
+    title: l("Mot de passe oublié", "Forgot Password", "نسيت كلمة المرور"),
+    desc: l(
+      "Entrez votre email et nous vous enverrons un lien de réinitialisation.",
+      "Enter your email and we'll send you a reset link.",
+      "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين.",
+    ),
+    send: l("Envoyer le lien", "Send Reset Link", "إرسال الرابط"),
+    sent: l(
+      "Un email de réinitialisation a été envoyé. Vérifiez votre boîte de réception.",
+      "A reset email has been sent. Check your inbox.",
+      "تم إرسال بريد إلكتروني لإعادة التعيين. تحقق من صندوق الوارد.",
+    ),
+    back: l("Retour à la connexion", "Back to login", "العودة لتسجيل الدخول"),
+    networkError: l("Erreur réseau", "Network error", "خطأ في الشبكة"),
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+
     try {
       const redirectTo = `${window.location.origin}/reset-password`;
-      const { error: err } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      const { error: err } = await sendPasswordResetEmail(email, redirectTo);
       if (err) {
-        setError(err.message);
+        setError(repairText(err.message));
       } else {
         setSent(true);
       }
     } catch {
-      setError("Erreur réseau");
+      setError(labels.networkError);
     } finally {
       setSubmitting(false);
     }
@@ -54,13 +60,20 @@ export function ForgotPasswordPage({ onNavigate }: Props) {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
           <img
-            src={theme === 'dark' ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
+            src={theme === "dark" ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
             alt="PrediTeq"
             className="h-16 object-contain"
           />
         </div>
 
-        <div className="relative rounded-2xl p-[1px] auth-card-shadow" style={{ backgroundImage: theme === 'dark' ? 'linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))' : 'linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)' }}>
+        <div
+          className="relative rounded-2xl p-[1px] auth-card-shadow"
+          style={{
+            backgroundImage: theme === "dark"
+              ? "linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))"
+              : "linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)",
+          }}
+        >
           <div className="bg-card rounded-2xl p-8 space-y-6">
             <div className="text-center">
               <h1 className="text-lg font-semibold text-foreground">{labels.title}</h1>
@@ -88,7 +101,7 @@ export function ForgotPasswordPage({ onNavigate }: Props) {
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(event) => setEmail(event.target.value)}
                     className="w-full h-12 rounded-xl border border-input bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
                     placeholder="votre@email.com"
                   />
@@ -103,8 +116,8 @@ export function ForgotPasswordPage({ onNavigate }: Props) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === 'dark' ? 'bg-primary hover:bg-primary/90' : 'shadow-lg'}`}
-                  style={theme !== 'dark' ? { backgroundImage: 'linear-gradient(to right, #0f766e, #14b8a6)' } : undefined}
+                  className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === "dark" ? "bg-primary hover:bg-primary/90" : "shadow-lg"}`}
+                  style={theme !== "dark" ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" } : undefined}
                 >
                   {submitting ? "..." : labels.send}
                 </button>

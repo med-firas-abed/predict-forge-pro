@@ -11,7 +11,7 @@ describe("KpiCard", () => {
     icon: <Icon />,
     label: "Health Index",
     value: "87%",
-    sub: "Dernière mise à jour il y a 5 min",
+    sub: "Derniere mise a jour il y a 5 min",
     variant: "green" as const,
   };
 
@@ -19,7 +19,12 @@ describe("KpiCard", () => {
     render(<KpiCard {...baseProps} />);
     expect(screen.getByText("Health Index")).toBeInTheDocument();
     expect(screen.getByText("87%")).toBeInTheDocument();
-    expect(screen.getByText("Dernière mise à jour il y a 5 min")).toBeInTheDocument();
+    expect(screen.getByText("Derniere mise a jour il y a 5 min")).toBeInTheDocument();
+  });
+
+  it("renders description when provided", () => {
+    render(<KpiCard {...baseProps} description="Short metric definition" />);
+    expect(screen.getByText("Short metric definition")).toBeInTheDocument();
   });
 
   it("renders icon", () => {
@@ -34,15 +39,12 @@ describe("KpiCard", () => {
   });
 
   it("renders trend badge when provided", () => {
-    render(
-      <KpiCard {...baseProps} trend={<TrendBadge variant="up">+2%</TrendBadge>} />
-    );
+    render(<KpiCard {...baseProps} trend={<TrendBadge variant="up">+2%</TrendBadge>} />);
     expect(screen.getByText("+2%")).toBeInTheDocument();
   });
 
   it("does not render trend when omitted", () => {
     const { container } = render(<KpiCard {...baseProps} />);
-    // The trend wrapper only appears conditionally
     const trendWrappers = container.querySelectorAll(".absolute.top-4.right-4");
     expect(trendWrappers.length).toBe(0);
   });
@@ -51,7 +53,7 @@ describe("KpiCard", () => {
     render(
       <KpiCard {...baseProps}>
         <div data-testid="child">Extra content</div>
-      </KpiCard>
+      </KpiCard>,
     );
     expect(screen.getByTestId("child")).toBeInTheDocument();
   });
@@ -61,7 +63,7 @@ describe("KpiCard", () => {
     (variant) => {
       const { container } = render(<KpiCard {...baseProps} variant={variant} />);
       expect(container.firstChild).toBeTruthy();
-    }
+    },
   );
 });
 

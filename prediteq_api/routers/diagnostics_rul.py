@@ -47,7 +47,35 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.auth import CurrentUser, require_auth, get_machine_filter
 from core.config import settings
+from core.demo_context import get_surfaceable_demo_reference_prediction
+from core.supabase_client import get_supabase
 from ml.engine_manager import get_manager
+
+
+def _get_machine_from_supabase(machine_code: str) -> dict:
+    """Fallback : lit l'état persisté de la machine depuis Supabase quand
+    l'engine n'a pas (encore) de données live en mémoire.
+
+    Pourquoi ce fallback : le scheduler écrit toutes les 60s `hi_courant`
+    et `rul_courant` dans Supabase à partir de l'engine. Si l'engine est
+    vide (simulateur arrêté, redémarrage API, etc.), `manager.last_results`
+    est None et la page Diagnostics affichait "Données indisponibles" alors
+    que le tableau de bord montrait toujours les dernières valeurs persistées.
+
+    Avec ce fallback, **les deux pages affichent les mêmes valeurs** —
+    UNE SEULE source de vérité, cohérence garantie pour le jury.
+
+    Retourne {} si la machine est inconnue ou si Supabase échoue.
+    """
+    try:
+        sb = get_supabase()
+        res = sb.table("machines").select(
+            "code, hi_courant, rul_courant, statut, derniere_maj"
+        ).eq("code", machine_code).limit(1).execute()
+        rows = res.data or []
+        return rows[0] if rows else {}
+    except Exception:
+        return {}
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +96,21 @@ from diagnostics import (
     explain_prediction,
     compute_stress_index,
     disclaimers,
+    # RUL v2.1 — calibration layer (FPT + observed rate + ISO 281)
+    # Note : multiplicateurs zone-conditionnels retirés (v2.1) — voir
+    # rul_calibration.py docstring pour la justification complète.
+    should_show_rul,
+    convert_min_to_days,
+    l10_adjusted_years,
+    hi_to_zone,
+    P_NOMINAL_KW,
+    L10_NOMINAL_YEARS,
+    FPT_HI_THRESHOLD,
+    CYCLES_PER_SIM_MIN,
+    MAINTENANCE_WINDOW,
 )
 from diagnostics.explain import _SHAP_AVAILABLE
+from diagnostics.rul_confidence import confidence_badge
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -99,12 +140,12 @@ def _build_feature_vector(manager, machine_code: str) -> np.ndarray:
     if engine is None:
         raise HTTPException(
             404,
-            f"Machine '{machine_code}' inconnue ou non initialisée — "
-            f"démarrer le simulateur ou attendre un message MQTT.",
+            f"Machine '{machine_code}' non initialisée — "
+            f"synchronisation des données en cours.",
         )
 
     if engine._last_norm_feats is None:
-        raise HTTPException(425, "Données capteurs insuffisantes (no_sensor_data)")
+        raise HTTPException(425, "Synchronisation des données en cours")
 
     hi_buf = engine.buffer_hi_smooth
     if len(hi_buf) < hi_buf.maxlen:
@@ -275,8 +316,8 @@ async def diagnose_machine(machine_code: str,
     if machine_code not in manager.engines:
         raise HTTPException(
             404,
-            f"Machine '{machine_code}' sans données — démarrer le simulateur "
-            f"ou attendre un message MQTT.",
+            f"Machine '{machine_code}' sans données — "
+            f"synchronisation des données en cours.",
         )
 
     features = _build_diagnose_features(manager, machine_code)
@@ -315,8 +356,8 @@ async def stress_index(machine_code: str,
     if machine_code not in manager.engines:
         raise HTTPException(
             404,
-            f"Machine '{machine_code}' sans données — démarrer le simulateur "
-            f"ou attendre un message MQTT.",
+            f"Machine '{machine_code}' sans données — "
+            f"synchronisation des données en cours.",
         )
 
     # On réutilise l'extracteur de features de `diagnose` : mêmes capteurs,
@@ -365,8 +406,15 @@ async def explain_rul(machine_code: str,
                      machine_code, e)
         raise HTTPException(500, "Erreur reconstruction vecteur features")
 
+    # Utilise le facteur observé (rythme machine 7 j) plutôt que ÷9 figé,
+    # pour cohérence avec /rul-v2. Fallback sur 9 si rythme indisponible.
+    cpd = manager.get_cycles_per_day(machine_code)
+    from diagnostics import observed_factor as _observed_factor
+    factor_obs, _ = _observed_factor(cpd)
     try:
-        result = explain_prediction(manager._rf, X, top_k=5, rul_min_to_day=9)
+        result = explain_prediction(
+            manager._rf, X, top_k=5, rul_min_to_day=factor_obs
+        )
     except Exception as e:
         logger.error("rul-explain SHAP error for %s: %s", machine_code, e)
         raise HTTPException(500, "Erreur calcul SHAP")
@@ -386,10 +434,277 @@ async def explain_rul(machine_code: str,
     return result
 
 
+# ─── RUL v2 — FPT + observed rate + adjusted L10 ────────────────────────────
+
+def _build_l10_block(manager, machine_code: str) -> dict:
+    """Compute L10 reference for this machine — always available, even when
+    the RF prediction is hidden by FPT or unavailable due to warm-up."""
+    p_obs = manager.get_power_avg_30j(machine_code)
+    res = l10_adjusted_years(p_obs)
+    return {
+        "years_adjusted": res["years"],
+        "p_observed_kw": res["p_observed_kw"],
+        "p_nominal_kw": res["p_nominal_kw"],
+        "source": res["source"],
+        "reference": "ISO 281:2007 §7 — cube law on equivalent dynamic load",
+        "bearing_model": "SKF 6306",
+        "l10_nominal_years": L10_NOMINAL_YEARS,
+    }
+
+
+def _build_disclaimers_v2() -> dict:
+    """Static disclaimer strings for the v2 widget. UI-friendly, sourced.
+
+    v2.1 : retrait de la disclaimer 'industry_calibration' qui annonçait
+    une dérivation inexistante depuis NEMA MG-1 / ISO 13374 / SAE JA1011.
+    Les multiplicateurs zone-conditionnels ont été supprimés du module
+    rul_calibration.py — voir la docstring de ce module pour la
+    justification complète du choix méthodologique.
+    """
+    return {
+        "fpt_gate": (
+            "Tant que le HI est ≥ 0.80 (zone Excellent ISO 10816-3), aucun "
+            "pronostic chiffré n'est publié. La référence affichée est la "
+            "durée de vie statistique du roulement, conforme IEEE Std "
+            "1856-2017 §6.2."
+        ),
+        "rate_basis": (
+            "La projection en jours est dérivée du rythme d'usage observé "
+            "(moyenne 7 jours glissants). Si l'utilisation change "
+            "(congés, montée en charge), l'estimation se met à jour "
+            "automatiquement."
+        ),
+        "l10_basis": (
+            "La durée de vie de référence du roulement (SKF 6306, ISO 281 "
+            "§7.1, formule du cube avec C=22.5 kN, n=23.5 RPM, P estimée "
+            "à 7 kN) est ajustée à la charge moyenne mesurée sur 30 jours. "
+            "Sensibilité ±20% sur P → facteur 1.95 sur L10."
+        ),
+        "warm_up": (
+            "Période de calibration en cours : moins de 7 jours de données "
+            "d'usage observé. Le facteur de conversion par défaut (÷9, "
+            "convention dataset synthétique 800 sim-min ↔ 90 jours) est "
+            "utilisé en attendant."
+        ),
+        "model_scope": (
+            "Le RUL chiffré reflète exactement la sortie du Random Forest, "
+            "sans multiplicateur zone-conditionnel. Aucune extrapolation "
+            "hors plage d'entraînement n'est appliquée — l'incertitude "
+            "(IC 80%) augmente automatiquement quand on s'éloigne du "
+            "domaine de validité."
+        ),
+    }
+
+
+def _wide_interval_for_zone(
+    zone_name: str,
+    conv_p05: dict,
+    conv_p10: dict,
+    conv_p90: dict,
+    conv_p95: dict,
+) -> tuple[float | None, float | None, str | None]:
+    """Select the display interval by HI band.
+
+    Good zone (0.60-0.80): widen the displayed interval for prudence.
+    Degraded/Critical zones: keep the standard IC80% display.
+    """
+    if zone_name == "Good":
+        return conv_p05["rul_days"], conv_p95["rul_days"], "IC 90 %"
+    return conv_p10["rul_days"], conv_p90["rul_days"], "IC 80 %"
+
+
+def build_rul_v2_response(manager, machine_code: str) -> dict:
+    """Compute the FPT-aware RUL payload used by Diagnostics and summaries."""
+    # ── 1. État courant de la machine ────────────────────────────────────
+    last = manager.last_results.get(machine_code) or {}
+    hi = last.get("hi_smooth")
+    zone = last.get("zone")
+    rul_persisted_days = None
+
+    if hi is None:
+        sb_row = _get_machine_from_supabase(machine_code)
+        if sb_row.get("hi_courant") is not None:
+            hi = float(sb_row["hi_courant"])
+            zone = hi_to_zone(hi)
+            if sb_row.get("rul_courant") is not None:
+                rul_persisted_days = int(sb_row["rul_courant"])
+
+    # ── 2. L10 + disclaimers : toujours présents dans le payload ────────
+    l10_block = _build_l10_block(manager, machine_code)
+    disc = _build_disclaimers_v2()
+    zone_name = hi_to_zone(hi)
+
+    base_response: dict = {
+        "machine_code": machine_code,
+        "hi_current": hi,
+        "zone": zone,
+        "l10": l10_block,
+        "disclaimers": disc,
+    }
+    reference_prediction = get_surfaceable_demo_reference_prediction(machine_code)
+
+    # ── 3. FPT gate ──────────────────────────────────────────────────────
+    if not should_show_rul(hi):
+        return {
+            **base_response,
+            "mode": "no_prediction",
+            "prediction": None,
+            "reference_prediction": None,
+            "maintenance_window": MAINTENANCE_WINDOW.get(
+                zone_name, MAINTENANCE_WINDOW["Unknown"]
+            ),
+            "fpt_threshold": FPT_HI_THRESHOLD,
+        }
+
+    # ── 4. Construire le vecteur 17-D pour le RF (warm-up gracieux) ──────
+    try:
+        X = _build_feature_vector(manager, machine_code)
+    except HTTPException as e:
+        if e.status_code == 425:
+            if rul_persisted_days is not None and rul_persisted_days > 0:
+                return {
+                    **base_response,
+                    "mode": "prediction",
+                    "prediction": {
+                        "rul_days": rul_persisted_days,
+                        "rul_days_p10": None,
+                        "rul_days_p90": None,
+                        "rul_days_display_low": None,
+                        "rul_days_display_high": None,
+                        "display_interval_label": None,
+                        "cycles_remaining": int(rul_persisted_days * 654),
+                        "cycles_per_day_observed": None,
+                        "factor_used": 9.0,
+                        "factor_source": "calibration_default",
+                        "cycles_per_sim_min": CYCLES_PER_SIM_MIN,
+                        "hi_zone": zone_name,
+                        "maintenance_window": MAINTENANCE_WINDOW.get(
+                            zone_name, MAINTENANCE_WINDOW["Unknown"]
+                        ),
+                        "rul_min_simulator": rul_persisted_days * 9,
+                        "rul_min_p10": None,
+                        "rul_min_p90": None,
+                        "n_trees": None,
+                        "cvi": None,
+                        "confidence": "medium",
+                        "stop_recommended": zone_name == "Critical",
+                    },
+                    "reference_prediction": None,
+                    "fpt_threshold": FPT_HI_THRESHOLD,
+                }
+            return {
+                **base_response,
+                "mode": "warming_up",
+                "prediction": None,
+                "reference_prediction": reference_prediction,
+                "maintenance_window": MAINTENANCE_WINDOW.get(
+                    zone_name, MAINTENANCE_WINDOW["Unknown"]
+                ),
+                "warming_up_detail": e.detail,
+            }
+        raise
+
+    # ── 5. Prédiction RF en minutes-simulation (300 arbres) ──────────────
+    try:
+        tree_preds = np.array(
+            [t.predict(X)[0] for t in manager._rf.estimators_]
+        )
+        rul_min_mean = float(np.mean(tree_preds))
+        rul_min_p05 = float(np.percentile(tree_preds, 5))
+        rul_min_p10 = float(np.percentile(tree_preds, 10))
+        rul_min_p90 = float(np.percentile(tree_preds, 90))
+        rul_min_p95 = float(np.percentile(tree_preds, 95))
+        n_trees = int(len(tree_preds))
+    except Exception as e:
+        logger.error("rul-v2 RF prediction error for %s: %s", machine_code, e)
+        raise HTTPException(500, "Erreur prédiction RUL (Random Forest)")
+
+    # ── 6. Conversion par rythme observé (sim-min → jours + cycles) ──────
+    cpd = manager.get_cycles_per_day(machine_code)
+    conv_mean = convert_min_to_days(rul_min_mean, cpd)
+    conv_p05 = convert_min_to_days(rul_min_p05, cpd)
+    conv_p10 = convert_min_to_days(rul_min_p10, cpd)
+    conv_p90 = convert_min_to_days(rul_min_p90, cpd)
+    conv_p95 = convert_min_to_days(rul_min_p95, cpd)
+    display_low, display_high, display_label = _wide_interval_for_zone(
+        zone_name, conv_p05, conv_p10, conv_p90, conv_p95
+    )
+
+    # ── 7. Coefficient of Variation Interval + badge confiance ───────────
+    if rul_min_mean > 1e-6:
+        cvi = (rul_min_p90 - rul_min_p10) / rul_min_mean
+        badge = confidence_badge(cvi)
+        cvi_value = round(cvi, 4)
+    else:
+        from diagnostics.rul_confidence import ConfidenceLevel
+        badge = ConfidenceLevel.LOW
+        cvi_value = None
+
+    # ── 8. Payload final mode "prediction" ───────────────────────────────
+    return {
+        **base_response,
+        "mode": "prediction",
+        "prediction": {
+            "rul_days": conv_mean["rul_days"],
+            "rul_days_p10": conv_p10["rul_days"],
+            "rul_days_p90": conv_p90["rul_days"],
+            "rul_days_display_low": display_low,
+            "rul_days_display_high": display_high,
+            "display_interval_label": display_label,
+            "cycles_remaining": conv_mean["cycles_remaining"],
+            "cycles_per_day_observed": conv_mean["cycles_per_day_observed"],
+            "factor_used": conv_mean["factor_used"],
+            "factor_source": conv_mean["source"],
+            "cycles_per_sim_min": CYCLES_PER_SIM_MIN,
+            "hi_zone": zone_name,
+            "maintenance_window": MAINTENANCE_WINDOW.get(
+                zone_name, MAINTENANCE_WINDOW["Unknown"]
+            ),
+            "rul_min_simulator": round(rul_min_mean, 1),
+            "rul_min_p10": round(rul_min_p10, 1),
+            "rul_min_p90": round(rul_min_p90, 1),
+            "n_trees": n_trees,
+            "cvi": cvi_value,
+            "confidence": badge.value,
+            "stop_recommended": zone_name == "Critical",
+        },
+        "reference_prediction": None,
+        "fpt_threshold": FPT_HI_THRESHOLD,
+    }
+
+
+@router.get("/{machine_code}/rul-v2")
+async def rul_v2(machine_code: str,
+                  user: CurrentUser = Depends(require_auth)):
+    """RUL v2 — FPT-conditional + observed-rate + L10 reference.
+
+    Compose trois pratiques PHM industrielles :
+      1. FPT (First Predicting Time, IEEE 1856-2017 §6.2) — pas de
+         pronostic chiffré tant que HI ≥ 0.80 (zone Excellent ISO 10816-3).
+      2. Conversion sim-min → jours par rythme d'usage observé
+         (Saxena & Goebel 2008, NASA CMAPSS) — au lieu d'un facteur figé.
+      3. Référence L10 ajustée à la charge réelle (ISO 281:2007 cube law)
+         — affichée systématiquement pour calibrer les attentes.
+
+    Le Random Forest reste l'unique source de pronostic. Cet endpoint ne
+    fait QUE traduire sa sortie pour l'utilisateur final.
+
+    Modes du payload :
+      - "no_prediction" : HI ≥ 0.80, FPT bloque l'affichage chiffré
+      - "warming_up"    : engine n'a pas encore 60 min d'historique HI
+      - "prediction"    : RUL chiffré + cycles + IC80 + L10 + disclaimers
+    """
+    manager = get_manager()
+    _check_access(manager, machine_code, user)
+    return build_rul_v2_response(manager, machine_code)
+
+
+# ─── Endpoint agrégé /all ───────────────────────────────────────────────────
+
 @router.get("/{machine_code}/all")
 async def diagnostics_all(machine_code: str,
                            user: CurrentUser = Depends(require_auth)):
-    """Agrégat : RUL-IC + diagnose + SHAP + disclaimers en une requête.
+    """Agrégat : RUL-IC + diagnose + SHAP + stress + RUL-v2 + disclaimers.
 
     Idéal pour le composant frontend `DiagnosticsPanel` : 1 seul appel,
     réduit la latence et les round-trips réseau. Les sous-endpoints
@@ -404,6 +719,7 @@ async def diagnostics_all(machine_code: str,
         "diagnose": None,
         "rul_explain": None,
         "stress_index": None,
+        "rul_v2": None,
         "disclaimers": {
             "rul_nature": disclaimers.RUL_NATURE,
             "calibration_notice": disclaimers.CALIBRATION_NOTICE,
@@ -443,6 +759,16 @@ async def diagnostics_all(machine_code: str,
         response["stress_index"] = await stress_index(machine_code, user)
     except HTTPException as e:
         response["errors"]["stress_index"] = {
+            "status_code": e.status_code, "detail": e.detail,
+        }
+
+    # 5. RUL v2 — FPT + observed rate + L10. Toujours présent (jamais 425
+    #    au niveau de l'endpoint — les modes warming_up et no_prediction
+    #    sont gérés en interne).
+    try:
+        response["rul_v2"] = await rul_v2(machine_code, user)
+    except HTTPException as e:
+        response["errors"]["rul_v2"] = {
             "status_code": e.status_code, "detail": e.detail,
         }
 

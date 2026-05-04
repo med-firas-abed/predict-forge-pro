@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS machines (
   region       TEXT NOT NULL DEFAULT '',
   latitude     DOUBLE PRECISION DEFAULT 0,
   longitude    DOUBLE PRECISION DEFAULT 0,
+  modele       TEXT,
+  etages       INTEGER,
+  emplacement  TEXT,
   statut       TEXT NOT NULL DEFAULT 'operational'
                  CHECK (statut IN ('operational', 'degraded', 'critical', 'maintenance')),
   hi_courant   DOUBLE PRECISION DEFAULT 0.5 CHECK (hi_courant >= 0 AND hi_courant <= 1),
@@ -216,7 +219,7 @@ CREATE POLICY "couts_insert_auth" ON couts FOR INSERT
 CREATE TABLE IF NOT EXISTS rapports (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   machine_code TEXT,
-  period       TEXT NOT NULL DEFAULT 'weekly' CHECK (period IN ('weekly', 'monthly')),
+  period       TEXT NOT NULL DEFAULT '7d' CHECK (period IN ('7d', '15d', '30d')),
   lang         TEXT NOT NULL DEFAULT 'fr' CHECK (lang IN ('fr', 'en', 'ar')),
   titre        TEXT NOT NULL,
   contenu      TEXT NOT NULL,
@@ -243,7 +246,9 @@ CREATE TABLE IF NOT EXISTS seuils (
   hi_critical           DOUBLE PRECISION NOT NULL DEFAULT 0.3,
   hi_surveillance       DOUBLE PRECISION NOT NULL DEFAULT 0.6,
   rul_critical_days     DOUBLE PRECISION NOT NULL DEFAULT 7,
-  rul_surveillance_days DOUBLE PRECISION NOT NULL DEFAULT 30
+  rul_surveillance_days DOUBLE PRECISION NOT NULL DEFAULT 30,
+  manager_email         TEXT,
+  technician_email      TEXT
 );
 
 ALTER TABLE seuils ENABLE ROW LEVEL SECURITY;

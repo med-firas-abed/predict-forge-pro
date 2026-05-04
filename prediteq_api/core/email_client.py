@@ -4,6 +4,7 @@ import resend
 from core.config import settings
 
 logger = logging.getLogger(__name__)
+DEFAULT_RESEND_FROM = "PrediTeq Alerts <onboarding@resend.dev>"
 
 # Set API key once at module load
 if settings.RESEND_API_KEY:
@@ -12,7 +13,7 @@ if settings.RESEND_API_KEY:
 # Warn loudly if RESEND_FROM is not configured for production
 if settings.RESEND_API_KEY and (
     not settings.RESEND_FROM
-    or settings.RESEND_FROM == "PrediTeq Alerts <onboarding@resend.dev>"
+    or settings.RESEND_FROM == DEFAULT_RESEND_FROM
 ):
     logger.error(
         "RESEND_FROM is not configured (using Resend demo address). "
@@ -25,19 +26,36 @@ def send_alert_email(to: str, subject: str, html_body: str) -> bool:
     if not settings.RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not set — email skipped")
         return False
-    if not settings.RESEND_FROM or settings.RESEND_FROM == "PrediTeq Alerts <onboarding@resend.dev>":
+    if not settings.RESEND_FROM or settings.RESEND_FROM == DEFAULT_RESEND_FROM:
         logger.warning("RESEND_FROM not configured or using demo address — email may fail")
-    try:
-        sender = settings.RESEND_FROM or "PrediTeq Alerts <onboarding@resend.dev>"
+
+    def _send_with_sender(sender: str) -> None:
         resend.Emails.send({
             "from": sender,
             "to": [to],
             "subject": subject,
             "html": html_body,
         })
+
+    sender = settings.RESEND_FROM or DEFAULT_RESEND_FROM
+    try:
+        _send_with_sender(sender)
         logger.info("Email sent to %s: %s", to, subject)
         return True
     except Exception as e:
+        error_text = str(e).lower()
+        if sender != DEFAULT_RESEND_FROM and "domain is not verified" in error_text:
+            logger.warning(
+                "Custom RESEND_FROM rejected for %s, retrying with onboarding sender",
+                to,
+            )
+            try:
+                _send_with_sender(DEFAULT_RESEND_FROM)
+                logger.info("Email sent to %s via onboarding sender: %s", to, subject)
+                return True
+            except Exception as fallback_error:
+                logger.error("Failed to send email after fallback: %s", fallback_error)
+                return False
         logger.error("Failed to send email: %s", e)
         return False
 

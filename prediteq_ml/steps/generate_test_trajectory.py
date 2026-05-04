@@ -4,7 +4,7 @@ Utilise le MÊME modèle physique que l'étape 1 mais un seed DIFFÉRENT (seed=2
 pour produire des données inédites pour le pipeline ML.
 
 Machine : SITI FC100L1-4, 2.2 kW, 400V triphasé, cos(φ)=0.80, réducteur 1:60
-Profil : B_exponential — usure de roulement réducteur (début lent, accélérant)
+Profil : B_quadratic — usure de roulement réducteur (début lent, accélérant)
          HI = 1 − 0.7 × (t/t_fail)²
 
 Sortie : data/raw/test_trajectories.csv  (trajectoire unique, ID 101)
@@ -15,30 +15,36 @@ import pandas as pd
 import sys
 import os
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from config import *
 
 # Seed DIFFÉRENT de l'entraînement (entraînement utilise seed=42)
 np.random.seed(2026)
 
-# Uniquement B_exponential — la défaillance la plus réaliste pour un ascenseur à réducteur :
+# Uniquement B_quadratic — la défaillance la plus réaliste pour un ascenseur à réducteur :
 # l'usure des roulements commence imperceptiblement puis accélère à mesure que le jeu augmente.
-PROFILE   = 'B_exponential'
+PROFILE   = 'B_quadratic'
 TRAJ_ID   = 101
 T_FAIL_BASE = TRAJECTORY_LEN_MIN * 60  # secondes
 
 
 def compute_hi(profile, t_arr, t_fail):
+    # v2.1 — coefficient 0.7→0.95 pour cohérence avec step1_simulate.py
+    # (HI(t_fail) ≈ 0.05, traverse complètement zone Critical avant coupure).
     ratio = t_arr / t_fail
     if profile == 'A_linear':
-        return np.clip(1 - 0.7 * ratio, 0, 1)
-    elif profile == 'B_exponential':
-        return np.clip(1 - 0.7 * ratio**2, 0, 1)
+        return np.clip(1 - 0.95 * ratio, 0, 1)
+    elif profile == 'B_quadratic':
+        return np.clip(1 - 0.95 * ratio**2, 0, 1)
     elif profile == 'C_stepwise':
         step = np.floor(5 * ratio) / 5
-        return np.clip(1 - 0.85 * step, 0, 1)
+        return np.clip(1 - 0.95 * step, 0, 1)
     elif profile == 'D_noisy_linear':
-        base  = np.clip(1 - 0.7 * ratio, 0, 1)
+        base  = np.clip(1 - 0.95 * ratio, 0, 1)
         noise = np.random.normal(0, 0.08, size=len(t_arr))
         return np.clip(base + noise, 0, 1)
 
@@ -137,7 +143,7 @@ if __name__ == '__main__':
     print(f"  Profil : {PROFILE} (usure roulement réducteur)")
 
     # Consommer l'état aléatoire pour la trajectoire 100 (A_linear) pour garder l'alignement,
-    # puis générer la trajectoire 101 (B_exponential) — identique à avant.
+    # puis générer la trajectoire 101 (B_quadratic) — identique à avant.
     _burn_t_fail = T_FAIL_BASE * np.random.uniform(0.8, 1.2)  # traj 100 t_fail
     _burn_t = np.arange(0, int(_burn_t_fail), 1, dtype=float)
     _burn_hi = compute_hi('A_linear', _burn_t, _burn_t_fail)
@@ -146,8 +152,8 @@ if __name__ == '__main__':
     _burn_tmp, _burn_hum = compute_temp_humidity(_burn_t, _burn_pwr)
 
     df = simulate_trajectory(TRAJ_ID, PROFILE)
-    print(f"  → {len(df):,} rows, {df.t_seconds.iloc[-1]/3600:.1f} hours")
-    print(f"  → HI: {df.simulated_hi.iloc[0]:.3f} → {df.simulated_hi.iloc[-1]:.3f}")
+    print(f"  -> {len(df):,} rows, {df.t_seconds.iloc[-1]/3600:.1f} hours")
+    print(f"  -> HI: {df.simulated_hi.iloc[0]:.3f} -> {df.simulated_hi.iloc[-1]:.3f}")
 
     out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             '..', 'data', 'raw', 'test_trajectories.csv')
@@ -155,5 +161,5 @@ if __name__ == '__main__':
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     df.to_csv(out_path, index=False)
 
-    print(f"\n  Sauvegardé → {out_path}")
+    print(f"\n  Sauvegarde -> {out_path}")
     print(f"  INÉDIT par les modèles entraînés (seed=2026 vs seed d'entraînement=42).")

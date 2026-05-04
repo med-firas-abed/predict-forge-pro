@@ -1,14 +1,15 @@
 {
-  "hybrid_alpha": 0.6,
-  "hybrid_threshold": 0.3900000000000002,
+  "hybrid_alpha": 0.2,
+  "hybrid_threshold": 0.2900000000000001,
+  "calibration_objective": "train-only smoothed HI correlation",
   "if_norm": {
-    "min": 0.38612695497547916,
-    "max": 0.6699971109083969
+    "min": 0.3897564464839849,
+    "max": 0.6672450638545254
   },
   "rms_norm": {
-    "min": -1.6285345063600163,
-    "max": 28.330065572503077
+    "min": -1.628413983471844,
+    "max": 28.315215546439806
   },
-  "rms_healthy_mean": 1.1504938207650883,
-  "rms_healthy_std": 0.20434690258397087
+  "rms_healthy_mean": 1.1503934642801676,
+  "rms_healthy_std": 0.20432152454701527
 }

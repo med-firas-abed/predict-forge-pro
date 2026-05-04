@@ -11,6 +11,10 @@ import json
 import os
 import sys
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import *
 
@@ -177,7 +181,7 @@ def export_mqtt_schema():
 
     with open(OUT_SCHEMA, 'w') as f:
         json.dump(schema, f, indent=2)
-    print(f"\n✅ Schéma MQTT sauvegardé -> {OUT_SCHEMA}")
+    print(f"\nOK: Schema MQTT sauvegarde -> {OUT_SCHEMA}")
 
 # ─── Résumé ─────────────────────────────────────────────────────────────────────────
 
@@ -219,4 +223,4 @@ if __name__ == '__main__':
     validate_engine(if_model, rf_model, scaler_params, hi_params, hybrid_params)
     export_mqtt_schema()
     print_summary()
-    print("\n✅ Étape 7 terminée — pipeline entièrement exporté et validé.")
+    print("\nOK: Etape 7 terminee - pipeline entierement exporte et valide.")

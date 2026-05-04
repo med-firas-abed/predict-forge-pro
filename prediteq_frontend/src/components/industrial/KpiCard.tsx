@@ -3,6 +3,7 @@ import { ReactNode } from "react";
 interface KpiCardProps {
   icon: ReactNode;
   label: string;
+  description?: ReactNode;
   value: ReactNode;
   sub: string;
   variant: 'blue' | 'green' | 'warn' | 'danger';
@@ -33,7 +34,16 @@ const VARIANT_STYLES = {
   },
 };
 
-export function KpiCard({ icon, label, value, sub, variant, trend, children }: KpiCardProps) {
+export function KpiCard({
+  icon,
+  label,
+  description,
+  value,
+  sub,
+  variant,
+  trend,
+  children,
+}: KpiCardProps) {
   const styles = VARIANT_STYLES[variant];
 
   return (
@@ -63,6 +73,12 @@ export function KpiCard({ icon, label, value, sub, variant, trend, children }: K
       {sub && <div className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{sub}</div>}
 
       {children}
+
+      {description && (
+        <div className="mt-2 min-h-[2.5rem] text-[0.76rem] italic leading-relaxed text-muted-foreground/85">
+          {description}
+        </div>
+      )}
     </div>
   );
 }

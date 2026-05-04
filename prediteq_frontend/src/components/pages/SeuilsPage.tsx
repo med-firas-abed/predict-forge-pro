@@ -22,16 +22,30 @@ export function SeuilsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    apiFetch<{ hi_critical: number; hi_surveillance: number; rul_critical_days: number; rul_surveillance_days: number }>("/seuils")
+    apiFetch<{
+      hi_critical: number;
+      hi_surveillance: number;
+      rul_critical_days: number;
+      rul_surveillance_days: number;
+      manager_email?: string | null;
+      technician_email?: string | null;
+    }>("/seuils")
       .then((data) => {
         setHiCrit(data.hi_critical);
         setHiSurv(data.hi_surveillance);
         setRulCrit(data.rul_critical_days);
         setRulSurv(data.rul_surveillance_days);
+        const recipients = {
+          manager: data.manager_email ?? "",
+          technician: data.technician_email ?? "",
+        };
+        setManagerEmail(recipients.manager);
+        setTechEmail(recipients.technician);
+        setAlertEmails(recipients);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [setAlertEmails]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -43,6 +57,8 @@ export function SeuilsPage() {
           hi_surveillance: hiSurv,
           rul_critical_days: rulCrit,
           rul_surveillance_days: rulSurv,
+          manager_email: managerEmail.trim() || null,
+          technician_email: techEmail.trim() || null,
         }),
       });
       setAlertEmails({ manager: managerEmail, technician: techEmail });
@@ -66,18 +82,18 @@ export function SeuilsPage() {
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={<Heart className="w-5 h-5" />} label="HI Critique" value={<>{hiCrit.toFixed(2)}</>} sub="Seuil urgence" variant="danger" />
-        <KpiCard icon={<Heart className="w-5 h-5" />} label="HI Surveillance" value={<>{hiSurv.toFixed(2)}</>} sub="Seuil alerte" variant="warn" />
-        <KpiCard icon={<Clock className="w-5 h-5" />} label="RUL Urgence" value={<>{rulCrit} <span className="text-sm opacity-40">j</span></>} sub="Jours restants" variant="danger" />
-        <KpiCard icon={<Clock className="w-5 h-5" />} label="RUL Surveillance" value={<>{rulSurv} <span className="text-sm opacity-40">j</span></>} sub="Jours restants" variant="warn" />
+        <KpiCard icon={<Heart className="w-5 h-5" />} label="Santé machine - critique" value={<>{hiCrit.toFixed(2)}</>} sub="Déclenchement urgence" variant="danger" />
+        <KpiCard icon={<Heart className="w-5 h-5" />} label="Santé machine - surveillance" value={<>{hiSurv.toFixed(2)}</>} sub="Déclenchement suivi" variant="warn" />
+        <KpiCard icon={<Clock className="w-5 h-5" />} label="RUL - urgence" value={<>{rulCrit} <span className="text-sm opacity-40">j</span></>} sub="Temps restant court" variant="danger" />
+        <KpiCard icon={<Clock className="w-5 h-5" />} label="RUL - surveillance" value={<>{rulSurv} <span className="text-sm opacity-40">j</span></>} sub="Temps restant à suivre" variant="warn" />
       </div>
 
       {/* Threshold Sliders — 2 cols */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="bg-card border border-border rounded-2xl p-5">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Health Index</h3>
-            <p className="text-xs text-muted-foreground mt-1">Seuils de déclenchement HI</p>
+            <h3 className="text-sm font-semibold text-foreground">Health Index (état de santé)</h3>
+            <p className="text-xs text-muted-foreground mt-1">Quand l'état de santé devient préoccupant</p>
           </div>
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2">
@@ -107,8 +123,8 @@ export function SeuilsPage() {
 
         <div className="bg-card border border-border rounded-2xl p-5">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Remaining Useful Life</h3>
-            <p className="text-xs text-muted-foreground mt-1">Seuils de déclenchement RUL</p>
+            <h3 className="text-sm font-semibold text-foreground">Durée de vie restante (RUL)</h3>
+            <p className="text-xs text-muted-foreground mt-1">Quand le temps restant devient court</p>
           </div>
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2">
@@ -141,26 +157,26 @@ export function SeuilsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="bg-card border border-border rounded-2xl p-5">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Règles d'alerte</h3>
-            <p className="text-xs text-muted-foreground mt-1">Résumé des déclenchements</p>
+            <h3 className="text-sm font-semibold text-foreground">Déclenchement des alertes</h3>
+            <p className="text-xs text-muted-foreground mt-1">Les comptes admin approuvés sont toujours notifiés. Les emails saisis ici ajoutent des destinataires opérationnels.</p>
           </div>
           <div className="space-y-2.5">
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 text-destructive mt-0.5 flex-shrink-0" />
               <p className="text-xs text-secondary-foreground">
-                <span className="font-bold text-destructive">Urgence</span> — HI &lt; {hiCrit.toFixed(2)} OU RUL &lt; {rulCrit}j → email automatique
+                <span className="font-bold text-destructive">Urgence</span> — si le Health Index passe sous {hiCrit.toFixed(2)} ou si le RUL passe sous {rulCrit} jours, un email part immédiatement aux admins approuvés puis aux destinataires opérationnels configurés
               </p>
             </div>
             <div className="flex items-start gap-2">
               <Eye className="w-3.5 h-3.5 text-warning mt-0.5 flex-shrink-0" />
               <p className="text-xs text-secondary-foreground">
-                <span className="font-bold text-warning">Surveillance</span> — HI &lt; {hiSurv.toFixed(2)} OU RUL &lt; {rulSurv}j → email hebdomadaire
+                <span className="font-bold text-warning">Surveillance</span> — si la marge se réduit mais reste non critique, un email de suivi est envoyé aux mêmes destinataires
               </p>
             </div>
             <div className="flex items-start gap-2">
               <Shield className="w-3.5 h-3.5 text-success mt-0.5 flex-shrink-0" />
               <p className="text-xs text-secondary-foreground">
-                <span className="font-bold text-success">OK</span> — aucun email
+                <span className="font-bold text-success">Situation normale</span> — aucun email automatique
               </p>
             </div>
           </div>
@@ -172,18 +188,21 @@ export function SeuilsPage() {
               <Mail className="w-4 h-4 text-muted-foreground" />
               {t("seuils.emailConfig")}
             </h3>
-            <p className="text-xs text-muted-foreground mt-1">Destinataires des notifications</p>
+            <p className="text-xs text-muted-foreground mt-1">Les comptes admin approuvés sont toujours inclus. Ces champs ajoutent les emails opérationnels utilisés par le backend.</p>
           </div>
           <div className="space-y-3">
             <div>
               <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">{t("seuils.managerEmail")}</label>
-              <input value={managerEmail} onChange={e => setManagerEmail(e.target.value)}
+              <input type="email" value={managerEmail} onChange={e => setManagerEmail(e.target.value)}
                 className="w-full bg-surface-3 border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground" />
             </div>
             <div>
               <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">{t("seuils.techEmail")}</label>
-              <input value={techEmail} onChange={e => setTechEmail(e.target.value)}
+              <input type="email" value={techEmail} onChange={e => setTechEmail(e.target.value)}
                 className="w-full bg-surface-3 border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground" />
+            </div>
+            <div className="rounded-xl border border-border bg-surface-3 px-3.5 py-3 text-xs text-muted-foreground">
+              Si aucun compte admin approuvé n'est trouvé, le backend retombe sur l'email administrateur configuré côté serveur.
             </div>
           </div>
         </div>

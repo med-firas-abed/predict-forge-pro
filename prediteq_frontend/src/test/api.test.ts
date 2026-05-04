@@ -1,22 +1,26 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock supabase module
-vi.mock("@/lib/supabase", () => ({
-  supabase: {
-    auth: {
-      getSession: () =>
-        Promise.resolve({
-          data: { session: { access_token: "test-token-123" } },
-        }),
-    },
-  },
+const authClientMocks = vi.hoisted(() => ({
+  getAuthSession: vi.fn(),
+  refreshAuthSession: vi.fn(),
+  signOutAuth: vi.fn(),
 }));
+
+vi.mock("@/lib/authClient", () => authClientMocks);
 
 import { apiFetch } from "@/lib/api";
 
 describe("apiFetch", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    authClientMocks.getAuthSession.mockResolvedValue({
+      data: { session: { access_token: "test-token-123" } },
+    });
+    authClientMocks.refreshAuthSession.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+    authClientMocks.signOutAuth.mockResolvedValue(undefined);
   });
 
   it("calls fetch with correct URL and auth header", async () => {
@@ -35,7 +39,7 @@ describe("apiFetch", () => {
           Authorization: "Bearer test-token-123",
           "Content-Type": "application/json",
         }),
-      })
+      }),
     );
     expect(result).toEqual(mockData);
   });
@@ -67,7 +71,7 @@ describe("apiFetch", () => {
           "X-Custom": "value",
           Authorization: "Bearer test-token-123",
         }),
-      })
+      }),
     );
   });
 
@@ -87,7 +91,69 @@ describe("apiFetch", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ name: "test" }),
-      })
+      }),
     );
+  });
+
+  it("uses a custom timeout when provided", async () => {
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true }),
+    });
+
+    await apiFetch("/machines", {
+      timeoutMs: 90_000,
+    });
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 90_000);
+  });
+
+  it("does not sign out when a 401 happens but the session is still recoverable", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve("Unauthorized"),
+    });
+
+    authClientMocks.getAuthSession
+      .mockResolvedValueOnce({
+        data: { session: { access_token: "stale-token" } },
+      })
+      .mockResolvedValueOnce({
+        data: { session: { access_token: "fresh-token" } },
+      });
+
+    await expect(apiFetch("/machines")).rejects.toThrow("API 401: Unauthorized");
+    expect(authClientMocks.signOutAuth).not.toHaveBeenCalled();
+  });
+
+  it("signs out only when a 401 happens and no session can be recovered", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve("Unauthorized"),
+    });
+
+    authClientMocks.getAuthSession
+      .mockResolvedValueOnce({
+        data: { session: { access_token: "stale-token" } },
+      })
+      .mockResolvedValueOnce({
+        data: { session: null },
+      });
+
+    authClientMocks.refreshAuthSession
+      .mockResolvedValueOnce({
+        data: { session: null },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { session: null },
+        error: null,
+      });
+
+    await expect(apiFetch("/machines")).rejects.toThrow("Session expirée");
+    expect(authClientMocks.signOutAuth).toHaveBeenCalledTimes(1);
   });
 });

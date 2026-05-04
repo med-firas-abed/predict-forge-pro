@@ -22,6 +22,7 @@ import {
   Phone,
   Youtube,
 } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 /* ───────────────────── i18n ───────────────────── */
 type Lang = "fr" | "en";
@@ -43,7 +44,7 @@ const T = {
     badge: { fr: "SaaS Prédictif propulsé par l'IA", en: "AI-Powered Predictive SaaS" },
     h1a: { fr: "Prédisez les pannes", en: "Predict Equipment Failures" },
     h1b: { fr: "Avant qu'elles n'arrivent", en: "Before They Happen" },
-    sub: { fr: "PrediTeq équipe vos machines de capteurs intelligents et exploite l'IA propriétaire pour éliminer les arrêts imprévus et prolonger la durée de vie de vos équipements jusqu'à 40 %.", en: "PrediTeq equips your machines with smart sensors and leverages proprietary AI to eliminate unplanned downtime and extend equipment life cycles by up to 40%." },
+    sub: { fr: "PrediTeq équipe vos machines de capteurs intelligents et transforme leurs signaux en décisions de maintenance plus tôt, plus clairement et avec un niveau de confiance explicite.", en: "PrediTeq equips your machines with smart sensors and turns their signals into earlier, clearer maintenance decisions with explicit confidence." },
     cta: { fr: "Essai Gratuit", en: "Start Free Trial" },
     demo: { fr: "Voir la démo", en: "Watch Demo" },
     hi: { fr: "Indice de Santé", en: "Health Index" },
@@ -65,8 +66,8 @@ const T = {
     solutionValidated: { fr: "— validé sur le benchmark NASA C-MAPSS", en: "— validated on NASA C-MAPSS benchmark" },
     benefitsLabel: { fr: "Avantages :", en: "Benefits:" },
     benefits: {
-      fr: ["Réduction des arrêts imprévus jusqu'à 40 %", "Indice de Santé en temps réel (0–100 %) par machine", "Prédictions RUL avec intervalles de confiance", "Rapports de maintenance générés par IA", "Surveillance multi-site depuis un seul tableau de bord"],
-      en: ["Reduced unplanned downtime by up to 40%", "Real-time Health Index (0–100%) for every machine", "RUL predictions with confidence intervals", "Automated AI-generated maintenance reports", "Multi-site monitoring from a single dashboard"],
+      fr: ["Priorisation plus précoce des risques machine", "Indice de Santé en temps réel (0–100 %) par machine", "Prédictions RUL avec intervalles de confiance", "Rapports de maintenance générés à la demande", "Surveillance multi-site depuis un seul tableau de bord"],
+      en: ["Earlier prioritization of machine risk", "Real-time Health Index (0–100%) for every machine", "RUL predictions with confidence intervals", "On-demand maintenance reports", "Multi-site monitoring from a single dashboard"],
     },
   },
   features: {
@@ -78,7 +79,7 @@ const T = {
       { title: { fr: "Prédiction RUL", en: "RUL Prediction" }, desc: { fr: "Nos modèles IA prédisent la Durée de Vie Restante avec des estimations précises basées sur les patterns d'usure actuels.", en: "AI models predict Remaining Useful Life with precise failure window estimates based on current wear patterns." } },
       { title: { fr: "Détection d'Anomalies", en: "Anomaly Detection" }, desc: { fr: "Identification instantanée des déviations subtiles dans les signatures thermiques, vibratoires ou acoustiques.", en: "Instant identification of subtle deviations in thermal, vibration, or acoustic signatures using unsupervised learning." } },
       { title: { fr: "Alertes Intelligentes", en: "Smart Alerts" }, desc: { fr: "Notifications contextuelles par Email lorsque les seuils critiques sont approchés. Niveaux URGENCE, SURVEILLANCE, OK.", en: "Context-aware notifications via Email when critical thresholds are approached. URGENCE, SURVEILLANCE, OK levels." } },
-      { title: { fr: "Rapports IA", en: "AI Reports" }, desc: { fr: "Synthèses exécutives et analyses de causes racines générées automatiquement chaque semaine ou à la demande via Claude AI.", en: "Automated executive summaries and technical root-cause analyses generated weekly or on-demand using Claude AI." } },
+      { title: { fr: "Rapports IA", en: "AI Reports" }, desc: { fr: "Synthèses exécutives et analyses techniques générées à la demande depuis les mêmes décisions que le tableau de bord.", en: "Executive summaries and technical analyses generated on demand from the same decisions used in the dashboard." } },
       { title: { fr: "Calendrier & Planification", en: "Calendar & Task Scheduling" }, desc: { fr: "Planifiez et suivez vos tâches de maintenance préventive grâce à un calendrier interactif avec rappels automatiques.", en: "Plan and track your preventive maintenance tasks with an interactive calendar and automatic reminders." } },
     ],
   },
@@ -112,8 +113,8 @@ const T = {
     mo: { fr: "/mois", en: "/mo" },
     plans: [
       { name: { fr: "Essentiel", en: "Starter" }, price: "990 DT", sub: { fr: "Jusqu'à 5 machines", en: "Up to 5 machines" }, features: { fr: ["Kit capteurs IoT (température, vibration)", "Indice de Santé en temps réel", "Prédiction RUL basique", "Alertes par email", "Tableau de bord 1 site"], en: ["IoT sensor kit (temperature, vibration)", "Real-time Health Index", "Basic RUL prediction", "Email alerts", "1-site dashboard"] }, popular: false },
-      { name: { fr: "Professionnel", en: "Professional" }, price: "2 490 DT", sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de Santé avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA hebdomadaires (Claude)"], en: ["Advanced sensor kit (6 parameters)", "Advanced Health Index", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "Weekly AI reports (Claude)"] }, popular: true },
-      { name: { fr: "Entreprise", en: "Enterprise" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Machines illimitées", en: "Unlimited machines" }, features: { fr: ["Tout l'offre Professionnel", "Capteurs sur-mesure pour vos lignes", "Entraînement de modèle IA personnalisé", "Déploiement on-premise possible", "Dashboard en marque blanche", "Rapports IA en temps réel"], en: ["Everything in Professional", "Custom sensors for your production lines", "Custom AI model training", "On-premise deployment option", "White-label dashboard", "Real-time AI reports"] }, popular: false },
+      { name: { fr: "Professionnel", en: "Professional" }, price: "2 490 DT", sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de Santé avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA à la demande"], en: ["Advanced sensor kit (6 parameters)", "Advanced Health Index", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "On-demand AI reports"] }, popular: true },
+      { name: { fr: "Entreprise", en: "Enterprise" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Machines illimitées", en: "Unlimited machines" }, features: { fr: ["Tout l'offre Professionnel", "Capteurs sur-mesure pour vos lignes", "Entraînement de modèle IA personnalisé", "Déploiement on-premise possible", "Tableau de bord en marque blanche", "Rapports IA en temps réel"], en: ["Everything in Professional", "Custom sensors for your production lines", "Custom AI model training", "On-premise deployment option", "White-label dashboard", "Real-time AI reports"] }, popular: false },
     ],
   },
   cta: {
@@ -479,7 +480,7 @@ function ChallengeSolution() {
               {lang === "fr" ? ", le scoring " : " anomaly detection, "}<strong className={dark ? 'text-white' : 'text-gray-900'}>{T.challenge.solutionHI[lang]}</strong>
               {lang === "fr" ? ", et la " : " scoring, and "}<strong className={dark ? 'text-white' : 'text-gray-900'}>{T.challenge.solutionRUL[lang]}</strong>{" "}
               {lang === "fr" ? "prédiction" : " prediction"}
-              {" "}{T.challenge.solutionValidated[lang]} <span className={`font-semibold ${dark ? 'text-teal-400' : 'text-teal-700'}`}>(R²=0.89)</span>.
+              {" "}{T.challenge.solutionValidated[lang]}.
             </p>
           </div>
           <div>
@@ -604,18 +605,48 @@ function AnimatedValue({ from, to, suffix, duration, start }: { from: number; to
   return <>{current}{suffix}</>;
 }
 
+interface LandingPublicMetrics {
+  marketing_cards: {
+    r2_pct: number | null;
+    rmse_days: number | null;
+    hybrid_f1_pct: number | null;
+    cmapss_r2_pct: number | null;
+    trajectories: number;
+  };
+}
+
 function Metrics() {
   const { lang } = useLang();
   const { theme } = useTheme();
   const dark = theme === "dark";
-  const STATS: { value: string; label: string; orange?: boolean; animate?: { from: number; to: number; suffix: string; duration: number } }[] = [
-    { value: "94%", label: T.stats.accuracy[lang], animate: { from: 0, to: 94, suffix: "%", duration: 2400 } },
-    { value: "<2h", label: T.stats.latency[lang], orange: true },
-    { value: "99.9%", label: T.stats.uptime[lang] },
-    { value: "3×", label: T.stats.roi[lang], animate: { from: 1, to: 3, suffix: "×", duration: 4000 }, orange: true },
+  const [metrics, setMetrics] = useState<LandingPublicMetrics | null>(null);
+  const INITIAL_STATS: { value: string; label: string; orange?: boolean; animate?: { from: number; to: number; suffix: string; duration: number } }[] = [
+    { value: "—", label: T.stats.accuracy[lang] },
+    { value: "—", label: T.stats.latency[lang], orange: true },
+    { value: "—", label: T.stats.uptime[lang] },
+    { value: "200", label: lang === "fr" ? "Trajectoires" : "Trajectories", orange: true },
   ];
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetch<LandingPublicMetrics>("/health/public-metrics")
+      .then((data) => {
+        if (!cancelled) {
+          setMetrics(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMetrics(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -624,9 +655,22 @@ function Metrics() {
     return () => obs.disconnect();
   }, []);
 
+  const cards = metrics?.marketing_cards;
+  const STATS = cards
+    ? [
+        { value: `${cards.r2_pct ?? 0}%`, label: T.stats.accuracy[lang], animate: cards.r2_pct != null ? { from: 0, to: cards.r2_pct, suffix: "%", duration: 2400 } : undefined },
+        { value: cards.rmse_days != null ? `${cards.rmse_days} j` : "—", label: T.stats.latency[lang], orange: true },
+        { value: cards.hybrid_f1_pct != null ? `${cards.hybrid_f1_pct}%` : "—", label: T.stats.uptime[lang] },
+        { value: `${cards.trajectories}`, label: lang === "fr" ? "Trajectoires" : "Trajectories", orange: true },
+      ]
+    : INITIAL_STATS;
+
   return (
     <section id="metrics" className={`py-20 ${dark ? 'bg-gradient-to-b from-[#0c1a30] to-[#0a1628]' : 'bg-gray-50'}`}>
       <div ref={ref} className="max-w-6xl mx-auto px-6">
+        <div className={`mb-8 text-center text-xs font-semibold uppercase tracking-[0.24em] ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
+          {lang === "fr" ? "Mesures vérifiées du pipeline" : "Verified pipeline metrics"}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {STATS.map((s) => (
             <div key={s.label} className="text-center">

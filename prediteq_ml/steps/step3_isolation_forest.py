@@ -14,6 +14,10 @@ import json
 import os
 import sys
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import *
 from sklearn.ensemble import IsolationForest
@@ -46,9 +50,14 @@ if __name__ == '__main__':
     df = pd.read_csv(IN_FEAT)
     print(f"  Chargé {len(df):,} lignes, {df['trajectory_id'].nunique()} trajectoires")
 
-    # ── Séparation train/test par trajectoire (80/20) ────────────────────
-    traj_ids   = df['trajectory_id'].unique()
-    train_ids, test_ids = get_train_test_ids(traj_ids)
+    # ── Séparation train/test par trajectoire (80/20 stratifié par profil) ──
+    traj_ids = df['trajectory_id'].unique()
+    traj_profile_map = (
+        df.drop_duplicates('trajectory_id')
+          .set_index('trajectory_id')['profile']
+          .to_dict()
+    )
+    train_ids, test_ids = get_train_test_ids(traj_ids, traj_profile_map=traj_profile_map)
 
     df_train = df[df['trajectory_id'].isin(train_ids)]
     df_test  = df[df['trajectory_id'].isin(test_ids)]
@@ -119,7 +128,8 @@ if __name__ == '__main__':
     scores_df['rms_norm'] = rz_norm
 
     # 3. Score hybride pondéré : alpha * IF_norm + (1-alpha) * RMS_norm
-    alpha = HYBRID_ALPHA  # 0.6
+    # α a été recalibré sur le train pour maximiser la fidélité du HI lissé.
+    alpha = HYBRID_ALPHA
     scores_df['hybrid_score'] = alpha * sa_norm + (1 - alpha) * rz_norm
     print(f"  Hybrid alpha={alpha} (IF={alpha:.0%}, RMS={1-alpha:.0%})")
 
@@ -222,6 +232,7 @@ if __name__ == '__main__':
     hybrid_params = {
         'hybrid_alpha':    alpha,
         'hybrid_threshold': float(best_thresh),
+        'calibration_objective': 'train-only smoothed HI correlation',
         'if_norm':  {'min': sa_min, 'max': sa_max},
         'rms_norm': {'min': rz_min, 'max': rz_max},
         'rms_healthy_mean': rms_mean,
@@ -230,9 +241,9 @@ if __name__ == '__main__':
     with open(OUT_HYBRID, 'w') as f:
         json.dump(hybrid_params, f, indent=2)
 
-    print(f"\n✅ Scores d'anomalie sauvegardés  → {OUT_SCORES}")
-    print(f"✅ Modèle IF sauvegardé          → {OUT_MODEL}")
-    print(f"✅ Paramètres hybrides sauvegardés → {OUT_HYBRID}")
+    print(f"\nOK: Scores d'anomalie sauvegardes -> {OUT_SCORES}")
+    print(f"OK: Modele IF sauvegarde        -> {OUT_MODEL}")
+    print(f"OK: Parametres hybrides sauvegardes -> {OUT_HYBRID}")
     print(f"   Plage de scores : [{if_scores.min():.4f}, {if_scores.max():.4f}]")
     print(f"   Plage de scores hybrides : [{scores_df['hybrid_score'].min():.4f}, "
           f"{scores_df['hybrid_score'].max():.4f}]")

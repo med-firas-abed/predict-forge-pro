@@ -1,16 +1,34 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { UserCheck, UserX, Users } from "lucide-react";
+import { Trash2, UserCheck, UserX, Users } from "lucide-react";
 
 export function AdminUsersPage() {
-  const { allUsers, currentUser, approveUser, rejectUser } = useAuth();
+  const { allUsers, currentUser, approveUser, rejectUser, deleteUser } = useAuth();
 
   const pending = allUsers.filter(u => u.status === "pending");
   const approved = allUsers.filter(u => u.status === "approved");
+  const approvedAdminCount = approved.filter(u => u.role === "admin").length;
 
   const getMachineName = (user: { machineId?: string; machineCode?: string }) => {
     if (!user.machineId) return "Toutes les machines";
     return user.machineCode || user.machineId;
+  };
+
+  // Confirmation + appel deleteUser. Côté backend : refuse self-delete et
+  // suppression du dernier admin approuvé (voir auth.py DELETE /admin/users).
+  const handleDelete = async (userId: string, userName: string, userRole: string, userStatus: string) => {
+    const isLastAdmin = userRole === "admin" && userStatus === "approved" && approvedAdminCount <= 1;
+    if (isLastAdmin) {
+      toast.error("Impossible de supprimer le dernier administrateur.");
+      return;
+    }
+    if (!window.confirm(`Supprimer définitivement ${userName} ? Action irréversible.`)) return;
+    try {
+      await deleteUser(userId);
+      toast.success("Compte supprimé");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur lors de la suppression");
+    }
   };
 
   return (
@@ -64,6 +82,14 @@ export function AdminUsersPage() {
                         <UserX className="w-3.5 h-3.5" />
                         Rejeter
                       </button>
+                      <button
+                        onClick={() => handleDelete(user.id, user.fullName, user.role, user.status)}
+                        title="Supprimer définitivement"
+                        className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-destructive/15 text-destructive border border-destructive/30 text-xs font-semibold hover:bg-destructive/25 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Supprimer
+                      </button>
                     </div>
                   )}
                 </div>
@@ -88,22 +114,48 @@ export function AdminUsersPage() {
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rôle</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Machine</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Approuvé le</th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {approved.map(user => (
-                <tr key={user.id} className="border-b border-border last:border-0">
-                  <td className="px-5 py-3 text-foreground font-medium">{user.fullName}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{user.email}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
-                      {user.role === "admin" ? "Admin" : "Utilisateur"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-muted-foreground">{getMachineName(user)}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{user.approvedAt ? new Date(user.approvedAt).toLocaleDateString("fr-FR") : "—"}</td>
-                </tr>
-              ))}
+              {approved.map(user => {
+                const isSelf = currentUser?.id === user.id;
+                const isLastAdmin = user.role === "admin" && approvedAdminCount <= 1;
+                const disableDelete = isSelf || isLastAdmin;
+                const reason = isSelf
+                  ? "Vous ne pouvez pas supprimer votre propre compte."
+                  : isLastAdmin
+                    ? "Dernier administrateur — promouvez un autre admin avant."
+                    : "Supprimer définitivement";
+                return (
+                  <tr key={user.id} className="border-b border-border last:border-0">
+                    <td className="px-5 py-3 text-foreground font-medium">{user.fullName}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{user.email}</td>
+                    <td className="px-5 py-3">
+                      <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
+                        {user.role === "admin" ? "Admin" : "Utilisateur"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">{getMachineName(user)}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{user.approvedAt ? new Date(user.approvedAt).toLocaleDateString("fr-FR") : "—"}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        disabled={disableDelete}
+                        onClick={() => handleDelete(user.id, user.fullName, user.role, user.status)}
+                        title={reason}
+                        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold transition-colors ${
+                          disableDelete
+                            ? "bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60"
+                            : "bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20"
+                        }`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Supprimer
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

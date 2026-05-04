@@ -10,6 +10,10 @@ import json
 import os
 import sys
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import *
 
@@ -202,21 +206,41 @@ if __name__ == '__main__':
     print("Concaténation de toutes les caractéristiques ...")
     feat_df = pd.concat(all_feats, ignore_index=True)
 
-    # Utiliser uniquement les IDs d'entraînement pour le scaler (éviter fuite de données)
-    train_ids, _ = get_train_test_ids(traj_ids)
-    print(f"Calcul du scaler sur données saines de référence (train uniquement, {len(train_ids)} trajectoires) ...")
+    raw_ids = set(traj_ids)
+    feat_ids = set(feat_df['trajectory_id'].unique())
+    missing_ids = sorted(raw_ids - feat_ids)
+    extra_ids = sorted(feat_ids - raw_ids)
+    if missing_ids or extra_ids:
+        raise RuntimeError(
+            "Intégrité Step 2 violée : les trajectoires transformées ne correspondent "
+            f"pas au brut. Missing={missing_ids} Extra={extra_ids}"
+        )
+    print(f"  Intégrité OK : {len(feat_ids)} trajectoires conservées après ingénierie")
+
+    # Utiliser le même split stratifié que les étapes 3 à 5 pour garder une
+    # référence saine cohérente entre normalisation, HI et RUL.
+    traj_profile_map = (
+        raw.drop_duplicates('trajectory_id')
+           .set_index('trajectory_id')['profile']
+           .to_dict()
+    )
+    train_ids, _ = get_train_test_ids(traj_ids, traj_profile_map=traj_profile_map)
+    print(
+        f"Calcul du scaler sur données saines de référence "
+        f"(train stratifié, {len(train_ids)} trajectoires) ..."
+    )
     scaler = compute_scaler(feat_df, train_ids=train_ids)
 
     print("Application de la normalisation Z-score ...")
     feat_df = apply_normalization(feat_df, scaler)
 
     feat_df.to_csv(OUT_FEAT, index=False)
-    print(f"✅ Caractéristiques sauvegardées → {OUT_FEAT}")
+    print(f"OK: Caracteristiques sauvegardees -> {OUT_FEAT}")
     print(f"   Forme : {feat_df.shape}")
 
     with open(OUT_SCALER, 'w') as f:
         json.dump(scaler, f, indent=2)
-    print(f"✅ Scaler sauvegardé  → {OUT_SCALER}")
+    print(f"OK: Scaler sauvegarde -> {OUT_SCALER}")
 
     print(f"\n   Colonnes de caractéristiques : {FEATURE_COLS}")
     print(f"   Exemple (1ère ligne) :\n{feat_df[FEATURE_COLS].iloc[0]}")

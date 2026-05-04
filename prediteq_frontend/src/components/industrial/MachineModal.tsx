@@ -4,6 +4,10 @@ import { SVGGauge } from "@/components/industrial/SVGGauge";
 import { X, Loader2 } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { apiFetch } from "@/lib/api";
+import {
+  formatMachineFloorCountValue,
+  formatMachineModelValue,
+} from "@/lib/machinePresentation";
 import { useAlertes } from "@/hooks/useAlertes";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LabelList } from "recharts";
 
@@ -20,16 +24,7 @@ interface MachineModalProps {
 
 export function MachineModal({ machine, onClose }: MachineModalProps) {
   const { t } = useApp();
-  if (!machine) return null;
-  const m = machine;
-  const cfg = STATUS_CONFIG[m.status];
-  const hiPct = Math.round(m.hi * 100);
-
-  // Fetch real alertes for this machine
-  const { alertes } = useAlertes();
-  const machineAlertes = alertes
-    .filter(a => a.machineCode === m.id)
-    .slice(0, 6);
+  const { alertes } = useAlertes(machine?.uuid);
 
   const sevMap: Record<string, { label: string; cls: string }> = {
     urgence: { label: 'CRIT', cls: 'bg-destructive/15 text-destructive' },
@@ -42,7 +37,7 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
   const [shapLoading, setShapLoading] = useState(false);
 
   useEffect(() => {
-    if (!machine) return;
+    if (!machine?.id) return;
     setShapLoading(true);
     setShapData(null);
     apiFetch<ShapData>(`/explain/${machine.id}`)
@@ -63,6 +58,11 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
       .sort((a, b) => b.value - a.value);
   }, [shapFeats, shapVals]);
 
+  const machineAlertes = useMemo(
+    () => alertes.filter(a => a.machineCode === machine?.id).slice(0, 6),
+    [alertes, machine?.id]
+  );
+
   // Color thresholds: top 30% red, 30-60% orange, bottom teal
   const getBarColor = (val: number) => {
     const ratio = maxShap > 0 ? val / maxShap : 0;
@@ -70,6 +70,11 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
     if (ratio > 0.25) return '#f59e0b';
     return '#14b8a6';
   };
+
+  if (!machine) return null;
+  const m = machine;
+  const cfg = STATUS_CONFIG[m.status];
+  const hiPct = typeof m.hi === "number" ? Math.round(m.hi * 100) : null;
 
   return (
     <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
@@ -91,10 +96,10 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
             <div className="section-title mb-4">{t("modal.machineInfo")}</div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               {[
-                [t("modal.model"), m.model],
-                [t("modal.floors"), m.floors],
+                [t("modal.model"), formatMachineModelValue(m.model, "-")],
+                [t("modal.floors"), formatMachineFloorCountValue(m.floors, "-")],
                 [t("modal.city"), m.city],
-                [t("modal.cyclesDay"), m.cycles],
+                [t("modal.cyclesDay"), m.cycles ?? "-"],
               ].map(([l, v]) => (
                 <div key={String(l)}>
                   <div className="industrial-label">{l}</div>
@@ -106,13 +111,23 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
           <div className="bg-surface-3 border border-border rounded-xl p-5">
             <div className="section-title mb-4">{t("modal.healthIndex")}</div>
             <div className="font-mono text-3xl font-bold" style={{ color: cfg.hex }}>
-              {hiPct}<span className="text-base opacity-50">%</span>
+              {hiPct != null ? (
+                <>
+                  {hiPct}<span className="text-base opacity-50">%</span>
+                </>
+              ) : (
+                "—"
+              )}
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-2">
-              <div className="hi-fill" style={{ width: `${hiPct}%` }} />
+              <div className="hi-fill" style={{ width: `${hiPct ?? 0}%` }} />
             </div>
             <div className="text-xs text-foreground mt-2.5">
-              RUL: {m.rul ? `${m.rul}j ± ${m.rulci}j` : t("modal.inMaintenance")}
+              RUL: {m.rulMode === 'no_prediction'
+                ? `L10 ${m.l10Years ?? '—'} ans — pas de précurseur`
+                : m.rul !== null && m.rul !== undefined
+                  ? `${m.rul}j${m.rulIntervalLow != null && m.rulIntervalHigh != null ? ` · ${m.rulIntervalLabel ?? 'IC 80 %'} ${m.rulIntervalLow}–${m.rulIntervalHigh}j` : m.rulci ? ` ± ${m.rulci}j` : ''}${m.stopRecommended ? ' · arrêt recommandé' : ''}`
+                  : t("modal.inMaintenance")}
             </div>
             <div className="text-xs text-muted-foreground mt-1">{t("modal.anomalies24h")}: {m.anom}</div>
           </div>
@@ -122,7 +137,13 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
         <div className="grid grid-cols-3 gap-4 mb-5">
           {[
             { value: m.vib, max: 15, color: '#14b8a6', label: t("modal.vibration"), unit: 'mm/s' },
-            { value: m.curr, max: 10, color: '#f59e0b', label: t("modal.current"), unit: 'A' },
+            {
+              value: m.curr,
+              max: 10,
+              color: '#f59e0b',
+              label: m.currSource === "estimated_from_power" ? "Courant estimé" : t("modal.current"),
+              unit: 'A',
+            },
             { value: m.temp, max: 100, color: '#e04060', label: t("modal.temperature"), unit: '°C' },
           ].map(g => (
             <div key={g.label} className="bg-surface-3 border border-border rounded-xl p-4 text-center">

@@ -1,16 +1,54 @@
-import { useState } from "react";
-import { Plus, ChevronRight, Globe, Palette, UserCheck, UserX, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, ChevronRight, Globe, Palette, Trash2, UserCheck, UserX, Users } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { repairText } from "@/lib/repairText";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 export function AdminPage() {
   const { t, lang, setLang, theme, setTheme } = useApp();
-  const { allUsers, currentUser, approveUser, rejectUser } = useAuth();
+  const { allUsers, currentUser, approveUser, rejectUser, deleteUser, refreshUsers } = useAuth();
   const navigate = useNavigate();
 
-  const l = (fr: string, en: string, ar: string) => lang === "fr" ? fr : lang === "en" ? en : ar;
+  const l = (fr: string, en: string, ar: string) =>
+    repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
+
+  // Combien d'admins approuvés restent ? Sert à griser le bouton "Supprimer"
+  // pour le DERNIER admin restant (impossible de tout supprimer côté UI, et
+  // côté backend l'endpoint répondrait 409 de toute façon — voir auth.py).
+  const approvedAdminCount = allUsers.filter(
+    u => u.role === "admin" && u.status === "approved",
+  ).length;
+
+  // Wrapper avec confirmation native — évite les suppressions accidentelles.
+  // (Pas de modal personnalisée pour rester simple ; la confirm() est suffisante
+  // pour une action peu fréquente et critique.)
+  const handleDelete = async (userId: string, userName: string, userRole: string, userStatus: string) => {
+    const isLastAdmin = userRole === "admin" && userStatus === "approved" && approvedAdminCount <= 1;
+    if (isLastAdmin) {
+      toast.error(l(
+        "Impossible de supprimer le dernier administrateur.",
+        "Cannot delete the last administrator.",
+        "لا يمكن حذف آخر مسؤول.",
+      ));
+      return;
+    }
+    const confirmed = window.confirm(
+      l(
+        `Supprimer définitivement ${userName} ? Cette action est irréversible.`,
+        `Permanently delete ${userName}? This action cannot be undone.`,
+        `حذف ${userName} نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.`,
+      ),
+    );
+    if (!confirmed) return;
+    try {
+      await deleteUser(userId);
+      toast.success(l("Compte supprimé", "Account deleted", "تم حذف الحساب"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : l("Erreur lors de la suppression", "Error during deletion", "خطأ أثناء الحذف"));
+    }
+  };
 
   const ADMIN_TABS = [
     { id: "comptes", label: l("Gestion des comptes", "Account Management", "إدارة الحسابات") },
@@ -18,6 +56,12 @@ export function AdminPage() {
   ];
 
   const [activeTab, setActiveTab] = useState("comptes");
+
+  useEffect(() => {
+    if (currentUser?.role === "admin" && currentUser.status === "approved") {
+      void refreshUsers();
+    }
+  }, [currentUser?.role, currentUser?.status, refreshUsers]);
 
   const SETTINGS = [
     { icon: <Globe className="w-5 h-5" />, title: t("settings.language"), sub: `${t("settings.french")} / ${t("settings.english")} / ${t("settings.arabic")}`, action: "lang" },
@@ -95,6 +139,16 @@ export function AdminPage() {
                             <UserX className="w-3.5 h-3.5" />
                             {l("Rejeter", "Reject", "رفض")}
                           </button>
+                          {/* Suppression définitive d'une demande en attente —
+                              parfois utile pour purger un compte de test. */}
+                          <button
+                            onClick={() => handleDelete(user.id, user.fullName, user.role, user.status)}
+                            title={l("Supprimer définitivement", "Delete permanently", "حذف نهائي")}
+                            className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-destructive/15 text-destructive border border-destructive/30 text-xs font-semibold hover:bg-destructive/25 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {l("Supprimer", "Delete", "حذف")}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -124,22 +178,52 @@ export function AdminPage() {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("table.role")}</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Machine</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{l("Approuvé le", "Approved on", "تاريخ الموافقة")}</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{l("Actions", "Actions", "إجراءات")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {allUsers.filter(u => u.status === "approved").map(user => (
-                    <tr key={user.id} className="border-b border-border last:border-0">
-                      <td className="px-5 py-3 text-foreground font-medium">{user.fullName}</td>
-                      <td className="px-5 py-3 text-muted-foreground">{user.email}</td>
-                      <td className="px-5 py-3">
-                        <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
-                          {user.role === "admin" ? "Admin" : l("Utilisateur", "User", "مستخدم")}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-muted-foreground">{user.machineId ? (user.machineCode || user.machineId) : l("Toutes", "All", "الكل")}</td>
-                      <td className="px-5 py-3 text-muted-foreground">{user.approvedAt ? new Date(user.approvedAt).toLocaleDateString("fr-FR") : "—"}</td>
-                    </tr>
-                  ))}
+                  {allUsers.filter(u => u.status === "approved").map(user => {
+                    const isSelf = currentUser?.id === user.id;
+                    // Désactivé si :
+                    //   (a) c'est le compte courant (anti-self-delete) ;
+                    //   (b) c'est le dernier admin approuvé (anti-last-admin) — la
+                    //       suppression serait également bloquée côté backend (409).
+                    const isLastAdmin = user.role === "admin" && approvedAdminCount <= 1;
+                    const disableDelete = isSelf || isLastAdmin;
+                    const disabledReason = isSelf
+                      ? l("Vous ne pouvez pas supprimer votre propre compte.", "You cannot delete your own account.", "لا يمكنك حذف حسابك الخاص.")
+                      : isLastAdmin
+                        ? l("Dernier administrateur — promouvez un autre admin avant.", "Last administrator — promote another admin first.", "آخر مسؤول — قم بترقية مسؤول آخر أولاً.")
+                        : l("Supprimer définitivement", "Delete permanently", "حذف نهائي");
+                    return (
+                      <tr key={user.id} className="border-b border-border last:border-0">
+                        <td className="px-5 py-3 text-foreground font-medium">{user.fullName}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{user.email}</td>
+                        <td className="px-5 py-3">
+                          <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
+                            {user.role === "admin" ? "Admin" : l("Utilisateur", "User", "مستخدم")}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-muted-foreground">{user.machineId ? (user.machineCode || user.machineId) : l("Toutes", "All", "الكل")}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{user.approvedAt ? new Date(user.approvedAt).toLocaleDateString("fr-FR") : "—"}</td>
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            disabled={disableDelete}
+                            onClick={() => handleDelete(user.id, user.fullName, user.role, user.status)}
+                            title={disabledReason}
+                            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold transition-colors ${
+                              disableDelete
+                                ? "bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60"
+                                : "bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20"
+                            }`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {l("Supprimer", "Delete", "حذف")}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

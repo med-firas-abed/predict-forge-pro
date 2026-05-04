@@ -1,272 +1,614 @@
-import { useState, useMemo } from "react";
-import { BarChart3, ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LabelList, CartesianGrid, Tooltip } from "recharts";
-import { useApp } from "@/contexts/AppContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { STATUS_CONFIG } from "@/data/machines";
-import { useMachines } from "@/hooks/useMachines";
-import { useAlertes } from "@/hooks/useAlertes";
-import { apiFetch } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-interface ShapData {
-  shap_contributions: Record<string, number>;
-  score_if: number;
-  features: Record<string, number>;
-  machine_code: string;
-  hi_smooth: number;
-  zone: string;
-  top_drivers: string[];
+import { useAuth } from "@/contexts/AuthContext";
+import { useAlertes } from "@/hooks/useAlertes";
+import { useAlertEmailHistory } from "@/hooks/useAlertEmailHistory";
+import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
+import { useMachines } from "@/hooks/useMachines";
+import {
+  formatHiPercent,
+  formatPredictiveRul,
+  formatStressValue,
+} from "@/lib/predictiveLive";
+import {
+  groupAlertes,
+  type AlertSeverity as AlertLevel,
+  type GroupedAlert,
+} from "@/lib/alertsSummary";
+
+type AlertSeverityFilter = "all" | AlertLevel;
+
+type MachineActionRow = {
+  machineId: string;
+  machineName: string;
+  latestTimestamp: string;
+  highestSeverity: AlertLevel;
+  activeSignals: GroupedAlert[];
+  openIds: string[];
+  openSignalCount: number;
+  historicalEchoCount: number;
+};
+
+const SEVERITY_ORDER: Record<AlertLevel, number> = {
+  urgence: 3,
+  surveillance: 2,
+  info: 1,
+};
+
+function formatAlertTimestamp(value: string) {
+  const timestamp = new Date(value);
+  return `${timestamp.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+  })}, ${timestamp.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
 
-const STATIC_FEATURE_IMPORTANCE = [
-  { name: "RMS_mean", importance: 0.342 },
-  { name: "current_mean", importance: 0.318 },
-  { name: "temp_deriv", importance: 0.295 },
-  { name: "power_cycle", importance: 0.245 },
-  { name: "ratio_duree", importance: 0.201 },
-  { name: "hi_std", importance: 0.185 },
-  { name: "corr_T_P", importance: 0.171 },
-  { name: "RMS_var", importance: 0.124 },
-  { name: "dRMS_dt", importance: 0.118 },
-  { name: "energy_cyc", importance: 0.025 },
-];
+function compareSeverity(left: AlertLevel, right: AlertLevel) {
+  return SEVERITY_ORDER[right] - SEVERITY_ORDER[left];
+}
 
-const STATIC_SHAP_B2 = [
-  { name: "temp_deriv", importance: 0.298 },
-  { name: "RMS_mean", importance: 0.275 },
-  { name: "current_mean", importance: 0.241 },
-  { name: "corr_T_P", importance: 0.218 },
-  { name: "hi_std", importance: 0.195 },
-  { name: "power_cycle", importance: 0.162 },
-  { name: "ratio_duree", importance: 0.148 },
-  { name: "RMS_var", importance: 0.112 },
-  { name: "dRMS_dt", importance: 0.085 },
-  { name: "energy_cyc", importance: 0.034 },
-];
+function sortSignals(left: GroupedAlert, right: GroupedAlert) {
+  const severityDelta = compareSeverity(left.severity, right.severity);
+  if (severityDelta !== 0) return severityDelta;
+  return right.latestTimestamp.localeCompare(left.latestTimestamp);
+}
 
-const STATIC_SHAP_C3 = [
-  { name: "RMS_mean", importance: 0.412 },
-  { name: "temp_deriv", importance: 0.388 },
-  { name: "current_mean", importance: 0.351 },
-  { name: "power_cycle", importance: 0.305 },
-  { name: "corr_T_P", importance: 0.268 },
-  { name: "hi_std", importance: 0.231 },
-  { name: "ratio_duree", importance: 0.198 },
-  { name: "RMS_var", importance: 0.175 },
-  { name: "dRMS_dt", importance: 0.152 },
-  { name: "energy_cyc", importance: 0.089 },
-];
+function getSeverityMeta(severity: AlertLevel) {
+  if (severity === "urgence") {
+    return {
+      label: "Controle prioritaire",
+      shortLabel: "Critique",
+      panelClass: "border-destructive/25 bg-destructive/5",
+      badgeClass: "bg-destructive/10 text-destructive",
+      lineClass: "border-destructive/30 bg-destructive/5",
+    };
+  }
+
+  if (severity === "surveillance") {
+    return {
+      label: "Sous surveillance",
+      shortLabel: "Surveillance",
+      panelClass: "border-warning/25 bg-warning/5",
+      badgeClass: "bg-warning/10 text-warning",
+      lineClass: "border-warning/30 bg-warning/5",
+    };
+  }
+
+  return {
+    label: "Information terrain",
+    shortLabel: "Info",
+    panelClass: "border-primary/25 bg-primary/5",
+    badgeClass: "bg-primary/10 text-primary",
+    lineClass: "border-primary/30 bg-primary/5",
+  };
+}
 
 export function AlertsPage() {
-  const { t, lang } = useApp();
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { machines } = useMachines(currentUser?.machineId);
-  const { alertes } = useAlertes(currentUser?.machineId);
+  const { alertes, acquitterAlertes } = useAlertes(currentUser?.machineId);
+  const { emailHistory } = useAlertEmailHistory(currentUser?.machineId);
+  const { insights, byMachineId } = useFleetPredictiveInsights(machines);
+  const [severityFilter, setSeverityFilter] = useState<AlertSeverityFilter>("all");
+  const [machineFilter, setMachineFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [expandedMachines, setExpandedMachines] = useState<Record<string, boolean>>({});
 
-  // SHAP state
-  const [shapData, setShapData] = useState<ShapData | null>(null);
-  const [shapLoading, setShapLoading] = useState(false);
-  const [shapMachine, setShapMachine] = useState("ASC-A1");
-  const [shapOpen, setShapOpen] = useState(false);
+  const filteredAlertes = useMemo(() => {
+    return alertes.filter((alert) => {
+      const machineId = alert.machineCode || alert.machineId;
 
-  const loadShap = () => {
-    if (shapMachine !== "ASC-A1") { setShapData(null); return; }
-    setShapLoading(true);
-    apiFetch<ShapData>(`/explain/${shapMachine}`)
-      .then(setShapData)
-      .catch(() => setShapData(null))
-      .finally(() => setShapLoading(false));
-  };
+      if (severityFilter !== "all" && alert.severite !== severityFilter) return false;
+      if (machineFilter !== "all" && machineId !== machineFilter) return false;
 
-  const featureData = useMemo(() => {
-    if (shapMachine === "ASC-A1" && shapData?.shap_contributions) {
-      return Object.entries(shapData.shap_contributions)
-        .map(([name, val]) => ({ name, importance: +Math.abs(val).toFixed(3) }))
-        .sort((a, b) => b.importance - a.importance)
-        .slice(0, 10);
-    }
-    if (shapMachine === "ASC-B2") return STATIC_SHAP_B2;
-    if (shapMachine === "ASC-C3") return STATIC_SHAP_C3;
-    return STATIC_FEATURE_IMPORTANCE;
-  }, [shapData, shapMachine]);
+      const createdAt = new Date(alert.createdAt);
+      if (startDate && createdAt < new Date(`${startDate}T00:00:00`)) return false;
+      if (endDate && createdAt > new Date(`${endDate}T23:59:59.999`)) return false;
+      return true;
+    });
+  }, [alertes, endDate, machineFilter, severityFilter, startDate]);
 
-  const maxImportance = featureData.length > 0 ? Math.max(...featureData.map(d => d.importance)) : 1;
+  const groupedAlerts = useMemo(() => groupAlertes(filteredAlertes), [filteredAlertes]);
 
-  // Map alertes to the legacy alertLog shape used by the UI
-  const alertLog = alertes.map(a => ({
-    id: a.id,
-    machineId: a.machineCode || a.machineId,
-    timestamp: a.createdAt,
-    message: a.description || a.titre,
-    type: a.severite === "urgence" ? "urgence" as const : a.severite === "surveillance" ? "surveillance" as const : "ok" as const,
-    acquitte: a.acquitte,
-  }));
+  const activeSignals = useMemo(
+    () => groupedAlerts.filter((entry) => entry.openCount > 0).sort(sortSignals),
+    [groupedAlerts],
+  );
 
-  // Categorize alerts
-  const urgences = alertLog.filter(l => l.type === "urgence" && !l.acquitte);
-  const surveillances = alertLog.filter(l => l.type === "surveillance" && !l.acquitte);
-  const resolved = alertLog.filter(l => l.acquitte);
+  const historySignals = useMemo(
+    () => groupedAlerts.filter((entry) => entry.openCount === 0).sort(sortSignals),
+    [groupedAlerts],
+  );
 
-  const sections = [
-    { title: t("alerts.emergenciesSection"), items: urgences, borderColor: 'border-l-destructive', badge: t("alerts.critical"), badgeCls: 'bg-destructive/10 text-destructive' },
-    { title: t("alerts.underMonitoring"), items: surveillances, borderColor: 'border-l-warning', badge: t("alerts.monitoring"), badgeCls: 'bg-warning/10 text-warning' },
-    { title: t("alerts.resolved"), items: resolved, borderColor: 'border-l-success', badge: 'OK', badgeCls: 'bg-success/10 text-success' },
-  ];
+  const rankedInsights = useMemo(
+    () => [...insights].sort((left, right) => right.urgencyScore - left.urgencyScore),
+    [insights],
+  );
+
+  const machineRows = useMemo(() => {
+    const machineNameById = new Map(machines.map((machine) => [machine.id, machine.name]));
+    const rows = new Map<string, MachineActionRow>();
+
+    activeSignals.forEach((signal) => {
+      const current = rows.get(signal.machineId) ?? {
+        machineId: signal.machineId,
+        machineName: machineNameById.get(signal.machineId) ?? signal.machineId,
+        latestTimestamp: signal.latestTimestamp,
+        highestSeverity: signal.severity,
+        activeSignals: [],
+        openIds: [],
+        openSignalCount: 0,
+        historicalEchoCount: 0,
+      };
+
+      current.activeSignals.push(signal);
+      current.openIds.push(...signal.openIds);
+      current.openSignalCount += 1;
+      current.historicalEchoCount += Math.max(0, signal.count - signal.openCount);
+
+      if (signal.latestTimestamp > current.latestTimestamp) {
+        current.latestTimestamp = signal.latestTimestamp;
+      }
+
+      if (SEVERITY_ORDER[signal.severity] > SEVERITY_ORDER[current.highestSeverity]) {
+        current.highestSeverity = signal.severity;
+      }
+
+      rows.set(signal.machineId, current);
+    });
+
+    return [...rows.values()]
+      .map((row) => ({
+        ...row,
+        activeSignals: [...row.activeSignals].sort(sortSignals),
+        openIds: Array.from(new Set(row.openIds)),
+      }))
+      .sort((left, right) => {
+        const rightInsight = byMachineId[right.machineId];
+        const leftInsight = byMachineId[left.machineId];
+        const rightScore = rightInsight?.urgencyScore ?? 0;
+        const leftScore = leftInsight?.urgencyScore ?? 0;
+        if (rightScore !== leftScore) return rightScore - leftScore;
+        return right.latestTimestamp.localeCompare(left.latestTimestamp);
+      });
+  }, [activeSignals, byMachineId, machines]);
+
+  const historyByMachine = useMemo(() => {
+    const machineNameById = new Map(machines.map((machine) => [machine.id, machine.name]));
+    const grouped = new Map<
+      string,
+      {
+        machineId: string;
+        machineName: string;
+        latestTimestamp: string;
+        entries: GroupedAlert[];
+        count: number;
+      }
+    >();
+
+    historySignals.forEach((signal) => {
+      const current = grouped.get(signal.machineId) ?? {
+        machineId: signal.machineId,
+        machineName: machineNameById.get(signal.machineId) ?? signal.machineId,
+        latestTimestamp: signal.latestTimestamp,
+        entries: [],
+        count: 0,
+      };
+
+      current.entries.push(signal);
+      current.count += signal.count;
+      if (signal.latestTimestamp > current.latestTimestamp) {
+        current.latestTimestamp = signal.latestTimestamp;
+      }
+
+      grouped.set(signal.machineId, current);
+    });
+
+    return [...grouped.values()].sort((left, right) => right.latestTimestamp.localeCompare(left.latestTimestamp));
+  }, [historySignals, machines]);
+
+  const activeMachineCount = machineRows.length;
+  const activeSignalCount = activeSignals.length;
+  const filteredEmailHistory = useMemo(() => {
+    return emailHistory.filter((entry) => {
+      if (machineFilter !== "all" && entry.machineId !== machineFilter) return false;
+      const createdAt = new Date(entry.createdAt);
+      if (startDate && createdAt < new Date(`${startDate}T00:00:00`)) return false;
+      if (endDate && createdAt > new Date(`${endDate}T23:59:59.999`)) return false;
+      return true;
+    });
+  }, [emailHistory, endDate, machineFilter, startDate]);
+  const visibleEmailHistory = filteredEmailHistory.slice(0, 10);
 
   return (
     <div className="space-y-6">
-      <div className="section-title">{t("alerts.center")}</div>
+      <div className="section-title">Centre d'alertes</div>
 
-      {/* Per-Machine Alert Status */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-premium">
-        <div className="section-title mb-4">{t("alerts.perMachineStatus")}</div>
-        <div className="space-y-2">
-          {machines.map(m => {
-            const mcfg = STATUS_CONFIG[m.status];
-            const alertDisp = (m.hi < 0.3 || (m.rul !== null && m.rul < 7))
-              ? { label: t("alerts.emailSent"), cls: "text-destructive" }
-              : (m.hi < 0.6 || (m.rul !== null && m.rul < 30))
-                ? { label: t("alerts.weeklyScheduled"), cls: "text-warning" }
-                : { label: t("alerts.noEmail"), cls: "text-success" };
-
-            return (
-              <div key={m.id} className="flex items-center gap-4 p-3.5 rounded-lg bg-surface-3 border-l-[3px]" style={{ borderLeftColor: mcfg.hex }}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-foreground">{m.id}</span>
-                    <span className={`status-pill ${mcfg.pillClass} text-[0.55rem]`}>{mcfg.label}</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">HI={m.hi.toFixed(2)} · RUL={m.rul ?? "—"}j</div>
-                </div>
-                <div className={`text-xs font-semibold ${alertDisp.cls}`}>
-                  {alertDisp.label}
-                </div>
-              </div>
-            );
-          })}
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="section-title">Machines a traiter maintenant</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Une ligne = une machine. Les signaux encore ouverts restent disponibles a la demande.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-foreground">
+              {activeMachineCount} cas actif{activeMachineCount > 1 ? "s" : ""}
+            </span>
+            <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
+              {activeSignalCount} signal{activeSignalCount > 1 ? "aux" : ""} ouvert{activeSignalCount > 1 ? "s" : ""}
+            </span>
+          </div>
         </div>
-      </div>
 
-      {/* Alert Sections */}
-      {sections.map(section => (
-        section.items.length > 0 && (
-          <div key={section.title}>
-            <h3 className="text-sm font-semibold text-foreground mb-3">{section.title}</h3>
-            <div className="space-y-2">
-              {section.items.map(entry => {
-                const ts = new Date(entry.timestamp);
-                return (
-                  <div key={entry.id} className={`bg-card border border-border rounded-lg p-4 border-l-[3px] ${section.borderColor}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-foreground">{entry.machineId}</span>
-                        <span className={`text-[0.6rem] font-semibold px-2 py-0.5 rounded-md ${section.badgeCls}`}>
-                          {section.badge}
+        {machineRows.length === 0 ? (
+          <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
+            Aucun cas actif ne ressort avec les filtres courants.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {machineRows.map((row) => {
+              const insight = byMachineId[row.machineId];
+              const severity = getSeverityMeta(row.highestSeverity);
+              const leadSignal = row.activeSignals[0];
+              const isExpanded = Boolean(expandedMachines[row.machineId]);
+
+              return (
+                <div
+                  key={row.machineId}
+                  className={`rounded-2xl border p-5 shadow-sm ${severity.panelClass}`}
+                >
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-bold text-foreground">{row.machineId}</span>
+                        <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${severity.badgeClass}`}>
+                          {severity.label}
+                        </span>
+                        <span className="rounded-full bg-card/80 px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
+                          {row.openSignalCount} signal{row.openSignalCount > 1 ? "aux" : ""} actif{row.openSignalCount > 1 ? "s" : ""}
+                        </span>
+                        <span className="text-[0.7rem] text-muted-foreground">
+                          {formatAlertTimestamp(row.latestTimestamp)}
                         </span>
                       </div>
-                      <span className="text-[0.65rem] text-muted-foreground tabular-nums">
-                        {ts.toLocaleDateString(lang === 'fr' ? "fr-FR" : lang === 'ar' ? "ar-TN" : "en-US", { day: "numeric", month: "short" })}, {ts.toLocaleTimeString(lang === 'fr' ? "fr-FR" : lang === 'ar' ? "ar-TN" : "en-US", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-secondary-foreground">{entry.message}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )
-      ))}
 
-      {/* 30-Day Stats */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-premium">
-        <div className="section-title mb-4">{t("alerts.stats")}</div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="text-center p-4 border-t-2 border-t-destructive bg-card border border-border rounded-lg">
-            <div className="text-3xl font-bold text-destructive">{urgences.length}</div>
-            <div className="industrial-label mt-1.5">{t("alerts.emergencies")}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">{row.machineName}</div>
+
+                      {insight ? (
+                        <div className="mt-3 flex flex-wrap gap-2 text-[0.72rem]">
+                          <span className="rounded-full bg-card/80 px-2.5 py-1 text-foreground">
+                            HI {formatHiPercent(insight.machine.hi)}
+                          </span>
+                          <span className="rounded-full bg-card/80 px-2.5 py-1 text-foreground">
+                            RUL {formatPredictiveRul(insight)}
+                          </span>
+                          <span className="rounded-full bg-card/80 px-2.5 py-1 text-foreground">
+                            Stress {formatStressValue(insight.stressValue)}
+                          </span>
+                          <span className="rounded-full bg-card/80 px-2.5 py-1 text-foreground">
+                            {insight.maintenanceWindow ?? "Fenetre a confirmer"}
+                          </span>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_0.9fr]">
+                        <div className="rounded-xl border border-border bg-card/80 p-4">
+                          <div className="industrial-label">Pourquoi maintenant</div>
+                          <div className="mt-2 text-sm font-semibold text-foreground">
+                            {leadSignal?.title ?? "Signal a confirmer"}
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
+                            {insight?.plainReason ?? leadSignal?.message ?? "Le systeme demande une verification terrain."}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-card/80 p-4">
+                          <div className="industrial-label">Action recommandee</div>
+                          <div className="mt-2 text-sm font-semibold text-foreground">
+                            {insight?.recommendedAction ?? "Verifier la machine avant reprise en charge normale."}
+                          </div>
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            {insight?.summary ?? "Le detail technique reste accessible dans le diagnostic de la machine."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex w-full flex-col gap-2 xl:w-[220px] xl:min-w-[220px]">
+                      <button
+                        onClick={() => navigate(`/diagnostics?machine=${encodeURIComponent(row.machineId)}`)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                      >
+                        Voir diagnostic
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedMachines((current) => ({
+                            ...current,
+                            [row.machineId]: !current[row.machineId],
+                          }))
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card/80 px-3.5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface-3"
+                      >
+                        {isExpanded ? "Masquer les signaux" : `Voir les signaux actifs (${row.openSignalCount})`}
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isExpanded ? (
+                    <div className="mt-4 rounded-xl border border-border bg-card/70 p-4">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="industrial-label">Signaux actifs</div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Les repetitions similaires restent regroupees pour garder une lecture claire.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => acquitterAlertes.mutate(row.openIds)}
+                          disabled={acquitterAlertes.isPending}
+                          className="rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[0.72rem] font-semibold text-foreground transition-colors hover:bg-border-subtle disabled:opacity-50"
+                        >
+                          Acquitter les signaux
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {row.activeSignals.map((signal) => {
+                          const signalSeverity = getSeverityMeta(signal.severity);
+                          const historicalEchoCount = Math.max(0, signal.count - signal.openCount);
+
+                          return (
+                            <div
+                              key={signal.key}
+                              className={`rounded-xl border p-3 ${signalSeverity.lineClass}`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`rounded-md px-2 py-0.5 text-[0.62rem] font-semibold ${signalSeverity.badgeClass}`}>
+                                    {signalSeverity.shortLabel}
+                                  </span>
+                                  <span className="text-sm font-semibold text-foreground">{signal.title}</span>
+                                </div>
+                                <span className="text-[0.7rem] text-muted-foreground">
+                                  {formatAlertTimestamp(signal.latestTimestamp)}
+                                </span>
+                              </div>
+
+                              {signal.message && signal.message !== signal.title ? (
+                                <p className="mt-2 text-xs leading-relaxed text-secondary-foreground">
+                                  {signal.message}
+                                </p>
+                              ) : null}
+
+                              {historicalEchoCount > 0 ? (
+                                <div className="mt-2 text-[0.7rem] text-muted-foreground">
+                                  {historicalEchoCount} occurrence{historicalEchoCount > 1 ? "s" : ""} similaire{historicalEchoCount > 1 ? "s" : ""}
+                                  {" "}deja acquittee{historicalEchoCount > 1 ? "s" : ""} restent repliee{historicalEchoCount > 1 ? "s" : ""} dans l'historique.
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-          <div className="text-center p-4 border-t-2 border-t-warning bg-card border border-border rounded-lg">
-            <div className="text-3xl font-bold text-warning">{surveillances.length}</div>
-            <div className="industrial-label mt-1.5">{t("alerts.monitoring")}</div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+        <div className="mb-4 section-title">Filtres</div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Severite</label>
+            <select
+              value={severityFilter}
+              onChange={(event) => setSeverityFilter(event.target.value as AlertSeverityFilter)}
+              className="w-full rounded-lg border border-border bg-surface-3 px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="all">Toutes</option>
+              <option value="urgence">Critique</option>
+              <option value="surveillance">Surveillance</option>
+              <option value="info">Info</option>
+            </select>
           </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Machine</label>
+            <select
+              value={machineFilter}
+              onChange={(event) => setMachineFilter(event.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-3 px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="all">Toutes</option>
+              {rankedInsights.map((insight) => (
+                <option key={insight.machine.id} value={insight.machine.id}>
+                  {insight.machine.id} - {insight.machine.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Date debut</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-3 px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Date fin</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-3 px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
+          L'historique reste secondaire ici : la vue principale se limite aux cas encore actifs, regroupes par machine.
         </div>
       </div>
 
-      {/* SHAP Feature Importance — collapsible */}
-      <div className="bg-card border border-border rounded-2xl">
-        <button
-          onClick={() => setShapOpen(!shapOpen)}
-          className="flex items-center gap-3 w-full px-5 py-4 text-left"
-        >
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold text-foreground">Features influentes — SHAP</h3>
-            <p className="text-xs text-muted-foreground">Importance des capteurs dans la détection d'anomalies (Isolation Forest)</p>
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="section-title">Historique des emails d'alerte</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Trace recente des notifications envoyees ou tentees par le pipeline et la simulation.
+            </p>
           </div>
-          {shapOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-        </button>
+          <div className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
+            {filteredEmailHistory.length} email{filteredEmailHistory.length > 1 ? "s" : ""}
+          </div>
+        </div>
 
-        {shapOpen && (
-          <div className="px-5 pb-5 border-t border-border pt-4">
-            <div className="flex items-center gap-3 mb-4">
-              <select
-                value={shapMachine}
-                onChange={e => { setShapMachine(e.target.value); setShapData(null); }}
-                className="bg-surface-3 border border-border rounded-lg px-3 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="ASC-A1">ASC-A1</option>
-                <option value="ASC-B2">ASC-B2</option>
-                <option value="ASC-C3">ASC-C3</option>
-              </select>
-              {shapMachine === "ASC-A1" && (
-                <button
-                  onClick={loadShap}
-                  disabled={shapLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
-                >
-                  {shapLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  {shapLoading ? "Calcul SHAP..." : "Charger live"}
-                </button>
-              )}
-              {shapMachine !== "ASC-A1" && (
-                <span className="text-[0.65rem] text-muted-foreground">Données statiques (démarrez le simulateur pour live)</span>
-              )}
-            </div>
-
-            {featureData.length > 0 && (
-              <>
-                <ResponsiveContainer width="100%" height={340}>
-                  <BarChart data={featureData} layout="vertical" margin={{ top: 0, right: 50, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" horizontal={false} />
-                    <XAxis type="number" domain={[0, Math.ceil(maxImportance * 100) / 100]}
-                      tick={{ fill: 'hsl(215,12%,55%)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="name" width={100}
-                      tick={{ fill: 'hsl(215,12%,55%)', fontSize: 10 }}
-                      axisLine={false} tickLine={false} />
-                    <Tooltip
-                      contentStyle={{ background: 'hsl(220,18%,10%)', border: '1px solid hsl(220,14%,20%)', borderRadius: '8px', fontSize: '11px', color: 'hsl(215,12%,55%)' }}
-                      labelStyle={{ color: 'hsl(224,76%,53%)' }}
-                      formatter={(value: number) => [`${value.toFixed(3)}`, 'Impact']}
-                    />
-                    <Bar dataKey="importance" radius={[0, 4, 4, 0]} barSize={22}>
-                      {featureData.map((entry, i) => {
-                        const ratio = entry.importance / maxImportance;
-                        const fill = ratio > 0.55 ? 'hsl(var(--destructive))' : ratio > 0.25 ? 'hsl(var(--warning))' : 'hsl(var(--primary))';
-                        return <Cell key={i} fill={fill} fillOpacity={0.85} />;
-                      })}
-                      <LabelList dataKey="importance" position="right"
-                        style={{ fill: 'hsl(215,12%,55%)', fontSize: 10 }} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-
-                <div className="flex items-center gap-4 mt-3 text-[0.6rem] text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-destructive inline-block" /> Élevé</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-warning inline-block" /> Modéré</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary inline-block" /> Faible</span>
+        {visibleEmailHistory.length > 0 ? (
+          <div className="space-y-3">
+            {visibleEmailHistory.map((entry) => {
+              const successClass = entry.success
+                ? "border-success/25 bg-success/5 text-success"
+                : "border-destructive/25 bg-destructive/5 text-destructive";
+              const sourceLabel = entry.source === "simulator" ? "Simulation" : "Pipeline";
+              return (
+                <div key={entry.id} className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-foreground">
+                          {entry.machineCode || entry.machineId}
+                        </span>
+                        <span className={`rounded-full border px-2.5 py-1 text-[0.64rem] font-semibold ${successClass}`}>
+                          {entry.success ? "Envoye" : "Echec"}
+                        </span>
+                        <span className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.64rem] font-semibold text-muted-foreground">
+                          {sourceLabel}
+                        </span>
+                        <span className="text-[0.7rem] text-muted-foreground">
+                          {formatAlertTimestamp(entry.createdAt)}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {entry.machineName || entry.machineCode || entry.machineId}
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr]">
+                        <div className="rounded-lg border border-border bg-surface-3 px-3 py-2.5">
+                          <div className="industrial-label">Destinataire</div>
+                          <div className="mt-1 text-sm font-medium text-foreground">{entry.recipientEmail}</div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-surface-3 px-3 py-2.5">
+                          <div className="industrial-label">Objet</div>
+                          <div className="mt-1 text-sm font-medium text-foreground">
+                            {entry.subject || "Notification d'alerte PrediTeq"}
+                          </div>
+                        </div>
+                      </div>
+                      {entry.note ? (
+                        <p className="mt-3 text-xs text-muted-foreground">{entry.note}</p>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-              </>
-            )}
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
+            Aucun email d'alerte recent ne ressort avec les filtres courants.
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="section-title">Historique replie</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Les anciens signaux restent disponibles en bas de page sans reprendre la main sur l'operationnel.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowHistory((value) => !value)}
+            className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-foreground transition-colors hover:bg-border-subtle"
+          >
+            {showHistory ? "Masquer" : `Afficher (${historySignals.length})`}
+          </button>
+        </div>
+
+        {showHistory ? (
+          historyByMachine.length > 0 ? (
+            <div className="space-y-3">
+              {historyByMachine.map((machineHistory) => (
+                <div key={machineHistory.machineId} className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-foreground">{machineHistory.machineId}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{machineHistory.machineName}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
+                        {machineHistory.entries.length} signal{machineHistory.entries.length > 1 ? "aux" : ""} cloture{machineHistory.entries.length > 1 ? "s" : ""}
+                      </div>
+                      <div className="mt-1 text-[0.68rem] text-muted-foreground">
+                        {formatAlertTimestamp(machineHistory.latestTimestamp)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {machineHistory.entries.slice(0, 4).map((entry) => {
+                      const severity = getSeverityMeta(entry.severity);
+                      return (
+                        <div key={entry.key} className="rounded-lg border border-border bg-surface-3 px-3 py-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`rounded-md px-2 py-0.5 text-[0.6rem] font-semibold ${severity.badgeClass}`}>
+                              {severity.shortLabel}
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">{entry.title}</span>
+                            <span className="text-[0.68rem] text-muted-foreground">
+                              {entry.count} occurrence{entry.count > 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          {entry.message && entry.message !== entry.title ? (
+                            <p className="mt-1 text-xs text-secondary-foreground">{entry.message}</p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
+              Aucun historique acquitte ne ressort avec les filtres courants.
+            </div>
+          )
+        ) : (
+          <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
+            L'historique detaille reste replie pour garder cette page centree sur les machines a traiter maintenant.
           </div>
         )}
       </div>

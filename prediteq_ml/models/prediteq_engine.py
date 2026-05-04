@@ -64,7 +64,7 @@ class PrediteqEngine:
         self._last_norm_feats = None   # latest normalized sensor vector (12 floats)
 
     # ── Appelé chaque seconde sur chaque message MQTT ───────────────────────────
-    def update(self, raw_features: dict) -> dict:
+    def update(self, raw_features: dict, allow_extreme: bool = False) -> dict:
         required = list(self.scaler.keys())
 
         # 1. Valider la complétude
@@ -80,7 +80,7 @@ class PrediteqEngine:
 
         # 2. Rejeter les valeurs aberrantes (> 5 sigma de la moyenne saine)
         #    Ignorer pendant le préchauffage (120 premières sec) — les caract. dérivées nécessitent le remplissage du buffer
-        if self._second_counter >= 120:
+        if self._second_counter >= 120 and not allow_extreme:
             for feat in required:
                 val  = raw_features[feat]
                 mean = self.scaler[feat]['mean']
@@ -150,6 +150,102 @@ class PrediteqEngine:
             'score_if':       round(float(score_if), 4),
             'buffer_if_len':  len(self.buffer_if_scores),
             'buffer_hi_len':  len(self.buffer_hi_smooth),
+            'uptime_seconds': self._second_counter,
+        }
+
+    def seed_from_feature_history(self, feature_history: list[dict]) -> dict:
+        """Bootstrap the engine from a finite recent history.
+
+        The runtime engine only remembers a bounded window:
+          - last 120 hybrid anomaly scores for HI smoothing
+          - last 60 minute-level HI points for the RF
+
+        For simulator bootstrap we therefore do not need to replay an entire
+        lifecycle from tick 0. Seeding from the recent pre-start history keeps
+        the same ML computation path while making demo startup fast enough for
+        live use.
+        """
+        if not feature_history:
+            return {
+                'hi_smooth': None,
+                'zone': 'UNKNOWN',
+                'error': 'empty_feature_history',
+            }
+
+        required = list(self.scaler.keys())
+        matrix = np.asarray(
+            [[sample[feat] for feat in required] for sample in feature_history],
+            dtype=float,
+        )
+        if matrix.ndim != 2 or matrix.shape[0] == 0:
+            return {
+                'hi_smooth': None,
+                'zone': 'UNKNOWN',
+                'error': 'invalid_feature_history',
+            }
+
+        means = np.asarray([self.scaler[feat]['mean'] for feat in required], dtype=float)
+        stds = np.asarray(
+            [max(self.scaler[feat]['std'], 1e-12) for feat in required],
+            dtype=float,
+        )
+        X = (matrix - means) / stds
+        if not np.isfinite(X).all():
+            return {
+                'hi_smooth': None,
+                'zone': 'UNKNOWN',
+                'error': 'nan_in_features',
+            }
+
+        score_if = self.IF.score_samples(X)
+        score_anomaly = -score_if
+
+        if self._use_hybrid:
+            rms_values = matrix[:, required.index('rms_mms')]
+            if_range = self.if_norm_max - self.if_norm_min + 1e-8
+            if_norm = np.clip((score_anomaly - self.if_norm_min) / if_range, 0.0, 1.0)
+
+            rms_z = (rms_values - self.rms_healthy_mean) / self.rms_healthy_std
+            rms_range = self.rms_norm_max - self.rms_norm_min + 1e-8
+            rms_norm = np.clip((rms_z - self.rms_norm_min) / rms_range, 0.0, 1.0)
+
+            hybrid_scores = self.hybrid_alpha * if_norm + (1 - self.hybrid_alpha) * rms_norm
+        else:
+            hybrid_scores = score_anomaly
+
+        cumsum = np.cumsum(hybrid_scores, dtype=float)
+        hi_series = np.empty_like(hybrid_scores, dtype=float)
+        denom = self.p95 - self.p5 if (self.p95 - self.p5) > 1e-8 else 1.0
+
+        for idx in range(len(hybrid_scores)):
+            start = max(0, idx - HI_SMOOTH_WINDOW + 1)
+            total = cumsum[idx] - (cumsum[start - 1] if start > 0 else 0.0)
+            window = idx - start + 1
+            smooth = total / max(window, 1)
+            hi_series[idx] = np.clip(1.0 - (smooth - self.p5) / denom, 0.0, 1.0)
+
+        minute_hi = [float(hi_series[idx]) for idx in range(59, len(hi_series), 60)]
+
+        self.buffer_if_scores = deque(
+            [float(v) for v in hybrid_scores[-HI_SMOOTH_WINDOW:]],
+            maxlen=HI_SMOOTH_WINDOW,
+        )
+        self.buffer_hi_smooth = deque(
+            minute_hi[-HI_LOOKBACK_MIN:],
+            maxlen=HI_LOOKBACK_MIN,
+        )
+        self._second_counter = len(feature_history)
+        self._last_norm_feats = X[-1].tolist()
+
+        hi_smooth = float(hi_series[-1])
+        zone = self._get_zone(hi_smooth)
+
+        return {
+            'hi_smooth': round(hi_smooth, 4),
+            'zone': zone,
+            'score_if': round(float(score_if[-1]), 4),
+            'buffer_if_len': len(self.buffer_if_scores),
+            'buffer_hi_len': len(self.buffer_hi_smooth),
             'uptime_seconds': self._second_counter,
         }
 

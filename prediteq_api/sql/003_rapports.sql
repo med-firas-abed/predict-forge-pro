@@ -1,12 +1,12 @@
 -- ═══════════════════════════════════════════════════════════════════
--- Table: rapports — stores auto-generated weekly/monthly reports
+-- Table: rapports — stores auto-generated 7/15/30-day reports
 -- Run this in Supabase SQL Editor
 -- ═══════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS rapports (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   machine_code TEXT,                         -- NULL = all machines
-  period       TEXT NOT NULL DEFAULT 'weekly', -- 'weekly' | 'monthly'
+  period       TEXT NOT NULL DEFAULT '7d', -- '7d' | '15d' | '30d'
   lang         TEXT NOT NULL DEFAULT 'fr',     -- 'fr' | 'en' | 'ar'
   titre        TEXT NOT NULL,
   contenu      TEXT NOT NULL,                  -- Markdown content

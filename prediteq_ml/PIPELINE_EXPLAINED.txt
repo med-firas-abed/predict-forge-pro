@@ -24,7 +24,10 @@ system that says "your engine will overheat in 12 days" and grades its current
 health from 0% to 100%, every second, based on vibration, power consumption,
 temperature, and humidity readings.
 
-The pipeline has 7 steps:
+Validated pipeline order for the current project: Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> Step 6 -> Step 6B -> Step 6C -> Step 7.
+For soutenance figures and artifact counts, `INDEX_RESULTATS.md` is the source of truth.
+
+The pipeline has 7 scripted sections in this narrative:
   Step 1: Simulate realistic sensor data (because we don't have years of real failure data)
   Step 2: Transform raw sensor readings into meaningful features
   Step 3: Detect anomalies using Isolation Forest + a hybrid ensemble
@@ -173,12 +176,11 @@ ISOLATION FOREST:
   IF_RANDOM_STATE   = 42      Fixed seed for reproducibility.
 
 HYBRID ENSEMBLE:
-  HYBRID_ALPHA = 0.6          The hybrid score = 0.6 × IF_score + 0.4 × RMS_z.
-                               IF gets 60% weight because it considers ALL 12
-                               features simultaneously. RMS gets 40% because it's
-                               the most direct physical indicator of bearing health.
-                               Why not 50/50? IF catches subtle multi-sensor patterns
-                               that RMS alone misses, so it deserves more weight.
+  HYBRID_ALPHA = 0.2          The hybrid score = 0.2 × IF_score + 0.8 × RMS_z.
+                               RMS now carries most of the weight because the
+                               simulated degradation remains driven primarily by
+                               vibratory amplitude, while IF keeps a supporting
+                               role for multi-sensor drift.
 
 HEALTH INDEX THRESHOLDS:
   HI_EXCELLENT     = 0.8      ≥ 80% → green zone, no action needed.
@@ -215,7 +217,7 @@ RUL:
                                real-world machine life.
 
 DATASET:
-  N_TRAJECTORIES    = 100     We generate 100 machine lifetimes (25 per profile).
+  N_TRAJECTORIES    = 200     We generate 200 machine lifetimes (50 per profile).
   N_PROFILES        = 4       Four degradation patterns (explained in Step 1).
   TRAJECTORY_LEN_MIN = 800    Each trajectory is ~800 minutes (~13.3 hours).
   TRAIN_RATIO       = 0.80    80% train / 20% test split.
@@ -475,7 +477,7 @@ Technical:
   This ensures load diversity doesn’t prevent light-load trajectories from
   reaching failure within the trajectory window.
 
-  OUTPUT: data/raw/trajectories.csv — 100 trajectories × ~800 min × 1 Hz.
+  OUTPUT: data/raw/trajectories.csv — 200 trajectories × ~800 min × 1 Hz.
   Columns: trajectory_id, profile, t_seconds, rms_mms, power_kw, temp_c,
            humidity_rh, simulated_hi, phase.
 
@@ -564,7 +566,7 @@ Technical — the 12 features:
   deviations above healthy". This makes the Isolation Forest's job easier and
   makes features comparable across different scales (mm/s vs kW vs °C).
 
-  OUTPUT: data/processed/features.csv (100 trajectories × 12 features + 12 normalized)
+  OUTPUT: data/processed/features.csv (200 trajectories × 12 features + 12 normalized)
           models/scaler_params.json (μ and σ for each of 12 features)
 
 
@@ -721,12 +723,29 @@ Technical:
 ════════════════════════════════════════════════════════════════════════════════
 
 Non-technical:
-  Now we can answer the big question: "How many days until this machine fails?"
-  We train a Random Forest model that looks at the current sensor readings AND
-  the Health Index trend over the last hour, and predicts how many minutes of
-  operating time remain before HI drops below 30% (Critical zone).
+  This is the step where we move from "What is the health NOW?" to
+  "When should maintenance be planned?" To make this understandable and
+  honest for the jury, we must separate 4 ideas:
 
-  The answer comes with a confidence interval: "142 days ± [120 — 165 days]"
+  1. HI (Health Index): current health, between 0 and 1.
+     - HI answers: "How healthy is the machine now?"
+  2. FPT (First Predicting Time): the moment when a numerical prognosis
+     becomes legitimate.
+     - In PrediTeq, FPT starts when HI drops below 0.80.
+  3. RUL (Remaining Useful Life): predicted remaining life, once a precursor
+     is present and enough history is available.
+     - RUL answers: "If degradation continues like this, how much time is left?"
+  4. L10: statistical reference life of the critical bearing.
+     - L10 answers: "How long does this component typically last?"
+
+  Therefore, the UI does NOT always show a numerical RUL:
+  - HI is shown first, because it is a current-state indicator.
+  - If HI >= 0.80, the machine is still in the very healthy zone:
+    we do NOT show a numerical RUL. We show L10 instead.
+  - If HI < 0.80 but we still lack 60 minutes of HI history, we show
+    "warming_up" / calibration rather than a fake precise number.
+  - Only when HI < 0.80 AND 60 HI points are available do we show
+    a numerical RUL with an uncertainty interval.
 
 Technical:
 
@@ -739,7 +758,7 @@ Technical:
   - It's interpretable with SHAP (Step 6).
   - We chose 300 trees (n_estimators=300), max_depth=12, and min_samples_leaf=10
     as a balance: enough complexity to capture real patterns, but regularized
-    to prevent overfitting on 100 trajectories. Compared to GradientBoosting
+    to prevent overfitting on 200 trajectories. Compared to GradientBoosting
     (R²=0.984) — RF won (R²=0.985).
 
   FEATURE VECTOR (17 features per prediction):
@@ -771,43 +790,85 @@ Technical:
 
   TRAINING LABEL (what we're predicting):
     RUL_minutes = t_fail - t_now
-  where t_fail is the first time simulated_hi (ground truth) drops below 0.3
-  (Critical threshold) AFTER the machine was healthy. IMPORTANT: we use
-  simulated_hi (not hi_smooth) for the label because the ground truth gives
-  clean, noise-free failure points. The model then learns to predict from
-  noisy features (hi_smooth, sensor data) to clean targets. This separation
-  of label quality from feature noise was the KEY design decision that boosted
-  R² from 0.65 to 0.985.
+  where t_fail is the first time the OBSERVED smoothed HI (`hi_smooth`)
+  stays below 0.30 for 3 consecutive points.
 
-  The 60-minute lookback (RUL_LOOKBACK_MIN = 60) means the model only starts
-  making predictions after it has accumulated 60 minutes of HI history.
+  Important correction versus older project notes:
+  - the current project does NOT train the RUL label from hidden
+    `simulated_hi` anymore,
+  - it trains from `hi_smooth`, the same observable signal available in
+    production,
+  - this avoids label leakage and makes the training target defensible for
+    a real deployment.
+
+  In code terms:
+  - threshold = HI_CRITICAL = 0.30
+  - persistence = RUL_CROSSING_PERSISTENCE = 3
+  - t_fail = first confirmed crossing of hi_smooth below 0.30
+
+  WHY 60 MINUTES OF HISTORY?
+  - The engine stores 1 HI value per minute in the RUL buffer.
+  - RUL_LOOKBACK_MIN = 60 therefore means 60 points = 60 minutes.
+  - This is why the API can show HI very early, but RUL only after a
+    one-hour warm-up.
 
   CONFIDENCE INTERVAL:
-  Instead of just taking the mean of 200 trees, we compute:
-    - RUL_predicted = mean of all 200 tree predictions
+  Instead of just taking the mean of 300 trees, we compute:
+    - RUL_predicted = mean of all 300 tree predictions
     - CI_low        = 10th percentile of tree predictions
     - CI_high       = 90th percentile of tree predictions
   This gives an 80% confidence interval — "we're 80% sure the real RUL falls
   between CI_low and CI_high." Wide CI = high uncertainty (e.g. noisy profile D).
   Narrow CI = high confidence (e.g. linear profile A).
 
-  CONVERSION TO DAYS:
-  The model predicts RUL in minutes of operating time. We convert to calendar
-  days using: RUL_days = RUL_minutes / RUL_MIN_TO_DAY = RUL_minutes / 9.
-  (Each trajectory of 800 min represents 90 calendar days.)
+  FPT GATE VS FAILURE THRESHOLD — DO NOT CONFUSE THEM:
+  - HI = 0.80 is the FPT gate:
+      above this threshold, no numerical RUL is shown to the operator.
+  - HI = 0.30 is the critical threshold used to define the end-of-life target.
+  - The 3-point persistence is a noise-robust confirmation rule.
+
+  CONVERSION FROM MINUTES TO DAYS:
+  The Random Forest predicts RUL in simulation-minutes, not in calendar days.
+  The runtime presentation layer then translates this number for the operator.
+
+  There are two levels of conversion:
+
+  1. Historical default calibration:
+       800 sim-minutes ≈ 90 calendar days
+       therefore DEFAULT_FACTOR = 800 / 90 ≈ 9
+
+     If the machine usage is still unknown, the fallback is:
+       RUL_days = RUL_minutes / 9
+
+  2. Observed-rate correction (preferred in production):
+       factor = 9 × (cycles_per_day_observed / 654)
+       RUL_days = RUL_minutes / factor
+
+     Meaning:
+     - if the machine runs MORE cycles per day than the calibration anchor,
+       the same raw RUL is consumed faster, so the displayed days go down;
+     - if it runs LESS, the displayed days go up.
+
+  Example:
+    If the RF predicts 540 sim-minutes:
+    - default mode: 540 / 9 = 60 days
+    - observed rate 1100 cycles/day:
+        factor = 9 × (1100 / 654) = 15.14
+        RUL_days = 540 / 15.14 = 35.7 days
+
+  The system also keeps a more physical unit:
+    cycles_remaining = RUL_minutes × 73.6
+
+  This is why the jury should read the output like this:
+  - days = maintenance-planning language,
+  - cycles = PHM/engineering language,
+  - confidence interval = uncertainty disclosure,
+  - L10 = statistical bearing reference shown even when RUL is hidden.
 
   RESULTS (on test set):
-  - R² = 0.983  (target was > 0.85 — far exceeded)
-  - RMSE = 25.4 min operating time = 2.82 calendar days
-  - MAE  = 12.8 min operating time = 1.43 calendar days
-  - Per-profile (all 4 profiles covered):
-    A_linear:       RMSE=1.85 days, R²=0.993
-    B_exponential:  RMSE=1.22 days, R²=0.997
-    C_stepwise:     RMSE=1.96 days, R²=0.992
-    D_noisy_linear: RMSE=4.97 days, R²=0.906
-  - GBR comparison: R²=0.984 vs RF=0.983 — RF chosen for CI + SHAP
-  - Best on B_exponential, worst on D_noisy_linear (expected:
-    noisy data makes prediction harder)
+  The exact audited metrics for the CURRENT pipeline revision are maintained in
+  INDEX_RESULTATS.md (holdout + GroupKFold + CMAPSS validation). This file is
+  the teaching narrative; INDEX_RESULTATS.md is the source of truth for numbers.
 
   OUTPUT: data/processed/rul_predictions.csv (true vs predicted RUL + CI)
           models/random_forest_rul.pkl (trained RF model, 300 trees)
@@ -1037,7 +1098,7 @@ Technical:
 ════════════════════════════════════════════════════════════════════════════════
 
 What the ML pipeline produces:
-The 7 steps train 2 models (Isolation Forest + Random Forest) and export a PrediteqEngine class. In production, the FastAPI backend instantiates one engine per machine. Each engine receives real-time sensor data via MQTT (1 Hz) and outputs: HI (0-100%), zone (Excellent/Good/Degraded/Critical), RUL (days), and confidence intervals. These values get written to the Supabase machines table, and the frontend reads them.
+The validated pipeline sequence trains 2 models (Isolation Forest + Random Forest) and exports a PrediteqEngine class. In production, the FastAPI backend instantiates one engine per machine. Each engine receives real-time sensor data via MQTT (1 Hz) and outputs: HI (0-100%), zone (Excellent/Good/Degraded/Critical), RUL (days), and confidence intervals. These values get written to the Supabase machines table, and the frontend reads them.
 
 Current state of the 3 machines:
 All 3 machines (ASC-A1, ASC-B2, ASC-C3) exist in the Supabase database and the frontend reads from it via useMachines.ts. The static fallback in machines.ts has hardcoded demo values:
@@ -1045,7 +1106,7 @@ All 3 machines (ASC-A1, ASC-B2, ASC-C3) exist in the Supabase database and the f
 ASC-A1: HI=0.87, RUL=142j, status=ok (healthy machine)
 ASC-B2: HI=0.62, RUL=54j, status=degraded (mid-life)
 ASC-C3: HI=0.31, RUL=12j, status=critical (near failure)
-The simulation covers ALL machines equally. The 100 trajectories in Step 1 don't correspond to one specific machine — they train a generic model that works on any SITI FC100L1-4 elevator. The same trained engine is instantiated 3 times (once per machine) by FastAPI. Each receives its own sensor stream and maintains its own buffers.
+The simulation covers ALL machines equally. The 200 trajectories in Step 1 don't correspond to one specific machine — they train a generic model that works on any SITI FC100L1-4 elevator. The same trained engine is instantiated 3 times (once per machine) by FastAPI. Each receives its own sensor stream and maintains its own buffers.
 
 For demo purposes: Yes, without a live MQTT sensor feed, the 3 machines show their Supabase-stored values (which the backend simulator updates). The HI chart (genHI() function) generates a synthetic 90-day trend from the current HI value. So all 3 machines are "live" in the demo — they just reflect the last values the backend wrote, not placeholder text.
 

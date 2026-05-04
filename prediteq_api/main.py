@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     if not settings.RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not set — email alerts will be skipped")
     if not settings.ADMIN_EMAIL:
-        logger.warning("ADMIN_EMAIL not set — alert emails have no recipient")
+        logger.warning("ADMIN_EMAIL not set — fallback alert recipient is empty; configure recipients in /seuils")
 
     # 1. Supabase client
     from core.supabase_client import init_supabase
@@ -53,8 +53,25 @@ async def lifespan(app: FastAPI):
                            hybrid_params, engine_cls)
 
     # 4. Cache machine UUIDs from Supabase (non-fatal: retry at runtime)
+    # RUL v2 (F3): also select power_avg_30j, cycles_avg_7j, metrics_updated
+    # so the calibration layer can pick them up at startup. These columns are
+    # added by migration 006_rul_v2_calibration.sql; if missing, the select
+    # itself will fail and we fall back to the legacy column set.
     try:
-        machines_res = sb.table('machines').select('id, code, nom, region').execute()
+        try:
+            machines_res = sb.table('machines').select(
+                'id, code, nom, region, '
+                'power_avg_30j, cycles_avg_7j, metrics_updated'
+            ).execute()
+        except Exception as legacy_e:
+            # Migration 006 not applied yet — fall back to legacy columns
+            logger.warning(
+                "RUL v2 columns not present (migration 006 not applied?): %s "
+                "— falling back to legacy machine schema", legacy_e
+            )
+            machines_res = sb.table('machines').select(
+                'id, code, nom, region'
+            ).execute()
         manager.register_machines(machines_res.data)
     except Exception as e:
         logger.error("Failed to register machines at startup: %s — will retry on first request", e)
@@ -110,9 +127,31 @@ app = FastAPI(
 
 from core.config import settings as _settings
 
+
+def _expand_loopback_origins(origins: list[str]) -> list[str]:
+    """Accept both localhost and 127.0.0.1 for local dev CORS.
+
+    Frontend dev servers are often opened on either hostname. Treat them as
+    equivalent so local browser requests do not fail before reaching FastAPI.
+    """
+    expanded: list[str] = []
+    for origin in origins:
+        if not origin:
+            continue
+        expanded.append(origin)
+        if origin.startswith("http://localhost:"):
+            expanded.append(origin.replace("http://localhost:", "http://127.0.0.1:", 1))
+        elif origin.startswith("http://127.0.0.1:"):
+            expanded.append(origin.replace("http://127.0.0.1:", "http://localhost:", 1))
+
+    # preserve order while removing duplicates
+    return list(dict.fromkeys(expanded))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _settings.CORS_ORIGINS.split(",") if o.strip()],
+    allow_origins=_expand_loopback_origins(
+        [o.strip() for o in _settings.CORS_ORIGINS.split(",") if o.strip()]
+    ),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
@@ -211,6 +250,7 @@ from routers.simulator import router as simulator_router
 from routers.chat import router as chat_router
 from routers.planner import router as planner_router
 from routers.diagnostics_rul import router as diagnostics_rul_router
+from routers.runtime_data import router as runtime_data_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -223,3 +263,4 @@ app.include_router(simulator_router)
 app.include_router(chat_router)
 app.include_router(planner_router)
 app.include_router(diagnostics_rul_router)
+app.include_router(runtime_data_router)

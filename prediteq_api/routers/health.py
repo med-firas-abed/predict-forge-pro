@@ -1,4 +1,6 @@
 import logging
+import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from routers.mqtt import is_connected as mqtt_is_connected
@@ -10,6 +12,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+def _read_metrics_file(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Could not read metrics file %s: %s", path, exc)
+        return {}
+
+
 @router.get("/health")
 def health_check():
     """GET /health — liveness probe (public, minimal info)."""
@@ -18,6 +30,40 @@ def health_check():
         return {"status": "ok", "version": "1.0.0"}
     except RuntimeError:
         return {"status": "starting"}
+
+
+@router.get("/health/public-metrics")
+def public_metrics():
+    repo_root = Path(__file__).resolve().parents[2]
+    outputs_dir = repo_root / "prediteq_ml" / "outputs"
+    metrics = _read_metrics_file(outputs_dir / "metrics.json")
+    cmapss = _read_metrics_file(outputs_dir / "cmapss_metrics.json")
+
+    anomaly = metrics.get("hybrid_ensemble") or metrics.get("anomaly_detection", {}).get("hybrid_ensemble", {})
+    rul = metrics.get("rul_regression", {}).get("holdout", {})
+
+    return {
+        "generated_at_utc": metrics.get("generated_at_utc"),
+        "pipeline_version": metrics.get("pipeline_version"),
+        "verified_pipeline": {
+            "trajectories": 200,
+            "holdout_r2": rul.get("r2"),
+            "holdout_rmse_days": rul.get("rmse_days"),
+            "holdout_mae_days": rul.get("mae_days"),
+            "hybrid_precision": anomaly.get("precision"),
+            "hybrid_recall": anomaly.get("recall"),
+            "hybrid_f1": anomaly.get("f1"),
+            "cmapss_r2": cmapss.get("r2"),
+            "cmapss_rmse_cycles": cmapss.get("rmse_cycles"),
+        },
+        "marketing_cards": {
+            "r2_pct": round(float(rul.get("r2", 0)) * 100),
+            "rmse_days": round(float(rul.get("rmse_days", 0)), 1),
+            "hybrid_f1_pct": round(float(anomaly.get("f1", 0)) * 100),
+            "cmapss_r2_pct": round(float(cmapss.get("r2", 0)) * 100),
+            "trajectories": 200,
+        },
+    }
 
 
 @router.get("/health/detail")

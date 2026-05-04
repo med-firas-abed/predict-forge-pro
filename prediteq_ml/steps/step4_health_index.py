@@ -11,6 +11,10 @@ import json
 import os
 import sys
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import *
 
@@ -97,11 +101,11 @@ if __name__ == '__main__':
 
     # ── Sauvegarde ────────────────────────────────────────────────────────────
     hi_df.to_csv(OUT_HI, index=False)
-    print(f"\n✅ HI sauvegardé          -> {OUT_HI}")
+    print(f"\nOK: HI sauvegarde        -> {OUT_HI}")
     print(f"   Forme : {hi_df.shape}")
 
     hi_params = {'p5': p5, 'p95': p95}
     with open(OUT_PARAMS, 'w') as f:
         json.dump(hi_params, f, indent=2)
-    print(f"✅ Paramètres HI sauvegardés -> {OUT_PARAMS}")
+    print(f"OK: Parametres HI sauvegardes -> {OUT_PARAMS}")
     print(f"   p5={p5:.4f}, p95={p95:.4f}")
