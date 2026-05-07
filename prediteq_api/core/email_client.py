@@ -25,7 +25,7 @@ def _smtp_is_configured() -> bool:
     )
 
 
-def _send_via_smtp(to: str, subject: str, html_body: str) -> bool:
+def _send_via_smtp(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = settings.SMTP_FROM
@@ -59,18 +59,25 @@ def _send_via_smtp(to: str, subject: str, html_body: str) -> bool:
                 server.send_message(message)
 
         logger.info("SMTP email sent to %s: %s", to, subject)
-        return True
+        return True, None
     except Exception as exc:
         logger.error("SMTP email failed for %s: %s", to, exc)
-        return False
+        return False, str(exc)
+
+
+def send_alert_email_detailed(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
+    """Send an alert email via SMTP and return `(success, error_message)`."""
+    if not _smtp_is_configured():
+        note = "SMTP not configured"
+        logger.warning("%s - email skipped", note)
+        return False, note
+    return _send_via_smtp(to, subject, html_body)
 
 
 def send_alert_email(to: str, subject: str, html_body: str) -> bool:
     """Send an alert email via SMTP only."""
-    if not _smtp_is_configured():
-        logger.warning("SMTP not configured - email skipped")
-        return False
-    return _send_via_smtp(to, subject, html_body)
+    sent, _ = send_alert_email_detailed(to, subject, html_body)
+    return sent
 
 
 def build_urgence_html(

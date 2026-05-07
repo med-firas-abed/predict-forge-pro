@@ -17,7 +17,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from core.config import settings
 from core.supabase_client import get_supabase
 from core.email_client import (
-    send_alert_email, build_urgence_html, build_surveillance_html,
+    send_alert_email_detailed, build_urgence_html, build_surveillance_html,
 )
 from core.email_history import append_email_event
 from ml.engine_manager import get_manager
@@ -195,7 +195,7 @@ def _send_alert_emails(
 
     any_success = False
     for index, recipient in enumerate(recipients):
-        sent = send_alert_email(recipient, subject, html)
+        sent, note = send_alert_email_detailed(recipient, subject, html)
         append_email_event(
             machine_id=machine_uuid,
             machine_code=machine_code,
@@ -206,6 +206,7 @@ def _send_alert_emails(
             source="scheduler",
             severity=severity,
             subject=subject,
+            note=note,
         )
         if sent:
             any_success = True

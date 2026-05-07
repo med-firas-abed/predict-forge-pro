@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.config import settings
 from core.auth import CurrentUser, require_admin, require_auth
-from core.email_client import build_urgence_html, send_alert_email
+from core.email_client import build_urgence_html, send_alert_email_detailed
 from core.email_history import append_email_event
 from core.demo_context import (
     get_demo_initial_hi,
@@ -1101,7 +1101,7 @@ def _deliver_demo_notification_jobs(jobs: list[dict]) -> dict:
     for job in jobs:
         code = str(job["machine_code"])
         attempted_by_code[code] = attempted_by_code.get(code, 0) + 1
-        sent = send_alert_email(
+        sent, note = send_alert_email_detailed(
             str(job["recipient_email"]),
             str(job["subject"]),
             str(job["html"]),
@@ -1116,7 +1116,10 @@ def _deliver_demo_notification_jobs(jobs: list[dict]) -> dict:
             source="simulator",
             severity="urgence",
             subject=str(job["subject"]),
-            note="Demo critical scenario triggered at simulator start.",
+            note=(
+                "Demo critical scenario triggered at simulator start."
+                + (f" SMTP: {note}" if note else "")
+            ),
         )
         if sent:
             success_by_code[code] = success_by_code.get(code, 0) + 1
