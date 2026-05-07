@@ -7,9 +7,9 @@ Degradation chain (from technician):
   charge ↑ → puissance ↑ → courant ↑ → I²R échauffement bobines ↑ → dégradation
   Voltage (400V) and speed (1410 RPM) are constant — current is the variable.
 
-RUL v2 — Calibration accessors (F3 of the rul-v2 plan)
+Runtime calibration accessors for the restored calendar display
 ──────────────────────────────────────────────────────
-Three new accessors added below for the FPT + observed-rate display layer:
+Three new accessors added below for the restored-timeline display layer:
   - get_cycles_per_day(code)  — moyenne 7 j glissants des cycles d'ascension
   - get_power_avg_30j(code)   — moyenne 30 j de la puissance ascensionnelle
                                  (lue depuis Supabase, écrite par scheduler.py)
@@ -39,6 +39,8 @@ except ImportError:
     RUL_LOOKBACK_MIN = 60
 
 logger = logging.getLogger(__name__)
+CURRENT_FROM_KW_FACTOR = 1000.0 / (np.sqrt(3.0) * 400.0 * 0.80)
+ASCENT_CURRENT_WINDOW = 20
 
 # ─── Module-level singleton ───────────────────────────────────────────────────
 
@@ -64,7 +66,9 @@ def get_manager() -> "EngineManager":
 class MachineFeatureBuffer:
     """Rolling buffers to compute the 12 features engine.update() expects."""
 
-    ASCENT_POWER_KW = P_ASCENT_NOM_KW * 0.62  # ~0.90 kW threshold for ascent
+    # Descent sits around ~0.35 kW on this fleet. 0.45 kW keeps enough margin
+    # to reject descent/pause while still detecting light-duty ascents.
+    ASCENT_POWER_KW = 0.45
     T_ASCENT_NOMINAL = float(T_ASCENT_S)        # 12s from ML config
 
     def __init__(self):
@@ -82,6 +86,10 @@ class MachineFeatureBuffer:
         # Ascent tracking
         self._in_ascent = False
         self._ascent_powers: list[float] = []
+        self._last_ascent_power_kw: float | None = None
+        self._last_ascent_current_a: float | None = None
+        self._recent_ascent_power_kw = deque(maxlen=120)
+        self._recent_ascent_current_a = deque(maxlen=120)
         self._e_cycle_kwh = 0.0
         self._duration_ratio = 0.0
 
@@ -124,6 +132,13 @@ class MachineFeatureBuffer:
             if self._in_ascent:
                 # Ascent just ended — compute energy and duration
                 n = len(self._ascent_powers)
+                if n >= 1:
+                    mean_ascent_power = float(np.mean(self._ascent_powers))
+                    mean_ascent_current = mean_ascent_power * CURRENT_FROM_KW_FACTOR
+                    self._last_ascent_power_kw = mean_ascent_power
+                    self._last_ascent_current_a = mean_ascent_current
+                    self._recent_ascent_power_kw.append(mean_ascent_power)
+                    self._recent_ascent_current_a.append(mean_ascent_current)
                 if n >= 2:
                     self._e_cycle_kwh = float(np.trapezoid(self._ascent_powers, dx=1.0)) / 3600.0
                     self._duration_ratio = n / self.T_ASCENT_NOMINAL
@@ -199,17 +214,17 @@ class EngineManager:
         self._cycle_counts: dict[str, int] = {}
         self._in_ascent: dict[str, bool] = {}
 
-        # RUL v2 — wall-clock-timestamped snapshots of cycle counts.
+        # Runtime calibration — wall-clock-timestamped snapshots of cycle counts.
         # Each entry: (datetime UTC, cumulative_cycle_count). Snapshots every
         # ~5 min (300 ingest ticks). Used by get_cycles_per_day() to derive
         # a 7-day rolling average rate. maxlen = 7d × 24h × 12 snapshots/h
         # = 2016 entries (overwrite oldest).
         self._cycles_history: dict[str, deque] = {}
 
-        # RUL v2 — manual override for cycles/day (simulator-only path).
+        # Runtime calibration — manual override for cycles/day (simulator-only path).
         # Real-time demo runs only ~2 min wall-clock, so the 7-day window
         # never fills naturally. The simulator sets this to a realistic
-        # per-machine value (e.g., ASC-A1=600, ASC-B2=1100, ASC-C3=400).
+        # per-machine value seeded from demo_scenarios.py.
         # In production with real MQTT, this dict is never written → the
         # natural wall-clock observation path takes over.
         self._cycles_per_day_override: dict[str, float] = {}
@@ -220,10 +235,9 @@ class EngineManager:
         # by scheduler.py and read by get_power_avg_30j() / fallback path.
         self.machine_cache: dict[str, dict] = {}
 
-        # Simulator can override RUL predictions (set by simulator replay loop).
-        # NOTE (v2): kept for backwards-compat during transition. Will be
-        # removed in F6 when simulator.py stops writing to it (the simulator
-        # then feeds coherent sensors so the RF predicts directly).
+        # Legacy compatibility hook for simulator-side RUL overrides.
+        # The normal demo path now feeds coherent sensors so the RF can
+        # predict directly; this dict remains only as a defensive fallback.
         self.rul_overrides: dict[str, dict] = {}
 
     def register_machines(self, machines: list[dict]):
@@ -301,6 +315,9 @@ class EngineManager:
                 float(r['current_a']) for r in buf_list
                 if r.get('current_a') is not None
             ]
+            cycle_current_mean = (
+                float(np.mean(current_values)) if current_values else None
+            )
             self.last_raw[code] = {
                 'rms_mms': float(np.mean([r['rms_mms'] for r in buf_list])),
                 'power_kw': float(np.mean([r['power_kw'] for r in buf_list])),
@@ -309,8 +326,18 @@ class EngineManager:
                 'observed_at': observed_dt.isoformat(),
                 'source': raw_payload.get('source', 'runtime_ingest'),
             }
-            if current_values:
-                self.last_raw[code]['current_a'] = float(np.mean(current_values))
+            if cycle_current_mean is not None:
+                self.last_raw[code]['current_a_cycle_mean'] = cycle_current_mean
+            ascent_current = self.get_recent_ascent_current_mean_a(code)
+            if ascent_current is not None:
+                self.last_raw[code]['current_a'] = float(ascent_current)
+                self.last_raw[code]['current_source'] = 'derived_ascent_power'
+            elif cycle_current_mean is not None:
+                self.last_raw[code]['current_a'] = cycle_current_mean
+                self.last_raw[code]['current_source'] = 'estimated_from_power'
+            ascent_power = self.get_recent_ascent_power_mean_kw(code)
+            if ascent_power is not None:
+                self.last_raw[code]['power_kw_ascent'] = float(ascent_power)
             if raw_payload.get('load_kg') is not None:
                 self.last_raw[code]['load_kg'] = float(raw_payload['load_kg'])
             if raw_payload.get('vibration_raw') is not None:
@@ -340,6 +367,7 @@ class EngineManager:
                     'ts': observed_dt.isoformat(),
                     'rms_mms': self.last_raw[code]['rms_mms'],
                     'power_kw': self.last_raw[code]['power_kw'],
+                    'current_a': self.last_raw[code].get('current_a'),
                     'temp_c': self.last_raw[code]['temp_c'],
                     'humidity_rh': self.last_raw[code]['humidity_rh'],
                     'load_kg': self.last_raw[code].get('load_kg', 0.0),
@@ -390,6 +418,9 @@ class EngineManager:
             self._raw_history[code].append(raw_payload)
             buf_list = list(self._raw_history[code])
             current_values = [float(r['current_a']) for r in buf_list if r.get('current_a') is not None]
+            cycle_current_mean = (
+                float(np.mean(current_values)) if current_values else None
+            )
             self.last_raw[code] = {
                 'rms_mms':     float(np.mean([r['rms_mms'] for r in buf_list])),
                 'power_kw':    float(np.mean([r['power_kw'] for r in buf_list])),
@@ -398,8 +429,18 @@ class EngineManager:
                 'observed_at': observed_dt.isoformat(),
                 'source': raw_payload.get('source', 'runtime_ingest'),
             }
-            if current_values:
-                self.last_raw[code]['current_a'] = float(np.mean(current_values))
+            if cycle_current_mean is not None:
+                self.last_raw[code]['current_a_cycle_mean'] = cycle_current_mean
+            ascent_current = self.get_recent_ascent_current_mean_a(code)
+            if ascent_current is not None:
+                self.last_raw[code]['current_a'] = float(ascent_current)
+                self.last_raw[code]['current_source'] = 'derived_ascent_power'
+            elif cycle_current_mean is not None:
+                self.last_raw[code]['current_a'] = cycle_current_mean
+                self.last_raw[code]['current_source'] = 'estimated_from_power'
+            ascent_power = self.get_recent_ascent_power_mean_kw(code)
+            if ascent_power is not None:
+                self.last_raw[code]['power_kw_ascent'] = float(ascent_power)
             if raw_payload.get('load_kg') is not None:
                 self.last_raw[code]['load_kg'] = float(raw_payload['load_kg'])
 
@@ -420,7 +461,7 @@ class EngineManager:
                 self._cycle_counts[code] = self._cycle_counts.get(code, 0) + 1
             self._in_ascent[code] = is_ascent
 
-            # RUL v2 — snapshot wall-clock timestamp + cumulative cycle count
+            # Runtime calibration — snapshot wall-clock timestamp + cumulative cycle count
             # every 300 ingests (≈5 min at 1 Hz). Used to derive cycles/day.
             # In simulator demo (speed=60) this fires every 5 sec real-time,
             # so we may collect ~24 snapshots in a 2-min run — not enough for
@@ -444,6 +485,7 @@ class EngineManager:
                     'ts':          observed_dt.isoformat(),
                     'rms_mms':     self.last_raw[code]['rms_mms'],
                     'power_kw':    self.last_raw[code]['power_kw'],
+                    'current_a':   self.last_raw[code].get('current_a'),
                     'temp_c':      self.last_raw[code]['temp_c'],
                     'humidity_rh': self.last_raw[code]['humidity_rh'],
                     'load_kg':     self.last_raw[code].get('load_kg', 0.0),
@@ -472,8 +514,8 @@ class EngineManager:
             logger.error("RUL prediction error for %s: %s", code, e)
             return None
 
-    # ─── RUL v2 — Calibration accessors ──────────────────────────────────────
-    # The methods below feed the FPT + observed-rate display layer
+    # ─── Runtime calibration accessors ───────────────────────────────────────
+    # The methods below feed the restored-timeline display layer
     # (prediteq_ml/diagnostics/rul_calibration.py). They are read-only with
     # respect to the RF model — no impact on predictions.
 
@@ -488,7 +530,7 @@ class EngineManager:
              Computed as (count_now - count_oldest_in_window) / days_elapsed.
           3. None — when neither is available (machine just connected, < 1
              snapshot collected). The downstream rul_calibration layer will
-             fall back to DEFAULT_FACTOR=9.
+             still publish the global synthetic timeline factor.
 
         Returns None if cycles cannot be reliably estimated.
         """
@@ -528,7 +570,7 @@ class EngineManager:
         """Manual override of cycles/day — simulator-only path.
 
         Called by simulator.py at the start of each replay session, with a
-        realistic per-machine value (e.g., ASC-A1=600, ASC-B2=1100, ASC-C3=400).
+        realistic per-machine value seeded from demo_scenarios.py.
         Pass value=None or call clear_cycles_per_day_override() to remove.
         Production MQTT data must NOT call this — it would mask real observation.
         """
@@ -563,11 +605,68 @@ class EngineManager:
         buf = self.buffers.get(code)
         if buf is None:
             return None
+        p_last = getattr(buf, "_last_ascent_power_kw", None)
+        if p_last is not None and p_last > 0:
+            return float(p_last)
         e = getattr(buf, "_e_cycle_kwh", 0.0)
         if e is None or e <= 0:
             return None
         # T_ASCENT_S = 12 s → factor 300 (= 3600/12)
         return float(e) * 3600.0 / float(T_ASCENT_S)
+
+    def get_recent_ascent_power_mean_kw(
+        self, code: str, window: int = ASCENT_CURRENT_WINDOW
+    ) -> float | None:
+        """Returns the recent mean ascent power over the last completed ascents.
+
+        This smooths per-cycle load variation so the dashboard and stress index
+        reflect the recent useful-load regime rather than a single ascent.
+        """
+        buf = self.buffers.get(code)
+        if buf is None:
+            return None
+        values = list(getattr(buf, "_recent_ascent_power_kw", []))
+        if not values:
+            return self.get_recent_ascent_power_kw(code)
+        tail = values[-max(1, window):]
+        return float(np.mean(tail))
+
+    def get_recent_ascent_current_mean_a(
+        self, code: str, window: int = ASCENT_CURRENT_WINDOW
+    ) -> float | None:
+        """Returns the recent ascent-equivalent current in amperes.
+
+        This is the physically meaningful motor effort during the useful lift
+        phase, averaged over the last few completed ascents.
+        """
+        buf = self.buffers.get(code)
+        if buf is None:
+            return None
+        values = list(getattr(buf, "_recent_ascent_current_a", []))
+        if not values:
+            p = self.get_recent_ascent_power_kw(code)
+            return float(p * CURRENT_FROM_KW_FACTOR) if p is not None else None
+        tail = values[-max(1, window):]
+        return float(np.mean(tail))
+
+    def get_recent_ascent_current_std_a(
+        self, code: str, window: int = ASCENT_CURRENT_WINDOW
+    ) -> float | None:
+        """Returns the variability of recent ascent-equivalent current.
+
+        Used by the stress index and expert rules to detect unstable
+        duty/load regimes without diluting the signal with pause periods.
+        """
+        buf = self.buffers.get(code)
+        if buf is None:
+            return None
+        values = list(getattr(buf, "_recent_ascent_current_a", []))
+        if not values:
+            return None
+        tail = values[-max(1, window):]
+        if len(tail) < 2:
+            return 0.0
+        return float(np.std(tail))
 
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -583,7 +682,7 @@ class EngineManager:
             self._sensor_counter.pop(code, None)
             self._cycle_counts.pop(code, None)
             self._in_ascent.pop(code, None)
-            # RUL v2 — clear cycle history + simulator override on maintenance
+            # Clear calibration history and simulator overrides on maintenance.
             self._cycles_history.pop(code, None)
             self._cycles_per_day_override.pop(code, None)
             logger.info("Engine reset for %s", code)

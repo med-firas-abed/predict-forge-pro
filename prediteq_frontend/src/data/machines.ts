@@ -25,10 +25,17 @@ export interface DemoScenario {
 }
 
 export type PredictiveUrgencyBand = "stable" | "watch" | "priority" | "critical";
-export type MachinePredictionMode = "no_prediction" | "warming_up" | "prediction";
+export type MachinePredictionMode =
+  | "reference_only"
+  | "initializing"
+  | "prediction";
 export type MachineStressBand = "low" | "moderate" | "high" | "critical";
 export type MachineReferenceKind = "demo_reference" | "last_valid";
-export type MachineCurrentSource = "measured" | "estimated_from_power" | "missing";
+export type MachineCurrentSource =
+  | "measured"
+  | "derived_ascent_power"
+  | "estimated_from_power"
+  | "missing";
 export type MachineDataSource =
   | "live_runtime"
   | "simulator_demo"
@@ -101,7 +108,7 @@ export interface Machine {
   rulIntervalLow?: number | null;
   rulIntervalHigh?: number | null;
   rulIntervalLabel?: string | null;
-  l10Years?: number | null;
+  referenceLifetimeYears?: number | null;
   rulReferenceDays?: number | null;
   rulReferenceKind?: MachineReferenceKind | null;
   stopRecommended?: boolean;

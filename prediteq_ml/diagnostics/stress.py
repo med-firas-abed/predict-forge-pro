@@ -62,11 +62,13 @@ DÉTAIL DES COMPOSANTES
    continu à 100 % et tolère 115 % en court terme.
 
 4. **R_stress — Stress de variabilité** (proxy cyclique sans capteur de cycle)
-        clip(σ(I_1h) / I_mean / 0.30, 0, 1)
+        clip(σ(I_1h) / max(I_mean, 0.5·I_rated) / 0.30, 0, 1)
    - 0 à ratio ≤ 0    : courant parfaitement stable
    - 1 à ratio ≥ 0.30 : asymétrie ou cyclage agressif
    Justification : seuil 0.30 = même valeur que `CURRENT_STD_THRESHOLD_RATIO`
-   utilisée par la règle MCSA (Thomson & Fenger 2001). Capture indirectement
+   utilisée par la règle MCSA (Thomson & Fenger 2001). Le plancher
+   `0.5·I_rated` évite de sur-pénaliser une machine légère dont le courant
+   moyen est faible mais stable en valeur absolue. Capture indirectement
    l'effet « démarrages/arrêts répétés » d'un ascenseur à fort trafic, qui
    serait autrement invisible faute de capteur de cycles.
 
@@ -233,7 +235,8 @@ def _variability_component(f: Mapping[str, float]) -> tuple[float, bool]:
     mean = f.get("i_rms_a")
     if sigma is None or mean is None or float(mean) < 0.1:
         return 0.0, False
-    ratio = float(sigma) / float(mean)
+    effective_mean = max(float(mean), _LOAD_LOW_FRACTION * _I_RATED_A)
+    ratio = float(sigma) / effective_mean
     score = ratio / _VAR_RATIO_MAX
     return _clip01(score), True
 

@@ -58,12 +58,17 @@ from typing import Iterable, Optional
 
 import numpy as np
 
+from .rul_calibration import DEFAULT_FACTOR
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Constantes — alignées sur config.py (non importé pour rester autonome)
 # ──────────────────────────────────────────────────────────────────────────────
-RUL_MIN_TO_DAY_DEFAULT: int = 9
-"""Convention d'affichage : 800 min-sim ÷ 90 jours calendaires ≈ 9.
-Peut être surchargé à l'appel pour faciliter la recalibration empirique."""
+RUL_MIN_TO_DAY_DEFAULT: float = DEFAULT_FACTOR
+"""Convention runtime : 800 min-sim ÷ 365 jours calendaires.
+
+Le facteur par défaut correspond à :
+    TRAJECTORY_LEN_SIM_MIN / SYNTHETIC_TIMELINE_DAYS
+"""
 
 CVI_THRESHOLD_HIGH: float = 0.15
 CVI_THRESHOLD_MEDIUM: float = 0.30
@@ -131,7 +136,7 @@ def predict_with_interval(
     X: np.ndarray | list,
     *,
     confidence_level: float = 0.80,
-    rul_min_to_day: int = RUL_MIN_TO_DAY_DEFAULT,
+    rul_min_to_day: float = RUL_MIN_TO_DAY_DEFAULT,
 ) -> RulPrediction:
     """Prédit le RUL avec un intervalle de confiance non paramétrique.
 
@@ -148,9 +153,9 @@ def predict_with_interval(
         Niveau de confiance de l'intervalle principal. 0.80 par défaut
         (correspond aux percentiles 10/90). Utiliser 0.90 pour un
         intervalle plus large, moins informatif mais plus prudent.
-    rul_min_to_day : int, default=9
-        Facteur de conversion min-sim → jours calendaires. À recalibrer
-        après 90 jours d'exploitation réelle (cf. config.py comment).
+    rul_min_to_day : float, default=800/365
+        Facteur de conversion min-sim → jours calendaires sur la timeline
+        synthétique restituée au runtime.
 
     Returns
     -------
@@ -272,7 +277,7 @@ def batch_predict_with_interval(
     X: np.ndarray,
     *,
     confidence_level: float = 0.80,
-    rul_min_to_day: int = RUL_MIN_TO_DAY_DEFAULT,
+    rul_min_to_day: float = RUL_MIN_TO_DAY_DEFAULT,
 ) -> list[RulPrediction]:
     """Version batch — appelle predict_with_interval pour chaque ligne.
 

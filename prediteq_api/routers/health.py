@@ -94,14 +94,24 @@ def health_detail(user: CurrentUser = Depends(require_auth)):
         except Exception as e:
             deps["groq"] = {"status": "error", "message": str(e)}
 
-        # Resend (email)
+        # SMTP (email)
         try:
             from core.config import settings
-            deps["resend"] = {
-                "status": "ok" if settings.RESEND_API_KEY else "not_configured",
+            deps["smtp"] = {
+                "status": (
+                    "ok"
+                    if (
+                        settings.SMTP_HOST
+                        and settings.SMTP_PORT
+                        and settings.SMTP_FROM
+                        and settings.SMTP_USERNAME
+                        and settings.SMTP_PASSWORD
+                    )
+                    else "not_configured"
+                ),
             }
         except Exception as e:
-            deps["resend"] = {"status": "error", "message": str(e)}
+            deps["smtp"] = {"status": "error", "message": str(e)}
 
         # MQTT
         deps["mqtt"] = {"status": "connected" if mqtt_is_connected() else "disconnected"}

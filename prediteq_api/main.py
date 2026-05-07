@@ -34,8 +34,15 @@ async def lifespan(app: FastAPI):
 
     if not settings.GROQ_API_KEY:
         logger.warning("GROQ_API_KEY not set — AI chat, reports, and planner will be unavailable")
-    if not settings.RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY not set — email alerts will be skipped")
+    has_smtp = bool(
+        settings.SMTP_HOST
+        and settings.SMTP_PORT
+        and settings.SMTP_FROM
+        and settings.SMTP_USERNAME
+        and settings.SMTP_PASSWORD
+    )
+    if not has_smtp:
+        logger.warning("SMTP not configured — email alerts will be skipped")
     if not settings.ADMIN_EMAIL:
         logger.warning("ADMIN_EMAIL not set — fallback alert recipient is empty; configure recipients in /seuils")
 
@@ -53,8 +60,8 @@ async def lifespan(app: FastAPI):
                            hybrid_params, engine_cls)
 
     # 4. Cache machine UUIDs from Supabase (non-fatal: retry at runtime)
-    # RUL v2 (F3): also select power_avg_30j, cycles_avg_7j, metrics_updated
-    # so the calibration layer can pick them up at startup. These columns are
+    # Also select power_avg_30j, cycles_avg_7j, metrics_updated so the
+    # calendar-restoration layer can pick them up at startup. These columns are
     # added by migration 006_rul_v2_calibration.sql; if missing, the select
     # itself will fail and we fall back to the legacy column set.
     try:
@@ -66,7 +73,7 @@ async def lifespan(app: FastAPI):
         except Exception as legacy_e:
             # Migration 006 not applied yet — fall back to legacy columns
             logger.warning(
-                "RUL v2 columns not present (migration 006 not applied?): %s "
+                "Calibrated RUL columns not present (migration 006 not applied?): %s "
                 "— falling back to legacy machine schema", legacy_e
             )
             machines_res = sb.table('machines').select(

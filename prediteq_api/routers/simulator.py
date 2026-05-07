@@ -3,9 +3,9 @@ Simulator — generates fresh trajectories on-the-fly for all 3 machines.
 Cumulative degradation: each run picks up from the last known HI (stored in
 Supabase). Every run uses a fresh seed → different noise/profile/load.
 
-ASC-A1 (Ben Arous): new machine, starts at HI ≈ 0.98
-ASC-B2 (Sfax): mid-life, starts at HI ≈ 0.48 (surveillance)
-ASC-C3 (Sousse): end-of-life, starts at HI ≈ 0.18 (critique)
+ASC-A1 (Ben Arous): protected/light-duty machine, starts around HI ≈ 0.96
+ASC-B2 (Sfax): mixed-traffic machine, starts around HI ≈ 0.62 (surveillance)
+ASC-C3 (Sousse): harsh-duty machine, starts around HI ≈ 0.10 (critique)
 
 POST /simulator/start          — cumulative run (picks up from last HI)
 POST /simulator/start?reset=1  — reset all machines to initial state
@@ -84,9 +84,9 @@ INITIAL_HI = get_demo_initial_hi()
 # Each machine must stay inside its designated zone during simulation.
 # The HI is clamped to these bounds so the demo always shows 3 distinct zones.
 HI_ZONE_BOUNDS = {
-    "ASC-A1": (0.82, 0.98),   # opérationnel  (≥ 0.80 → vert)
-    "ASC-B2": (0.62, 0.78),   # surveillance   (0.60–0.80 → jaune)
-    "ASC-C3": (0.10, 0.28),   # critique       (< 0.30 → rouge)
+    "ASC-A1": (0.90, 0.98),   # opérationnel protégé
+    "ASC-B2": (0.60, 0.70),   # usage moyen / surveillance
+    "ASC-C3": (0.05, 0.16),   # usage dur / critique
 }
 
 # Fraction of a full lifecycle per simulator session.
@@ -95,7 +95,7 @@ HI_ZONE_BOUNDS = {
 SESSION_FRAC = 0.15
 
 
-# ─── RUL v2 — Demo calibration seeds ─────────────────────────────────────────
+# ─── Demo runtime calibration seeds ──────────────────────────────────────────
 # (machine_code, cycles_per_day, power_avg_30j_kw)
 #
 # Used by the simulator at start-of-replay to seed manager.machine_cache and
@@ -112,9 +112,9 @@ DEMO_CALIBRATION_SEEDS: list[tuple[str, float, float]] = iter_demo_calibration_s
 # Demo mode is tuned against the live IF + RF runtime, not against the
 # synthetic HI directly. Each machine starts at a calibrated point in its own
 # degradation trajectory so the natural pipeline lands near the desired stage:
-#   - ASC-A1: early degradation -> HI stays in Excellent, RUL hidden, L10 shown
-#   - ASC-B2: mid degradation   -> HI settles around mid-band with visible RUL
-#   - ASC-C3: late degradation  -> HI enters Critical with a short visible RUL
+#   - ASC-A1: early degradation -> HI stays in Excellent with a long forecast
+#   - ASC-B2: mid degradation   -> HI sits in surveillance with a medium forecast
+#   - ASC-C3: late degradation  -> HI enters Critical with a short forecast
 def _build_demo_stage_config() -> dict[str, dict[str, float | int | str | tuple[int, int]]]:
     config: dict[str, dict[str, float | int | str | tuple[int, int]]] = {}
     for code in MACHINE_CODES:
@@ -154,9 +154,9 @@ DEMO_SEED_BASE = 20260427
 # recomputes HI, zone and RUL from the injected sensors; we only choose which
 # operating regime each machine starts from.
 DEMO_PUBLIC_START_TICKS: dict[str, int] = {
-    "ASC-A1": 14795,
-    "ASC-B2": 18240,
-    "ASC-C3": 29593,
+    # ASC-B2 uses a manual plateau start so the stepwise mid-life profile
+    # keeps 20 minutes of warmup context before replay begins.
+    "ASC-B2": 20400,
 }
 
 # The runtime engine has finite memory. Replaying an entire lifecycle from tick
@@ -199,6 +199,22 @@ def _demo_zone_from_hi(hi: float) -> str:
     if hi >= 0.30:
         return "Degraded"
     return "Critical"
+
+
+def _persisted_status_from_zone(zone: str | None, hi: float | None = None) -> str:
+    if zone == "Excellent":
+        return "operational"
+    if zone in {"Good", "Degraded"}:
+        return "degraded"
+    if zone == "Critical":
+        return "critical"
+    if hi is None:
+        return "operational"
+    if hi >= 0.8:
+        return "operational"
+    if hi >= 0.3:
+        return "degraded"
+    return "critical"
 
 
 def _clamp_demo_trajectory_slice(
@@ -337,14 +353,14 @@ def _build_load_series(t_seconds: np.ndarray, scenario: dict[str, float | int | 
     pattern = str(scenario["load_pattern"])
 
     if pattern == "light_to_medium":
-        candidates = np.array([0, 40, 60, 80, 100, 110], dtype=float)
-        weights = np.array([0.10, 0.22, 0.25, 0.23, 0.15, 0.05], dtype=float)
+        candidates = np.array([0, 20, 35, 50, 70, 90], dtype=float)
+        weights = np.array([0.20, 0.26, 0.22, 0.17, 0.10, 0.05], dtype=float)
     elif pattern == "mixed_half_load":
-        candidates = np.array([60, 90, 120, 140, 160, 180], dtype=float)
-        weights = np.array([0.08, 0.16, 0.28, 0.24, 0.16, 0.08], dtype=float)
+        candidates = np.array([70, 100, 130, 150, 170, 190], dtype=float)
+        weights = np.array([0.08, 0.16, 0.24, 0.24, 0.18, 0.10], dtype=float)
     elif pattern == "heavy_near_max":
-        candidates = np.array([140, 170, 190, 210, 230, 240], dtype=float)
-        weights = np.array([0.05, 0.10, 0.20, 0.28, 0.22, 0.15], dtype=float)
+        candidates = np.array([180, 210, 230, 250, 270, 285], dtype=float)
+        weights = np.array([0.06, 0.12, 0.20, 0.24, 0.22, 0.16], dtype=float)
     else:
         low, high = scenario["load_band_kg"]  # type: ignore[misc]
         candidates = np.array([low, high], dtype=float)
@@ -774,11 +790,79 @@ def _bootstrap_demo_histories(manager) -> tuple[dict[str, dict], dict[str, dict 
     return scenarios, prev_raw_by_code
 
 
+def _persist_demo_machine_snapshots(manager) -> None:
+    """Persist the calibrated demo-stage state so DB-backed views stay coherent."""
+    try:
+        sb = get_supabase()
+    except Exception as exc:
+        logger.warning("Simulator demo DB sync skipped: Supabase unavailable (%s)", exc)
+        return
+
+    try:
+        from routers.diagnostics_rul import build_calibrated_rul_response
+    except Exception as exc:
+        logger.warning(
+            "Simulator demo DB sync skipped: calibrated RUL unavailable (%s)",
+            exc,
+        )
+        return
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    for code in MACHINE_CODES:
+        machine_uuid = manager.get_uuid(code)
+        if not machine_uuid:
+            continue
+
+        cfg = DEMO_STAGE_CONFIG.get(code) or {}
+        last = manager.last_results.get(code) or {}
+        hi = last.get("hi_smooth")
+        zone = last.get("zone")
+
+        update_data: dict[str, float | int | str | None] = {
+            "derniere_maj": now_iso,
+            "metrics_updated": now_iso,
+        }
+
+        cycles_per_day = cfg.get("cycles_per_day")
+        if cycles_per_day is not None:
+            update_data["cycles_avg_7j"] = round(float(cycles_per_day), 1)
+
+        power_avg = cfg.get("power_avg_30j_kw")
+        if power_avg is not None:
+            update_data["power_avg_30j"] = round(float(power_avg), 4)
+
+        if hi is not None:
+            hi_value = float(hi)
+            update_data["hi_courant"] = round(hi_value, 4)
+            update_data["statut"] = _persisted_status_from_zone(zone, hi_value)
+
+        try:
+            rul_payload = build_calibrated_rul_response(manager, code)
+        except Exception as exc:
+            logger.warning("Simulator demo RUL snapshot failed for %s: %s", code, exc)
+            rul_payload = None
+
+        prediction = ((rul_payload or {}).get("prediction") or {})
+        if (rul_payload or {}).get("mode") == "prediction" and prediction.get("rul_days") is not None:
+            update_data["rul_courant"] = int(round(float(prediction["rul_days"])))
+        else:
+            update_data["rul_courant"] = None
+
+        manager.machine_cache.setdefault(code, {}).update(update_data)
+
+        try:
+            sb.table("machines").update(update_data).eq("id", machine_uuid).execute()
+        except Exception as exc:
+            logger.warning("Simulator demo DB sync failed for %s: %s", code, exc)
+
+
 def _send_demo_critical_notifications(manager) -> dict:
     """Send one critical email per demo run for machines staged as critical."""
-    recipients = get_alert_recipients()
-    if not recipients:
-        logger.warning("Simulator demo email skipped: no alert recipients configured")
+    try:
+        sb = get_supabase()
+    except Exception as exc:
+        logger.warning("Simulator demo alert/email setup failed: %s", exc)
         return {
             "recipients": [],
             "attempted_codes": [],
@@ -789,6 +873,7 @@ def _send_demo_critical_notifications(manager) -> dict:
     attempted_codes: list[str] = []
     sent_codes: list[str] = []
     failed_recipients: list[str] = []
+    all_recipients: list[str] = []
 
     for code in MACHINE_CODES:
         scenario = get_demo_scenario(code)
@@ -809,16 +894,60 @@ def _send_demo_critical_notifications(manager) -> dict:
 
         attempted_codes.append(code)
         machine_info = manager.get_machine_info(code) or {}
+        machine_uuid = str(machine_info.get("id") or manager.get_uuid(code) or "")
         machine_nom = str(machine_info.get("nom") or code)
-        rul_result = manager.predict_rul(code)
+        recipients = get_alert_recipients(machine_uuid or None)
+        if not recipients:
+            logger.warning(
+                "Simulator demo email skipped for %s: no alert recipients configured",
+                code,
+            )
+            continue
+        all_recipients.extend(recipients)
+        rul_result = None
+        try:
+            from routers.diagnostics_rul import build_calibrated_rul_response
+
+            rul_payload = build_calibrated_rul_response(manager, code)
+            prediction = (rul_payload.get("prediction") or {}) if isinstance(rul_payload, dict) else {}
+            if rul_payload.get("mode") == "prediction" and prediction.get("rul_days") is not None:
+                ci_low = prediction.get("rul_days_display_low")
+                ci_high = prediction.get("rul_days_display_high")
+                if ci_low is None or ci_high is None:
+                    ci_low = prediction.get("rul_days_p10")
+                    ci_high = prediction.get("rul_days_p90")
+                rul_result = {
+                    "rul_days": float(prediction["rul_days"]),
+                    "ci_low": float(ci_low) if ci_low is not None else None,
+                    "ci_high": float(ci_high) if ci_high is not None else None,
+                }
+        except Exception:
+            rul_result = manager.predict_rul(code)
         subject = f"[URGENCE - Simulation] {machine_nom} — machine critique détectée"
         html = build_urgence_html(machine_nom, code, hi, rul_result, [])
+
+        try:
+            rul_note = ""
+            if rul_result and rul_result.get("rul_days") is not None:
+                rul_note = f", RUL = {float(rul_result['rul_days']):.1f} jours"
+            sb.table("alertes").insert({
+                "machine_id": machine_uuid,
+                "type": "hi",
+                "titre": f"Machine critique au lancement du replay - {code}",
+                "description": (
+                    f"Replay demo demarre avec HI = {hi:.4f}{rul_note}. "
+                    "Notification email declenchee vers les destinataires relies a cette machine."
+                ),
+                "severite": "urgence",
+            }).execute()
+        except Exception as exc:
+            logger.warning("Simulator demo alert insert failed for %s: %s", code, exc)
 
         success_count = 0
         for recipient in recipients:
             sent = send_alert_email(recipient, subject, html)
             append_email_event(
-                machine_id=str(machine_info.get("id") or manager.get_uuid(code) or ""),
+                machine_id=machine_uuid,
                 machine_code=code,
                 machine_name=machine_nom,
                 recipient_email=recipient,
@@ -850,7 +979,7 @@ def _send_demo_critical_notifications(manager) -> dict:
             )
 
     return {
-        "recipients": recipients,
+        "recipients": list(dict.fromkeys(all_recipients)),
         "attempted_codes": attempted_codes,
         "sent_codes": sent_codes,
         "failed_recipients": list(dict.fromkeys(failed_recipients)),
@@ -874,6 +1003,7 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
             scenarios, prev_raw_by_code = await asyncio.to_thread(
                 _bootstrap_demo_histories, manager
             )
+            await asyncio.to_thread(_persist_demo_machine_snapshots, manager)
             notification_summary = await asyncio.to_thread(
                 _send_demo_critical_notifications, manager
             )
@@ -959,13 +1089,13 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
             for idx in indices:
                 engine.buffer_hi_smooth.append(float(hi_vals[idx]))
 
-        # ── RUL v2 — Seed calibration metrics for the demo ──────────────────
+        # ── Seed calibration metrics for the restored calendar view ────────
         # Real production paths : scheduler.py accumulates these over real
         # days from MQTT data. Demo path (this simulator) only runs ~2 min
         # wall-clock, so we seed realistic per-machine values directly so
-        # the /rul-v2 endpoint and the L10 reference behave correctly.
-        # Values chosen to match the planned scenarios (FPT/observed-rate
-        # calibration vs. ISO 281 cube law adjustments) :
+        # the /rul-v2 endpoint and the engineering reference blocks stay coherent.
+        # Values are chosen to match the planned scenarios, the restored
+        # synthetic timeline, and the ISO 281 reference block:
         for code, cycles_per_day, p_avg in DEMO_CALIBRATION_SEEDS:
             manager.set_cycles_per_day_override(code, cycles_per_day)
             cached = manager.machine_cache.setdefault(code, {})
@@ -999,7 +1129,7 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
 
                 sim_hi = float(row["simulated_hi"])
 
-                # ── RUL v2 — No more RUL bypass! ────────────────────────────
+                # ── Calibrated RF path only — no hand-written RUL bypass ────
                 # Previously this block hand-coded a RUL via the formula
                 #   rul = (sim_hi - 0.15) / 0.85 × 90
                 # which short-circuited the Random Forest entirely. Now that
@@ -1007,8 +1137,8 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
                 # _generate_all_trajectories) and the HI buffer matches the
                 # displayed HI, the RF receives coherent inputs and predicts
                 # natively within its training distribution. The /rul-v2
-                # endpoint applies FPT + observed-rate conversion + L10 on
-                # top of the RF's actual prediction.
+                # endpoint restores the synthetic time scale and surfaces the
+                # ISO 281 bearing-life reference alongside the RF prediction.
                 # ─────────────────────────────────────────────────────────────
 
                 _state["machines"][code]["current"] = tick
@@ -1026,7 +1156,7 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
                 logger.info("Simulator: tick %d/%d", tick, max_len)
 
         _state["running"] = False
-        # ── RUL v2 — Cleanup at end of replay ────────────────────────────
+        # ── Cleanup at end of replay ────────────────────────────────────────
         # Clear cycles_per_day_override per machine so any subsequent real
         # MQTT traffic uses wall-clock-observed rate. rul_overrides is no
         # longer populated by the simulator, but we clear it defensively
@@ -1083,13 +1213,16 @@ async def start_simulator(speed: int = 60, reset: bool = False,
     if reset:
         try:
             sb = get_supabase()
+            now_iso = datetime.now(timezone.utc).isoformat()
             for code, hi in INITIAL_HI.items():
                 uuid = manager.get_uuid(code)
                 if uuid:
                     statut = 'operational' if hi >= 0.8 else ('degraded' if hi >= 0.3 else 'critical')
                     sb.table('machines').update({
                         'hi_courant': round(hi, 4),
+                        'rul_courant': None,
                         'statut': statut,
+                        'derniere_maj': now_iso,
                     }).eq('id', uuid).execute()
             logger.info("Simulator: reset HI values written to Supabase")
         except Exception as e:

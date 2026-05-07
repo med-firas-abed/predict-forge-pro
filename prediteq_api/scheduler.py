@@ -2,11 +2,11 @@
 APScheduler — runs every 60 seconds per active machine.
 Updates Supabase, inserts historique_hi, triggers alerts & emails.
 
-RUL v2 (F4) — Adds an hourly calibration metrics job:
+Runtime calibration — Adds an hourly metrics job:
     update_calibration_metrics()
 which maintains power_avg_30j (EMA, 30-day effective window) and
 cycles_avg_7j (from manager observation) on the machines table. These
-power the FPT + observed-rate display layer (rul_calibration.py).
+power the calibrated runtime display layer (rul_calibration.py).
 """
 
 import logging
@@ -23,11 +23,6 @@ from core.email_history import append_email_event
 from ml.engine_manager import get_manager
 from routers.seuils import get_alert_recipients
 
-# FPT gate (IEEE 1856-2017 §6.2) — décide si on persiste un RUL chiffré
-# pour une machine donnée. Au-dessus du seuil HI=0.80 (zone Excellent
-# ISO 10816-3 « neuf/remis à neuf »), le RUL chiffré est masqué.
-from diagnostics import should_show_rul
-
 logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
@@ -36,7 +31,7 @@ scheduler = BackgroundScheduler()
 # while the previous one is still open.
 ALERT_DEDUP_HOURS: int = 12
 
-# ─── RUL v2 calibration constants ───────────────────────────────────────────
+# ─── Runtime calibration constants ──────────────────────────────────────────
 #
 # EMA alpha for the 30-day effective window when the job fires hourly :
 #     n_eff = 30 days × 24 hours = 720 samples → alpha = 1/n_eff ≈ 0.00139
@@ -95,6 +90,39 @@ def _zone_to_severite(zone: str) -> str | None:
     if zone == 'Degraded':
         return 'surveillance'
     return None
+
+
+def _build_public_rul_result(manager, code: str) -> tuple[dict | None, str | None]:
+    """Build the operator-facing RUL snapshot used for DB persistence."""
+    try:
+        from routers.diagnostics_rul import build_calibrated_rul_response
+
+        payload = build_calibrated_rul_response(manager, code)
+    except Exception as exc:
+        logger.warning("Could not build public RUL snapshot for %s: %s", code, exc)
+        return None, None
+
+    mode = str(payload.get("mode") or "") or None
+    if mode != "prediction":
+        return None, mode
+
+    prediction = payload.get("prediction") or {}
+    rul_days = prediction.get("rul_days")
+    if rul_days is None:
+        return None, mode
+
+    ci_low = prediction.get("rul_days_display_low")
+    ci_high = prediction.get("rul_days_display_high")
+    if ci_low is None or ci_high is None:
+        ci_low = prediction.get("rul_days_p10")
+        ci_high = prediction.get("rul_days_p90")
+
+    return {
+        "rul_days": round(float(rul_days), 1),
+        "ci_low": round(float(ci_low), 1) if ci_low is not None else None,
+        "ci_high": round(float(ci_high), 1) if ci_high is not None else None,
+        "status": "ok",
+    }, mode
 
 
 def _can_send_urgence(sb, machine_uuid: str) -> bool:
@@ -156,7 +184,7 @@ def _send_alert_emails(
     machine_name: str | None = None,
     severity: str | None = None,
 ) -> bool:
-    recipients = get_alert_recipients()
+    recipients = get_alert_recipients(machine_uuid)
     if not recipients:
         logger.warning("No alert email recipients configured for machine %s", machine_uuid)
         return False
@@ -252,17 +280,7 @@ def _update_one_machine(manager, sb, code: str):
 
     # ── RUL prediction ────────────────────────────────────────────────────
     rul_result = manager.predict_rul(code)
-
-    # ── FPT gate (IEEE 1856-2017 §6.2 — First Predicting Time) ────────────
-    # On NE PERSISTE PAS de RUL chiffré tant que la machine est saine
-    # (HI ≥ FPT_HI_THRESHOLD = 0.80, zone Excellent ISO 10816-3). Sinon
-    # toutes les pages qui consomment `rul_courant` (Tableau de bord,
-    # Machines, Géolocalisation, Rapports) afficheraient un chiffre
-    # extrapolé hors plage d'entraînement, contredisant le pronostic
-    # conditionnel affiché sur la page Diagnostics RUL.
-    #
-    # Cohérence garantie : une seule source de vérité pour le RUL chiffré.
-    fpt_show = should_show_rul(hi)
+    public_rul_result, public_rul_mode = _build_public_rul_result(manager, code)
 
     # ── Update machines table ─────────────────────────────────────────────
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -271,11 +289,19 @@ def _update_one_machine(manager, sb, code: str):
         'statut': statut,
         'derniere_maj': now_iso,
     }
-    if fpt_show and rul_result and rul_result.get('rul_days') is not None:
-        update_data['rul_courant'] = int(rul_result['rul_days'])
+    rul_for_storage = None
+    if public_rul_mode == "prediction" and public_rul_result is not None:
+        rul_for_storage = public_rul_result
+    elif public_rul_mode in {"reference_only", "initializing"}:
+        rul_for_storage = None
+    elif rul_result and rul_result.get('rul_days') is not None:
+        # Fallback only if the public translation failed unexpectedly.
+        rul_for_storage = rul_result
+
+    if rul_for_storage and rul_for_storage.get('rul_days') is not None:
+        update_data['rul_courant'] = int(round(float(rul_for_storage['rul_days'])))
     else:
-        # FPT actif (machine saine) OU pas de prédiction disponible :
-        # on remet explicitement à NULL pour effacer toute valeur stale.
+        # Pas de prédiction exploitable : on efface toute valeur stale.
         update_data['rul_courant'] = None
 
     try:
@@ -284,15 +310,13 @@ def _update_one_machine(manager, sb, code: str):
         logger.error("machines update error for %s: %s", code, e)
 
     # ── Insert predictions_rul (RUL history + confidence intervals) ───────
-    # Pareillement gated par FPT : pas d'historique chiffré pour machines
-    # saines. L'historique reste fidèle aux décisions présentées à l'UI.
-    if fpt_show and rul_result and rul_result.get('rul_days') is not None:
+    if rul_for_storage and rul_for_storage.get('rul_days') is not None:
         try:
             sb.table('predictions_rul').insert({
                 'machine_id': machine_uuid,
-                'rul_jours': round(rul_result['rul_days'], 2),
-                'ic_bas': round(rul_result['ci_low'], 2) if rul_result.get('ci_low') is not None else None,
-                'ic_haut': round(rul_result['ci_high'], 2) if rul_result.get('ci_high') is not None else None,
+                'rul_jours': round(float(rul_for_storage['rul_days']), 2),
+                'ic_bas': round(float(rul_for_storage['ci_low']), 2) if rul_for_storage.get('ci_low') is not None else None,
+                'ic_haut': round(float(rul_for_storage['ci_high']), 2) if rul_for_storage.get('ci_high') is not None else None,
             }).execute()
         except Exception as e:
             logger.error("predictions_rul insert error for %s: %s", code, e)
@@ -312,14 +336,18 @@ def _update_one_machine(manager, sb, code: str):
     prev_zone = manager.previous_zones.get(code)
     manager.previous_zones[code] = zone
     severite = _zone_to_severite(zone)
+    alert_rul_result = (
+        rul_for_storage
+        or (rul_result if rul_result and rul_result.get('rul_days') is not None else None)
+    )
 
     if prev_zone != zone and severite:
         machine_info = manager.get_machine_info(code) or {}
         machine_nom = machine_info.get('nom', code)
 
         rul_str = ""
-        if rul_result and rul_result.get('rul_days') is not None:
-            rul_str = f", RUL = {rul_result['rul_days']} jours"
+        if alert_rul_result and alert_rul_result.get('rul_days') is not None:
+            rul_str = f", RUL = {alert_rul_result['rul_days']} jours"
         alert_type = 'hi'
         alert_title = f"{'HI critique' if severite == 'urgence' else 'Dégradation détectée'} — {code}"
         alert_description = f"HI = {hi:.4f}{rul_str}"
@@ -369,8 +397,8 @@ def _update_one_machine(manager, sb, code: str):
                 except Exception:
                     pass
 
-                subject = f"[URGENCE] {machine_nom} — RUL {rul_result['rul_days'] if rul_result and rul_result.get('rul_days') else 'N/A'} jours"
-                html = build_urgence_html(machine_nom, code, hi, rul_result, recent_alerts)
+                subject = f"[URGENCE] {machine_nom} — RUL {alert_rul_result['rul_days'] if alert_rul_result and alert_rul_result.get('rul_days') else 'N/A'} jours"
+                html = build_urgence_html(machine_nom, code, hi, alert_rul_result, recent_alerts)
                 _send_alert_emails(
                     sb,
                     machine_uuid,
@@ -384,7 +412,7 @@ def _update_one_machine(manager, sb, code: str):
 
         elif severite == 'surveillance' and _can_send_surveillance(sb, machine_uuid):
             subject = f"[SURVEILLANCE] {machine_nom} — HI {hi:.2f}"
-            html = build_surveillance_html(machine_nom, code, hi, rul_result)
+            html = build_surveillance_html(machine_nom, code, hi, alert_rul_result)
             _send_alert_emails(
                 sb,
                 machine_uuid,
@@ -397,7 +425,7 @@ def _update_one_machine(manager, sb, code: str):
             )
 
 
-# ─── RUL v2 — Hourly calibration metrics update ─────────────────────────────
+# ─── Hourly runtime-calibration metrics update ──────────────────────────────
 
 def update_calibration_metrics():
     """Hourly: refresh power_avg_30j (EMA) and cycles_avg_7j on machines.
@@ -481,7 +509,7 @@ def _update_calibration_one(manager, sb, code: str):
 def start():
     scheduler.add_job(update_all_machines, 'interval', seconds=60,
                       id='update_machines', replace_existing=True)
-    # RUL v2 : hourly calibration metrics refresh
+    # Hourly runtime-calibration metrics refresh
     scheduler.add_job(update_calibration_metrics, 'interval', hours=1,
                       id='update_calibration', replace_existing=True)
     scheduler.start()

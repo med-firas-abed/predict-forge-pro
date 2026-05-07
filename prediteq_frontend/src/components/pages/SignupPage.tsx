@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
 import { apiFetch } from "@/lib/api";
@@ -9,8 +11,9 @@ interface SignupPageProps {
 }
 
 export function SignupPage({ onNavigate }: SignupPageProps) {
-  const { signup } = useAuth();
+  const { signup, currentUser } = useAuth();
   const { lang, setLang, theme, setTheme, t } = useApp();
+  const location = useLocation();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,10 +25,20 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const isAdminCreateMode =
+    currentUser?.role === "admin" &&
+    currentUser.status === "approved" &&
+    new URLSearchParams(location.search).get("mode") === "admin-create";
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    if (isAdminCreateMode) {
+      setRole("user");
+    }
+  }, [isAdminCreateMode]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -173,7 +186,18 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
       if (!result.success) {
         setError(result.error || t("auth.registrationError"));
       } else {
-        onNavigate("/pending");
+        if (isAdminCreateMode) {
+          toast.success(
+            lang === "fr"
+              ? "Utilisateur créé. Retour à l'administration pour validation."
+              : lang === "en"
+                ? "User created. Returning to administration for validation."
+                : "ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙˆØ§Ù„Ø¹ÙˆØ¯Ø© Ø¥Ù„Ù‰ Ø§Ù„Ø¥Ø¯Ø§Ø±Ø© Ù„Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©.",
+          );
+          onNavigate("/administration");
+        } else {
+          onNavigate("/pending");
+        }
       }
     } finally {
       setSubmitting(false);
@@ -250,7 +274,15 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
         >
           <div className="bg-card rounded-2xl p-8 space-y-5">
             <div className="text-center">
-              <h1 className="text-lg font-semibold text-foreground">{t("auth.createAccount")}</h1>
+              <h1 className="text-lg font-semibold text-foreground">
+                {isAdminCreateMode
+                  ? lang === "fr"
+                    ? "Ajouter un utilisateur"
+                    : lang === "en"
+                      ? "Add a user"
+                      : "Ø¥Ø¶Ø§ÙØ© Ù…Ø³ØªØ®Ø¯Ù…"
+                  : t("auth.createAccount")}
+              </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {lang === "fr"
                   ? "Rejoignez le SaaS de maintenance prédictive"
@@ -368,7 +400,8 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                 </div>
               </div>
 
-              <div>
+              {!isAdminCreateMode && (
+                <div>
                 <label className="block text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
                   {t("auth.role")}
                 </label>
@@ -397,7 +430,8 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                     </button>
                   ))}
                 </div>
-              </div>
+                </div>
+              )}
 
               {role === "user" && (
                 <div>
@@ -439,7 +473,15 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                 style={theme !== "dark" ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" } : undefined}
               >
                 <UserPlus className="w-4 h-4" />
-                {submitting ? "..." : t("auth.createBtn")}
+                {submitting
+                  ? "..."
+                  : isAdminCreateMode
+                    ? lang === "fr"
+                      ? "CrÃ©er l'utilisateur"
+                      : lang === "en"
+                        ? "Create user"
+                        : "Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…"
+                    : t("auth.createBtn")}
               </button>
             </form>
 

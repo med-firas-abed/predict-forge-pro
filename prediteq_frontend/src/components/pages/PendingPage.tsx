@@ -11,6 +11,9 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
   const { lang, setLang, theme, setTheme, t } = useApp();
 
   const pendingUser = currentUser || allUsers.filter(u => u.status === "pending").sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  const assignedMachineLabel = pendingUser?.machineId
+    ? [pendingUser.machineCode, pendingUser.machineName].filter(Boolean).join(" - ") || pendingUser.machineId
+    : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
@@ -77,10 +80,10 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
                       : t("auth.user")}
                   </span>
                 </div>
-                {pendingUser.role === "user" && pendingUser.machineCode && (
+                {pendingUser.role === "user" && assignedMachineLabel && (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Machine</span>
-                    <span className="text-foreground font-medium">{pendingUser.machineCode}</span>
+                    <span className="text-foreground font-medium">{assignedMachineLabel}</span>
                   </div>
                 )}
               </div>

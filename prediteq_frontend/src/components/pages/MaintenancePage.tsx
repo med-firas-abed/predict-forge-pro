@@ -236,23 +236,23 @@ export function MaintenancePage() {
   const statusCards = useMemo(
     () => [
       {
-        title: "Planifiées",
+        title: "A venir",
         count: statusCounts.planifiee,
-        helper: "Toutes dates confondues · Tâches validées à venir",
+        helper: "Taches deja validees a venir",
         dot: "bg-primary",
         valueClassName: "text-primary",
       },
       {
         title: "En cours",
         count: statusCounts.en_cours,
-        helper: "Toutes dates confondues · Actions en cours d'exécution",
+        helper: "Interventions en cours d'execution",
         dot: "bg-warning",
         valueClassName: "text-warning",
       },
       {
-        title: "Terminées",
+        title: "Cloturees",
         count: statusCounts.terminee,
-        helper: "Toutes dates confondues · Interventions clôturées",
+        helper: "Interventions terminees",
         dot: "bg-success",
         valueClassName: "text-success",
       },
@@ -430,10 +430,10 @@ export function MaintenancePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="section-title">Calendrier de maintenance</div>
+          <div className="section-title">Calendrier des actions validees apres pronostic</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Le calendrier suit uniquement les tâches déjà validées. Les recommandations IA se consultent
-            séparément avant d'être envoyées ici.
+            Ici, on suit seulement les taches deja validees. Le pronostic decide d'abord, puis le
+            calendrier execute ce qui a ete confirme.
           </p>
         </div>
         <div className="flex gap-2">
@@ -449,7 +449,7 @@ export function MaintenancePage() {
             className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" />
-            Nouvelle tâche
+            Ajouter une tache manuelle
           </button>
         </div>
       </div>
@@ -473,10 +473,10 @@ export function MaintenancePage() {
             <div>
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-primary" />
-                <div className="section-title">Calendrier de maintenance</div>
+                <div className="section-title">Execution dans le calendrier</div>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Ici, on suit uniquement les interventions déjà planifiées, en cours ou terminées.
+                Cette vue montre uniquement les taches deja placees apres validation.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -580,7 +580,7 @@ export function MaintenancePage() {
             <div>
               <div className="flex items-center gap-2">
                 <Wrench className="h-4 w-4 text-primary" />
-                <div className="section-title">Planning de la date sélectionnée</div>
+                <div className="section-title">Ce jour-la</div>
               </div>
               <p className="mt-1 text-sm font-semibold text-foreground">
                 {formatDate(selectedDate)}
@@ -588,8 +588,8 @@ export function MaintenancePage() {
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {selectedDateEvents.length > 0
-                  ? `${selectedDateEvents.length} intervention${selectedDateEvents.length > 1 ? "s" : ""} prévue${selectedDateEvents.length > 1 ? "s" : ""} pour cette date.`
-                  : "Aucune intervention planifiée pour cette date."}
+                  ? `${selectedDateEvents.length} tache${selectedDateEvents.length > 1 ? "s" : ""} validee${selectedDateEvents.length > 1 ? "s" : ""} ou en cours pour cette date.`
+                  : "Aucune tache validee pour cette date."}
               </p>
             </div>
             <button
@@ -677,16 +677,16 @@ export function MaintenancePage() {
           ) : (
             <div className="space-y-3">
               <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-                Cette date est libre pour l'instant. Vous pouvez y ajouter une tâche directement, ou ouvrir
-                l'agent IA si vous souhaitez transformer une recommandation en tâche planifiée.
+                Cette date est libre pour l'instant. Vous pouvez y ajouter une tache manuelle, ou ouvrir le
+                plan d'action pour valider une recommandation IA avant de l'envoyer ici.
               </div>
 
               {fallbackEvents.length > 0 && (
                 <div className="rounded-xl border border-border bg-surface-3 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="industrial-label">Prochaines interventions prévues</div>
+                    <div className="industrial-label">Prochaines taches deja placees</div>
                     <span className="text-[0.7rem] text-muted-foreground">
-                      Après le {formatDate(selectedDate)}
+                      Apres le {formatDate(selectedDate)}
                     </span>
                   </div>
 
@@ -734,7 +734,7 @@ export function MaintenancePage() {
             <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                <div className="industrial-label">Recommandations IA en attente</div>
+                <div className="industrial-label">Pronostic en attente de validation</div>
               </div>
               <span className="rounded-full bg-card px-2.5 py-1 text-[0.6rem] font-semibold text-muted-foreground">
                 {isRefreshingInsights ? "Mise à jour..." : "Actualisation 5 s"}
@@ -742,14 +742,14 @@ export function MaintenancePage() {
             </div>
 
             <p className="mb-3 text-xs text-muted-foreground">
-              L'agent IA reste l'espace de décision. Le calendrier ne reçoit que les
-              tâches déjà validées ; l'ajout manuel reste possible ici.
+              Le plan d'action IA reste l'espace de decision. Une fois validees, les taches issues du
+              pronostic arrivent ici automatiquement ; l'ajout manuel reste aussi possible.
             </p>
 
             <div className="rounded-xl border border-border bg-card p-3">
               <div className="text-2xl font-bold text-foreground">{aiPendingSummary.total}</div>
               <div className="text-xs font-semibold text-foreground">
-                recommandation{aiPendingSummary.total > 1 ? "s" : ""} IA en attente
+                proposition{aiPendingSummary.total > 1 ? "s" : ""} en attente
               </div>
 
               <div className="mt-2.5 flex flex-wrap gap-1.5 text-[0.65rem]">
@@ -771,7 +771,7 @@ export function MaintenancePage() {
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90"
             >
               <Brain className="h-3.5 w-3.5" />
-              {isAdmin ? "Ouvrir l'agent IA" : "Ouvrir l'espace IA"}
+              {isAdmin ? "Ouvrir le plan d'action" : "Ouvrir l'espace IA"}
             </button>
           </div>
         </div>

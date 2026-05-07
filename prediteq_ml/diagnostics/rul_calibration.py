@@ -108,37 +108,21 @@ from typing import Optional, TypedDict, Literal
 # ─── Constantes d'ancrage (alignées sur prediteq_ml/config.py) ───────────────
 
 ANCHOR_CYCLES_PER_DAY: float = 654.0
-"""Rythme de référence de la calibration originale (cycles/jour).
+"""Rythme nominal du jumeau synthétique (cycles/jour)."""
 
-Dérivation :
-    RUL_HOURS_PER_DAY × cycles_par_heure
-    = 8 h × (3600 s/h ÷ T_CYCLE_S=44 s) = 8 × 81.82 = 654.5 cycles/jour
-Source : config.py — cycle ascensionnel mesuré chez Aroteq (technicien).
-Convention d'affichage, pas de mesure terrain Aroteq encore disponible."""
+TRAJECTORY_LEN_SIM_MIN: float = 800.0
+"""Longueur nominale d'une trajectoire RUL dans le dataset synthétique."""
 
-DEFAULT_FACTOR: float = 9.0
-"""Facteur de conversion sim-min → jours par défaut.
+SYNTHETIC_TIMELINE_DAYS: float = 365.0
+"""Calendrier restitué au runtime : 800 min-sim ↔ 365 jours."""
 
-Dérivation :
-    TRAJECTORY_LEN_MIN ÷ jours_de_référence = 800 / 90 ≈ 8.89 → arrondi 9
-Le 90 jours est une CONVENTION D'AFFICHAGE héritée de la calibration
-initiale du dataset synthétique (analogue à NASA CMAPSS, où 1 cycle =
-1 « engine flight »). Pas une dérivation physique. Sera recalibré après
-90 jours d'exploitation réelle (cf. `disclaimers.RUL_NATURE`).
+DEFAULT_FACTOR: float = TRAJECTORY_LEN_SIM_MIN / SYNTHETIC_TIMELINE_DAYS
+"""Facteur de conversion sim-min → jours sur la timeline restituée."""
 
-Utilisé en mode fallback quand le rythme observé est indisponible
-(machine fraîchement connectée, < 7 jours de données)."""
-
-CYCLES_PER_SIM_MIN: float = 73.6
-"""Conversion sim-min → cycles physiques.
-
-Dérivation (cohérente avec la convention 90 jours) :
-    ANCHOR_CYCLES_PER_DAY × 90 ÷ TRAJECTORY_LEN_MIN
-    = 654 × 90 ÷ 800 = 73.575 → arrondi 73.6
-
-Permet d'afficher l'unité PHM standard (cycles d'opération) à côté
-des jours calendaires. Le chiffre en cycles est PLUS HONNÊTE que les
-jours car il ne dépend pas de l'hypothèse 8h/jour."""
+CYCLES_PER_SIM_MIN: float = (
+    ANCHOR_CYCLES_PER_DAY * SYNTHETIC_TIMELINE_DAYS / TRAJECTORY_LEN_SIM_MIN
+)
+"""Conversion sim-min → cycles restants sur la même timeline synthétique."""
 
 
 # ─── Paramètres ISO 281 du roulement critique (sortie réducteur) ─────────────
@@ -227,12 +211,7 @@ Le seuil HI=0.80 est donc l'image directe de la frontière vibratoire.
 Référence: IEEE Std 1856-2017 § 6.2 (FPT-conditional prognosis)."""
 
 MIN_CYCLES_FOR_OBSERVED_RATE: float = 100.0
-"""Rythme minimum observé en-dessous duquel on considère la machine en mode
-warm-up (données insuffisantes pour une moyenne 7 j fiable). Sous ce seuil,
-on retombe sur DEFAULT_FACTOR = 9.
-
-Justification : 100 cycles/jour ≈ 1.2 h d'opération, en-dessous duquel
-le calcul d'une moyenne 7 j perd son sens statistique."""
+"""Constante conservée pour compatibilité d'appel avec l'ancienne API."""
 
 
 # ─── Zone helper ─────────────────────────────────────────────────────────────
@@ -278,20 +257,20 @@ MAINTENANCE_WINDOW: dict[str, str] = {
     #   - Degraded  : HI 0.3-0.6, dégradation active → planifier intervention
     #   - Critical  : HI<0.3, défaillance imminente → arrêt préventif
 
-    "Excellent": "Surveillance de routine — prochain contrôle planifié",
-    "Good":      "Inspection visuelle sous 30-90 jours • "
-                 "Planifier une révision sous 6-12 mois",
-    "Degraded":  "Maintenance préventive sous 2-4 semaines • "
-                 "Inspecter les roulements et l'alignement",
-    "Critical":  "ARRÊT IMMÉDIAT recommandé — "
-                 "risque de grippage dans les prochains jours",
+    "Excellent": "Surveillance de routine — contrôle au prochain passage préventif",
+    "Good":      "Inspection planifiée sous 1-3 mois • "
+                 "Suivre la tendance HI et la charge",
+    "Degraded":  "Maintenance ciblée sous 2-6 semaines • "
+                 "Inspecter roulements, alignement et charge",
+    "Critical":  "Intervention prioritaire sous 1-4 semaines • "
+                 "Préparer un arrêt si la tendance continue de chuter",
     "Unknown":   "Synchronisation des données en cours",
 }
 
 
 # ─── Types de retour ─────────────────────────────────────────────────────────
 
-ConversionSource = Literal["observed", "calibration_default"]
+ConversionSource = Literal["synthetic_scale"]
 L10Source = Literal["measured", "fallback"]
 
 
@@ -338,36 +317,19 @@ def observed_factor(cycles_per_day: Optional[float],
                     default: float = DEFAULT_FACTOR,
                     min_cycles: float = MIN_CYCLES_FOR_OBSERVED_RATE
                     ) -> tuple[float, ConversionSource]:
-    """Calcule le facteur sim-min → jour calendaire à partir du rythme observé.
+    """Retourne le facteur de décompression calendrier du runtime.
 
-    Formule :
-        factor = default × (cycles_per_day / anchor)
+    Les cycles/jour observés restent remontés à l'UI pour expliquer le rythme
+    d'usage de la machine, mais ils ne recontractent plus le RUL affiché.
+    On applique la même restitution temporelle à toutes les machines :
 
-    La constante `default` (9) correspond à la calibration originale supposant
-    `anchor` (654) cycles/jour. Si la machine fait plus de cycles/jour, elle
-    consomme sa vie plus vite → facteur plus grand → moins de jours pour le
-    même rul_min. Inversement.
+        800 min-sim → SYNTHETIC_TIMELINE_DAYS jours
 
-    Args:
-        cycles_per_day: rythme observé (moyenne 7 j glissants), ou None.
-        anchor: rythme calibration originale (654 cycles/jour).
-        default: facteur de fallback si données insuffisantes (9).
-        min_cycles: seuil sous lequel on considère le rythme insuffisant.
-
-    Returns:
-        (factor, source) où source ∈ {"observed", "calibration_default"}.
-
-    Edge cases :
-        - cycles_per_day=None         → (9.0, "calibration_default")
-        - cycles_per_day < 100        → (9.0, "calibration_default")
-        - cycles_per_day = 654        → (9.0, "observed")
-        - cycles_per_day = 1308       → (18.0, "observed")
+    Les paramètres `anchor` et `min_cycles` sont conservés pour compatibilité
+    d'appel, mais n'influencent plus le facteur.
     """
-    if cycles_per_day is None or cycles_per_day < min_cycles:
-        return (default, "calibration_default")
-    if anchor <= 0:
-        return (default, "calibration_default")
-    return (default * (cycles_per_day / anchor), "observed")
+    _ = cycles_per_day, anchor, min_cycles
+    return (default, "synthetic_scale")
 
 
 def convert_min_to_days(rul_min: float,
@@ -377,23 +339,24 @@ def convert_min_to_days(rul_min: float,
 
     Pipeline :
         1. Sanitisation (NaN, négatifs → 0)
-        2. Conversion sim-min → jours via rythme observé OU défaut
-        3. Mêmes opérations sur les cycles pour cohérence d'unité
+        2. Décompression uniforme sim-min → jours sur la timeline runtime
+        3. Conversion cohérente en cycles restants
 
     AUCUN multiplicateur zone-conditionnel. La sortie reflète exactement
     ce que le RF a prédit, traduit dans l'unité utilisateur (jours, cycles).
 
     Args:
         rul_min: sortie brute du RF (sim-min, plage typique 0-800).
-        cycles_per_day: rythme observé sur 7 j glissants, ou None.
+        cycles_per_day: rythme observé sur 7 j glissants, exposé pour
+            contexte mais non utilisé pour rescaler le RUL.
 
     Returns:
         ConversionResult avec :
           rul_days                  — jours calendaires
           cycles_remaining          — cycles d'usage avant maintenance
-          factor_used               — facteur observé (transparence)
+          factor_used               — facteur de la timeline restituée
           cycles_per_day_observed   — rythme observé (pour disclaimer UI)
-          source                    — "observed" ou "calibration_default"
+          source                    — "synthetic_scale"
 
     Garanties :
         - rul_days ≥ 0 (clip)
@@ -404,7 +367,7 @@ def convert_min_to_days(rul_min: float,
     # hors distribution (zone Critique HI < 0.3).
     safe_min = max(0.0, float(rul_min)) if rul_min == rul_min else 0.0  # NaN check
 
-    # Conversion observée (rythme machine vs ÷9 figé)
+    # Décompression uniforme du temps synthétique.
     factor, source = observed_factor(cycles_per_day)
     rul_days = safe_min / factor if factor > 0 else 0.0
     cycles_remaining = safe_min * CYCLES_PER_SIM_MIN
@@ -493,15 +456,15 @@ def _self_test() -> None:
     assert should_show_rul(0.80) is False, "Boundary 0.80 → hide (≥ threshold)"
     assert should_show_rul(0.7999) is True, "Just below 0.80 → show"
 
-    # 2. Observed factor
+    # 2. Synthetic timeline factor
     f, src = observed_factor(654)
-    assert abs(f - 9.0) < 1e-6 and src == "observed", "Anchor → factor 9"
+    assert abs(f - DEFAULT_FACTOR) < 1e-6 and src == "synthetic_scale"
     f, src = observed_factor(1308)  # double rate
-    assert abs(f - 18.0) < 1e-6 and src == "observed", "Double rate → factor 18"
+    assert abs(f - DEFAULT_FACTOR) < 1e-6 and src == "synthetic_scale"
     f, src = observed_factor(None)
-    assert f == 9.0 and src == "calibration_default", "None → fallback 9"
+    assert abs(f - DEFAULT_FACTOR) < 1e-6 and src == "synthetic_scale"
     f, src = observed_factor(50)  # below min_cycles
-    assert f == 9.0 and src == "calibration_default", "Low rate → fallback"
+    assert abs(f - DEFAULT_FACTOR) < 1e-6 and src == "synthetic_scale"
 
     # 3. hi_to_zone helper
     assert hi_to_zone(0.92) == "Excellent"
@@ -515,35 +478,30 @@ def _self_test() -> None:
     assert hi_to_zone(0.0) == "Critical"
     assert hi_to_zone(None) == "Unknown"
 
-    # 4. Convert min to days — scenarios for the 3 demo machines
-    # ASC-B2: HI=0.68 (Good zone), RF predicts 480 sim-min, 1100 cycles/day
-    # factor = 9 × (1100/654) = 15.14
-    # rul_days = 480 / 15.14 = 31.7
+    # 4. Convert min to days — timeline restored uniformly
+    # 800 sim-min ↔ 365 jours, donc 480 sim-min ↔ 219.0 jours
     res = convert_min_to_days(480.0, 1100.0)
-    assert abs(res["rul_days"] - 31.7) < 0.5, \
-        f"ASC-B2 days: {res['rul_days']} ≠ 31.7"
-    assert res["source"] == "observed"
-    assert abs(res["factor_used"] - 15.14) < 0.05
-    # cycles : 480 × 73.6 = 35 328
-    assert res["cycles_remaining"] == round(480 * 73.6)
+    assert abs(res["rul_days"] - 219.0) < 0.5, \
+        f"ASC-B2 days: {res['rul_days']} ≠ 219.0"
+    assert res["source"] == "synthetic_scale"
+    assert abs(res["factor_used"] - DEFAULT_FACTOR) < 0.05
+    assert res["cycles_remaining"] == round(480 * CYCLES_PER_SIM_MIN)
 
-    # ASC-C3: HI=0.22 (Critical zone), 45 sim-min, 400 cycles/day
-    # factor = 9 × (400/654) = 5.50, rul_days = 45/5.50 = 8.2
+    # ASC-C3: 45 sim-min ↔ 20.5 jours
     res = convert_min_to_days(45.0, 400.0)
-    assert abs(res["rul_days"] - 8.2) < 0.5, \
-        f"ASC-C3: {res['rul_days']} ≠ 8.2"
-    assert res["source"] == "observed"
+    assert abs(res["rul_days"] - 20.5) < 0.5, \
+        f"ASC-C3: {res['rul_days']} ≠ 20.5"
+    assert res["source"] == "synthetic_scale"
 
-    # Hypothèse Degraded zone : HI=0.45, RF prédit 250 sim-min, 800 cyc/j
-    # factor = 9 × (800/654) = 11.0, rul_days = 250/11 = 22.7
+    # Hypothèse Degraded zone : 250 sim-min ↔ 114.1 jours
     res = convert_min_to_days(250.0, 800.0)
-    assert abs(res["rul_days"] - 22.7) < 0.5, \
-        f"Degraded: {res['rul_days']} ≠ 22.7"
+    assert abs(res["rul_days"] - 114.1) < 0.5, \
+        f"Degraded: {res['rul_days']} ≠ 114.1"
 
     # Edge cases
     res = convert_min_to_days(540.0, None)  # warm-up fallback
-    assert res["source"] == "calibration_default"
-    assert res["rul_days"] == 60.0  # 540/9
+    assert res["source"] == "synthetic_scale"
+    assert res["rul_days"] == 246.4
     res = convert_min_to_days(-5.0, 1000.0)  # negative safety
     assert res["rul_days"] == 0.0
     res = convert_min_to_days(float('nan'), 1000.0)  # NaN
@@ -551,9 +509,9 @@ def _self_test() -> None:
 
     # Maintenance window pour chaque zone
     assert "Surveillance de routine" in MAINTENANCE_WINDOW["Excellent"]
-    assert "30-90 jours" in MAINTENANCE_WINDOW["Good"]
-    assert "2-4 semaines" in MAINTENANCE_WINDOW["Degraded"]
-    assert "ARRÊT IMMÉDIAT" in MAINTENANCE_WINDOW["Critical"]
+    assert "1-3 mois" in MAINTENANCE_WINDOW["Good"]
+    assert "2-6 semaines" in MAINTENANCE_WINDOW["Degraded"]
+    assert "Intervention prioritaire" in MAINTENANCE_WINDOW["Critical"]
     assert "Synchronisation" in MAINTENANCE_WINDOW["Unknown"]
 
     # 5. L10 adjusted (cube law ISO 281)
@@ -586,7 +544,7 @@ def _self_test() -> None:
     res = l10_adjusted_years(0.01)  # extreme low load → bounded to 50 years
     assert res["years"] == 50.0
 
-    print("✅ All rul_calibration self-tests passed")
+    print("All rul_calibration self-tests passed")
 
 
 if __name__ == "__main__":

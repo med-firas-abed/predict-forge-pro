@@ -47,7 +47,7 @@ const T = {
     sub: { fr: "PrediTeq équipe vos machines de capteurs intelligents et transforme leurs signaux en décisions de maintenance plus tôt, plus clairement et avec un niveau de confiance explicite.", en: "PrediTeq equips your machines with smart sensors and turns their signals into earlier, clearer maintenance decisions with explicit confidence." },
     cta: { fr: "Essai Gratuit", en: "Start Free Trial" },
     demo: { fr: "Voir la démo", en: "Watch Demo" },
-    hi: { fr: "Indice de Santé", en: "Health Index" },
+    hi: { fr: "Indice de santé (HI)", en: "Machine health (HI)" },
     optimal: { fr: "Optimal", en: "Optimal" },
     rul: { fr: "Prédiction RUL (Durée de Vie Restante)", en: "RUL Prediction (Remaining Useful Life)" },
     days: { fr: "JOURS", en: "DAYS" }, hours: { fr: "HEURES", en: "HOURS" }, mins: { fr: "MIN", en: "MINS" }, secs: { fr: "SEC", en: "SECS" },
@@ -61,13 +61,13 @@ const T = {
     solutionLabel: { fr: "Solution :", en: "Solution:" },
     solutionText: { fr: "Une plateforme SaaS prédictive multi-capteurs combinant la détection d'anomalies par ", en: "An AI-powered predictive SaaS platform combining " },
     solutionIF: { fr: "Isolation Forest", en: "Isolation Forest" },
-    solutionHI: { fr: "Indice de Santé", en: "Health Index" },
+    solutionHI: { fr: "Indice de santé (HI)", en: "Machine health (HI)" },
     solutionRUL: { fr: "Prédiction RUL par Random Forest", en: "Random Forest RUL" },
     solutionValidated: { fr: "— validé sur le benchmark NASA C-MAPSS", en: "— validated on NASA C-MAPSS benchmark" },
     benefitsLabel: { fr: "Avantages :", en: "Benefits:" },
     benefits: {
-      fr: ["Priorisation plus précoce des risques machine", "Indice de Santé en temps réel (0–100 %) par machine", "Prédictions RUL avec intervalles de confiance", "Rapports de maintenance générés à la demande", "Surveillance multi-site depuis un seul tableau de bord"],
-      en: ["Earlier prioritization of machine risk", "Real-time Health Index (0–100%) for every machine", "RUL predictions with confidence intervals", "On-demand maintenance reports", "Multi-site monitoring from a single dashboard"],
+      fr: ["Priorisation plus précoce des risques machine", "Indice de santé (HI) en temps réel (0–100 %) par machine", "Prédictions RUL avec intervalles de confiance", "Rapports de maintenance générés à la demande", "Surveillance multi-site depuis un seul tableau de bord"],
+      en: ["Earlier prioritization of machine risk", "Real-time machine health (HI) for every machine", "RUL predictions with confidence intervals", "On-demand maintenance reports", "Multi-site monitoring from a single dashboard"],
     },
   },
   features: {
@@ -75,7 +75,7 @@ const T = {
     title: { fr: "Intelligence de Grade Industriel", en: "Industrial-Grade Intelligence" },
     sub: { fr: "Des capacités de surveillance avancées conçues pour les écosystèmes industriels complexes.", en: "Deep monitoring capabilities designed for complex industrial ecosystems." },
     items: [
-      { title: { fr: "Indice de Santé", en: "Health Index" }, desc: { fr: "Calcul continu de la viabilité des équipements via la télémétrie multi-capteurs installée sur vos machines.", en: "Continuous calculation of asset viability using multi-parameter sensor telemetry installed on your machines." } },
+      { title: { fr: "Indice de santé (HI)", en: "Machine health (HI)" }, desc: { fr: "Calcul continu de la santé machine via la télémétrie multi-capteurs installée sur vos machines.", en: "Continuous calculation of machine health using multi-parameter sensor telemetry installed on your machines." } },
       { title: { fr: "Prédiction RUL", en: "RUL Prediction" }, desc: { fr: "Nos modèles IA prédisent la Durée de Vie Restante avec des estimations précises basées sur les patterns d'usure actuels.", en: "AI models predict Remaining Useful Life with precise failure window estimates based on current wear patterns." } },
       { title: { fr: "Détection d'Anomalies", en: "Anomaly Detection" }, desc: { fr: "Identification instantanée des déviations subtiles dans les signatures thermiques, vibratoires ou acoustiques.", en: "Instant identification of subtle deviations in thermal, vibration, or acoustic signatures using unsupervised learning." } },
       { title: { fr: "Alertes Intelligentes", en: "Smart Alerts" }, desc: { fr: "Notifications contextuelles par Email lorsque les seuils critiques sont approchés. Niveaux URGENCE, SURVEILLANCE, OK.", en: "Context-aware notifications via Email when critical thresholds are approached. URGENCE, SURVEILLANCE, OK levels." } },
@@ -112,8 +112,8 @@ const T = {
     sub: { fr: "Choisissez l'offre adaptée à votre parc machines. Capteurs IoT inclus dans chaque formule.", en: "Choose the plan that fits your industrial footprint. IoT sensors included in every plan." },
     mo: { fr: "/mois", en: "/mo" },
     plans: [
-      { name: { fr: "Essentiel", en: "Starter" }, price: "990 DT", sub: { fr: "Jusqu'à 5 machines", en: "Up to 5 machines" }, features: { fr: ["Kit capteurs IoT (température, vibration)", "Indice de Santé en temps réel", "Prédiction RUL basique", "Alertes par email", "Tableau de bord 1 site"], en: ["IoT sensor kit (temperature, vibration)", "Real-time Health Index", "Basic RUL prediction", "Email alerts", "1-site dashboard"] }, popular: false },
-      { name: { fr: "Professionnel", en: "Professional" }, price: "2 490 DT", sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de Santé avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA à la demande"], en: ["Advanced sensor kit (6 parameters)", "Advanced Health Index", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "On-demand AI reports"] }, popular: true },
+      { name: { fr: "Essentiel", en: "Starter" }, price: "990 DT", sub: { fr: "Jusqu'à 5 machines", en: "Up to 5 machines" }, features: { fr: ["Kit capteurs IoT (température, vibration)", "Indice de santé (HI) en temps réel", "Prédiction RUL basique", "Alertes par email", "Tableau de bord 1 site"], en: ["IoT sensor kit (temperature, vibration)", "Real-time machine health (HI)", "Basic RUL prediction", "Email alerts", "1-site dashboard"] }, popular: false },
+      { name: { fr: "Professionnel", en: "Professional" }, price: "2 490 DT", sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de santé (HI) avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA à la demande"], en: ["Advanced sensor kit (6 parameters)", "Advanced machine health (HI)", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "On-demand AI reports"] }, popular: true },
       { name: { fr: "Entreprise", en: "Enterprise" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Machines illimitées", en: "Unlimited machines" }, features: { fr: ["Tout l'offre Professionnel", "Capteurs sur-mesure pour vos lignes", "Entraînement de modèle IA personnalisé", "Déploiement on-premise possible", "Tableau de bord en marque blanche", "Rapports IA en temps réel"], en: ["Everything in Professional", "Custom sensors for your production lines", "Custom AI model training", "On-premise deployment option", "White-label dashboard", "Real-time AI reports"] }, popular: false },
     ],
   },
@@ -382,7 +382,7 @@ function Hero({ onGetStarted }: { onGetStarted: () => void }) {
 
         {/* Live dashboard mockup */}
         <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-          {/* Health Index Card */}
+          {/* Machine health card */}
           <div className={`rounded-2xl border backdrop-blur-sm p-6 ${dark ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'}`}>
             <div className="flex items-center justify-between mb-4">
               <span className={`text-xs font-semibold uppercase tracking-wider ${dark ? 'text-gray-300' : 'text-gray-600'}`}>{T.hero.hi[lang]}</span>

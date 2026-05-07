@@ -1,12 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 006 — RUL v2 calibration metrics
+-- 006 — Runtime calibration metrics
 -- Run in Supabase SQL Editor AFTER 005_integrity_fixes.sql
 -- Safe to run multiple times (IF NOT EXISTS guards).
 --
--- Adds 3 columns to `machines` to support the FPT-conditional RUL display
--- introduced in v2 of the diagnostics layer:
+-- Adds 3 columns to `machines` to support the calibrated RUL display
+-- and the engineering reference context introduced in the diagnostics layer:
 --   • power_avg_30j   — moyenne glissante 30 j de la puissance pendant les
---                        phases ascensionnelles (kW). Sert au calcul du L10
+--                        phases ascensionnelles (kW). Sert au calcul de la
+--                        référence roulement
 --                        ajusté ISO 281:2007 §7 (cube law on dynamic load).
 --   • cycles_avg_7j   — moyenne glissante 7 j du nombre d'ascensions par jour
 --                        (cycles/jour). Sert à la conversion sim-min → jours
@@ -20,7 +21,7 @@
 --
 -- Toutes les colonnes sont NULLables : un nouveau code machine apparaît avec
 -- power_avg_30j = NULL, ce qui est interprété par rul_calibration.py comme
--- « warm-up — utiliser P_nominal=1.51 kW et facteur ÷9 par défaut ».
+-- « warm-up — utiliser P_nominal=1.51 kW et l'échelle synthétique par défaut ».
 -- ═══════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE machines

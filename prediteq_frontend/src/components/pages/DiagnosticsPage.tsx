@@ -18,13 +18,26 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/contexts/AppContext";
 import { STATUS_CONFIG } from "@/data/machines";
-import { useDiagnostics } from "@/hooks/useDiagnostics";
+import {
+  getBearingReference,
+  getCalibratedRul,
+  normalizeCalibratedRulMode,
+  useDiagnostics,
+} from "@/hooks/useDiagnostics";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { useMachineSensors } from "@/hooks/useMachineSensors";
 import { useMachines } from "@/hooks/useMachines";
 import { inferComponentFocus } from "@/lib/componentInference";
 import { getSurfaceableMachineDemoScenario } from "@/lib/demoScenario";
-import { formatMachineFloorLabel } from "@/lib/machinePresentation";
+import {
+  describeAudienceUsageRegime,
+  formatAudienceAxisLabel,
+  formatAudienceConfidenceLabel,
+  formatAudienceFeatureLabel,
+  normalizeAudienceToken,
+  shortenAudienceAction,
+  shortenAudienceWindow,
+} from "@/lib/juryNarrative";
 import { repairText } from "@/lib/repairText";
 import { buildRulDisplay } from "@/lib/rulDisplay";
 
@@ -39,13 +52,13 @@ const AXIS_LABELS = {
   thermal: { fr: "Thermique", en: "Thermal", ar: "Thermal" },
   vibration: { fr: "Vibration", en: "Vibration", ar: "Vibration" },
   load: { fr: "Charge", en: "Load", ar: "Load" },
-  variability: { fr: "Variabilité", en: "Variability", ar: "Variability" },
+  variability: { fr: "Régime instable", en: "Unstable operating pattern", ar: "Unstable operating pattern" },
 } as const;
 
 const CONFIDENCE_LABELS = {
-  high: { fr: "Confiance élevée", en: "High confidence", ar: "High confidence" },
-  medium: { fr: "Confiance moyenne", en: "Medium confidence", ar: "Medium confidence" },
-  low: { fr: "Confiance faible", en: "Low confidence", ar: "Low confidence" },
+  high: { fr: "Lecture solide", en: "Solid reading", ar: "Solid reading" },
+  medium: { fr: "Lecture utilisable", en: "Usable reading", ar: "Usable reading" },
+  low: { fr: "À confirmer sur site", en: "Confirm on site", ar: "Confirm on site" },
 } as const;
 
 const STATUS_LABELS = {
@@ -56,11 +69,7 @@ const STATUS_LABELS = {
 } as const;
 
 function normalizeToken(value: string | null | undefined) {
-  return repairText(value ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+  return normalizeAudienceToken(value);
 }
 
 function normalizeStatusKey(value: string | null | undefined): keyof typeof STATUS_LABELS | null {
@@ -253,12 +262,15 @@ export function DiagnosticsPage() {
   const selectedInsight = selected ? byMachineId[selected.id] : null;
   const selectedScenario = getSurfaceableMachineDemoScenario(selected);
   const cfg = selected ? STATUS_CONFIG[selected.status] : STATUS_CONFIG.ok;
-  const predictionMode =
-    diagnostics?.rul_v2?.mode ?? selectedInsight?.predictionMode ?? selected?.rulMode ?? null;
-  const prediction = diagnostics?.rul_v2?.prediction ?? null;
+  const calibratedRul = getCalibratedRul(diagnostics);
+  const bearingReference = getBearingReference(calibratedRul);
+  const predictionMode = normalizeCalibratedRulMode(
+    calibratedRul?.mode ?? selectedInsight?.predictionMode ?? selected?.rulMode ?? null,
+  );
+  const prediction = calibratedRul?.prediction ?? null;
   const maintenanceWindow =
     repairText(
-      diagnostics?.rul_v2?.maintenance_window ??
+      calibratedRul?.maintenance_window ??
         selectedInsight?.maintenanceWindow ??
         selected?.decision?.maintenanceWindow ??
         null,
@@ -270,6 +282,7 @@ export function DiagnosticsPage() {
         selected?.decision?.topDriver ??
         null,
     ) || null;
+  const topDriverLabel = topDriver ? formatAudienceFeatureLabel(topDriver, l) : null;
   const dominantAxis =
     diagnostics?.stress_index?.dominant ??
     selectedInsight?.dominantAxis ??
@@ -303,28 +316,34 @@ export function DiagnosticsPage() {
   const statusLabel = statusKey
     ? l(STATUS_LABELS[statusKey].fr, STATUS_LABELS[statusKey].en, STATUS_LABELS[statusKey].ar)
     : repairText(selected.status);
-  const confidenceLabel = confidenceKey
-    ? l(
-        CONFIDENCE_LABELS[confidenceKey].fr,
-        CONFIDENCE_LABELS[confidenceKey].en,
-        CONFIDENCE_LABELS[confidenceKey].ar,
-      )
-    : confidenceLevel
-      ? repairText(String(confidenceLevel))
+  const confidenceLabel = confidenceLevel
+    ? formatAudienceConfidenceLabel(confidenceLevel, l)
+    : confidenceKey
+      ? l(
+          CONFIDENCE_LABELS[confidenceKey].fr,
+          CONFIDENCE_LABELS[confidenceKey].en,
+          CONFIDENCE_LABELS[confidenceKey].ar,
+        )
       : null;
-  const dominantAxisLabel = axisKey
-    ? l(AXIS_LABELS[axisKey].fr, AXIS_LABELS[axisKey].en, AXIS_LABELS[axisKey].ar)
-    : dominantAxis
-      ? repairText(String(dominantAxis))
+  const dominantAxisLabel = dominantAxis
+    ? formatAudienceAxisLabel(dominantAxis, l)
+    : axisKey
+      ? l(AXIS_LABELS[axisKey].fr, AXIS_LABELS[axisKey].en, AXIS_LABELS[axisKey].ar)
       : null;
   const dataSourceLabel =
     selectedInsight?.dataSource === "live_runtime"
       ? l("Flux en direct", "Live stream", "Live stream")
       : selectedInsight?.dataSource === "simulator_demo"
-        ? l("Replay démo", "Demo replay", "Demo replay")
+        ? l("Replay démo calibré", "Calibrated demo replay", "Calibrated demo replay")
         : selectedInsight?.dataSource === "persisted_reference"
           ? l("Référence persistée", "Reference snapshot", "Reference snapshot")
           : l("Flux en attente", "Waiting for stream", "Waiting for stream");
+  const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
+  const demoPipelineNote = l(
+    "Lecture issue d'un replay demo calibre. En exploitation reelle, la meme chaine utilisera les vraies mesures vibration, puissance, temperature et humidite.",
+    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
+    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
+  );
   const freshnessLabel =
     selectedInsight?.updatedAt != null
       ? new Date(selectedInsight.updatedAt).toLocaleString(numberLocale, {
@@ -339,7 +358,7 @@ export function DiagnosticsPage() {
     machine: selected,
     predictionMode,
     prediction,
-    l10Years: diagnostics?.rul_v2?.l10?.years_adjusted ?? null,
+    referenceLifetimeYears: bearingReference?.years_adjusted ?? null,
     localize: l,
   });
 
@@ -384,7 +403,8 @@ export function DiagnosticsPage() {
   const warningDiagnosis = diagnoses.find((diagnosis) => diagnosis.severity === "warning") ?? null;
   const expertDiagnosis = criticalDiagnosis ?? warningDiagnosis ?? diagnoses[0] ?? null;
   const hasLivePrediction = predictionMode === "prediction" && Boolean(prediction);
-  const isReferenceMode = predictionMode === "no_prediction" || rulDisplay.source === "l10_reference";
+  const isReferenceMode =
+    predictionMode === "reference_only" || rulDisplay.source === "reference_lifetime";
   const prognosisBadgeLabel = hasLivePrediction
     ? confidenceLabel ?? l("Pronostic live", "Live prognosis", "Live prognosis")
     : isReferenceMode
@@ -438,9 +458,9 @@ export function DiagnosticsPage() {
         .slice(0, 4)
         .map((contribution) => ({
           ...contribution,
-          feature: repairText(contribution.feature),
+          feature: formatAudienceFeatureLabel(contribution.feature, l),
         })),
-    [diagnostics?.rul_explain?.contributions],
+    [diagnostics?.rul_explain?.contributions, l],
   );
 
   const maxExplainImpact = Math.max(
@@ -467,6 +487,48 @@ export function DiagnosticsPage() {
   const componentEvidence = Array.from(
     new Set([...componentFocus.evidence, ...cleanedEvidence.slice(0, 3)]),
   ).slice(0, 5);
+  const usageRegimeLabel = describeAudienceUsageRegime(selectedScenario, l);
+  const sameFleetPrefix = l(
+    "Meme age de flotte, mais",
+    "Same fleet age, but",
+    "Same fleet age, but",
+  );
+  const componentFamilyToken = normalizeAudienceToken(componentFocus.familyLabel);
+  const dominantCueLabel = repairText(expertDiagnosis?.cause ?? topDriverLabel ?? componentFocus.primarySignal);
+  const decisionActionLead = shortenAudienceAction(decisionActionText, componentFocus.familyLabel, l);
+  const decisionSummaryPlain =
+    selected.status === "critical"
+      ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: la marge restante est courte et l'intervention ne doit pas attendre trop longtemps.`
+      : selected.status === "degraded"
+        ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: la machine reste exploitable, mais la marge se reduit.`
+        : `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: l'etat reste compatible avec une exploitation normale.`;
+  const decisionReasonPlain = needsExpertEscalation
+    ? `${dominantCueLabel} reste le signal le plus fort et justifie un controle prioritaire.`
+    : selected.status === "critical"
+      ? `${dominantCueLabel} oriente d'abord le controle vers ${componentFocus.familyLabel.toLowerCase()}.`
+      : selected.status === "degraded"
+        ? `${dominantCueLabel} et ${dominantAxisLabel?.toLowerCase() ?? l("les signaux recents", "recent signals", "recent signals")} demandent un controle cible.`
+        : l(
+            "Les signaux recents restent contenus, avec une surveillance normale.",
+            "Recent signals remain contained, with routine follow-up.",
+            "Recent signals remain contained, with routine follow-up.",
+          );
+  const decisionWindowShort = shortenAudienceWindow(decisionWindowValue, selected.status, l);
+  const decisionInterventionShort =
+    componentFamilyToken.includes("moteur") || componentFamilyToken.includes("alimentation")
+      ? l("Controle moteur cible", "Targeted motor check", "Targeted motor check")
+      : componentFamilyToken.includes("roulement") || componentFamilyToken.includes("transmission")
+        ? l("Controle mecanique cible", "Targeted mechanical check", "Targeted mechanical check")
+        : componentFamilyToken.includes("echauff") || componentFamilyToken.includes("refroid")
+          ? l("Controle thermique cible", "Targeted thermal check", "Targeted thermal check")
+          : l("Controle cible", "Targeted check", "Targeted check");
+  const decisionStatusShort = needsExpertEscalation
+    ? l("Priorite terrain", "Field priority", "Field priority")
+    : hasLivePrediction
+      ? confidenceLabel ?? l("Lecture en cours", "Reading in progress", "Reading in progress")
+      : isReferenceMode
+        ? l("Reference stable", "Stable reference", "Stable reference")
+        : l("Lecture en preparation", "Reading in preparation", "Reading in preparation");
 
   if (isLoadingMachines && !selected) {
     return (
@@ -510,9 +572,9 @@ export function DiagnosticsPage() {
             <div className="section-title">{l("Diagnostic avancé", "Advanced diagnostics", "Advanced diagnostics")}</div>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-secondary-foreground">
               {l(
-                "Vue détaillée : HI, RUL, stress, alertes et action conseillée.",
-                "Detailed view: HI, RUL, stress, alerts, and suggested action.",
-                "Detailed view: HI, RUL, stress, alerts, and suggested action.",
+                "Vue detaillee : quoi verifier, pourquoi, et sous quel delai. En demo, la lecture vient d'un replay calibre; en exploitation, la meme chaine lira les mesures terrain.",
+                "Detailed view: what to check, why, and how soon. In demo mode, the reading comes from a calibrated replay; in operation, the same pipeline will read field measurements.",
+                "Detailed view: what to check, why, and how soon. In demo mode, the reading comes from a calibrated replay; in operation, the same pipeline will read field measurements.",
               )}
             </p>
           </div>
@@ -565,13 +627,22 @@ export function DiagnosticsPage() {
             </div>
           </div>
         </div>
+
+      {isDemoReplay ? (
+        <div className="rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
+          <span className="font-semibold text-foreground">
+            {l("Lecture demo", "Demo reading", "Demo reading")}
+          </span>
+          : {demoPipelineNote}
+        </div>
+      ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            <div className="section-title">{l("Décision de maintenance", "Maintenance decision", "Maintenance decision")}</div>
+            <div className="section-title">{l("Action prioritaire", "Priority action", "Priority action")}</div>
           </div>
 
             <div className="rounded-xl border border-border bg-surface-3 px-4 py-4">
@@ -579,28 +650,28 @@ export function DiagnosticsPage() {
                 {l("Action", "Action", "Action")}
               </div>
               <div className="mt-2 text-lg font-semibold leading-relaxed text-foreground">
-                {decisionActionText}
+                {decisionActionLead}
               </div>
               <div className="mt-3 text-sm leading-relaxed text-secondary-foreground">
-                {decisionSummaryText}
+                {decisionSummaryPlain}
               </div>
               <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
-                {decisionReasonText}
+                {decisionReasonPlain}
               </div>
             </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <MiniMetric
               label={l("Fenêtre", "Suggested window", "Suggested window")}
-              value={decisionWindowValue}
+              value={decisionWindowShort}
             />
             <MiniMetric
               label={l("Intervention", "Intervention type", "Intervention type")}
-              value={decisionInterventionValue}
+              value={decisionInterventionShort}
             />
             <MiniMetric
-              label={decisionStatusLabel}
-              value={decisionStatusValue}
+              label={l("Lecture", "Reading", "Reading")}
+              value={decisionStatusShort}
             />
           </div>
         </div>
@@ -627,7 +698,7 @@ export function DiagnosticsPage() {
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <MiniMetric
-              label={l("Health Index", "Health Index", "Health Index")}
+              label={l("Santé observée (HI)", "Observed health (HI)", "Observed health (HI)")}
               value={
                 selected.hi != null
                   ? `${Math.round(selected.hi * 100)}%`
@@ -655,20 +726,20 @@ export function DiagnosticsPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
           <div className="mb-4 flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-primary" />
-            <div className="section-title">{l("Zone à vérifier", "Inspection target", "Inspection target")}</div>
+            <div className="section-title">{l("Où regarder d'abord", "Where to look first", "Where to look first")}</div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <MiniMetric
-              label={l("Zone à vérifier", "Inspection target", "Inspection target")}
+              label={l("Cible", "Target", "Target")}
               value={componentFocus.familyLabel}
             />
             <MiniMetric
-              label={l("Indice clé", "Key signal", "Key signal")}
+              label={l("Signal", "Signal", "Signal")}
               value={componentFocus.primarySignal}
             />
             <MiniMetric
-              label={l("Orientation", "Direction", "Direction")}
+              label={l("Niveau", "Level", "Level")}
               value={componentFocus.confidenceLabel}
             />
           </div>
@@ -692,7 +763,7 @@ export function DiagnosticsPage() {
           {componentEvidence.length > 0 ? (
             <div className="mt-4">
               <div className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
-                {l("Repères", "Cues", "Cues")}
+                {l("Indices lus", "Observed cues", "Observed cues")}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {componentEvidence.map((item) => (
@@ -732,7 +803,7 @@ export function DiagnosticsPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
           <div className="mb-4 flex items-center gap-2">
             <Wrench className="h-4 w-4 text-primary" />
-            <div className="section-title">{l("Alertes techniques", "Expert diagnostics", "Expert diagnostics")}</div>
+            <div className="section-title">{l("Justification technique", "Technical rationale", "Technical rationale")}</div>
           </div>
 
           {isLoadingDiagnostics && !diagnostics ? (
@@ -784,9 +855,11 @@ export function DiagnosticsPage() {
             />
             <MiniMetric
               label={
-                selected.currSource === "estimated_from_power"
-                  ? l("Courant estimé", "Estimated current", "Estimated current")
-                  : l("Courant", "Current", "Current")
+                selected.currSource === "derived_ascent_power"
+                  ? l("Courant de montée", "Ascent current", "Ascent current")
+                  : selected.currSource === "estimated_from_power"
+                    ? l("Courant estimé", "Estimated current", "Estimated current")
+                    : l("Courant", "Current", "Current")
               }
               value={`${formatNumber(latestSensorPoint?.curr ?? selected.curr, 1)} A`}
             />
@@ -795,13 +868,13 @@ export function DiagnosticsPage() {
               value={`${formatNumber(latestSensorPoint?.temp ?? selected.temp, 1)} C`}
             />
             <MiniMetric
-              label={l("Cycles du jour", "Cycles today", "Cycles today")}
-              value={selected.cycles != null ? selected.cycles.toLocaleString(numberLocale) : "-"}
-              sub={formatMachineFloorLabel(selected.floors, {
-                singular: l("étage", "floor", "floor"),
-                plural: l("étages", "floors", "floors"),
-                fallback: l("Étages non renseignés", "Floor count unavailable", "Floor count unavailable"),
-              })}
+              label={l("Cadence de service", "Service pace", "Service pace")}
+              value={
+                selectedScenario?.cycles_per_day != null
+                  ? `${Math.round(selectedScenario.cycles_per_day).toLocaleString(numberLocale)} ${l("cycles/jour", "cycles/day", "cycles/day")}`
+                  : "-"
+              }
+              sub={usageRegimeLabel}
             />
           </div>
 

@@ -24,6 +24,13 @@ interface RapportIAPageProps {
   embedded?: boolean;
 }
 
+function cleanReportTitle(value: string) {
+  return repairText(value).replace(
+    /\s+-\s+(Vue jury|Vue technicien|Vue double|Jury view|Technician view|Dual view)(?=\s+[—-])/i,
+    "",
+  );
+}
+
 export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   const { lang } = useApp();
   const { currentUser } = useAuth();
@@ -35,7 +42,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   );
   const [period, setPeriod] = useState<ReportPeriod>("7d");
   const [reportLang, setReportLang] = useState<"fr" | "en" | "ar">(lang);
-  const [reportAudience, setReportAudience] = useState<ReportAudience>("dual");
+  const reportAudience: ReportAudience = "dual";
   const [reportText, setReportText] = useState("");
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -50,10 +57,10 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
     { value: "15d", label: l("15 jours", "15 days", "15 يوما") },
     { value: "30d", label: l("30 jours", "30 days", "30 يوما") },
   ];
-  const audienceOptions: { value: ReportAudience; label: string }[] = [
-    { value: "jury", label: l("Jury", "Jury", "Jury") },
-    { value: "dual", label: l("Les deux", "Both", "Both") },
-    { value: "technician", label: l("Technicien", "Technician", "Technician") },
+  const languageOptions: { value: "fr" | "en" | "ar"; label: string }[] = [
+    { value: "fr", label: "FR" },
+    { value: "en", label: "EN" },
+    { value: "ar", label: "AR" },
   ];
 
   const getPeriodLabel = (value: string) =>
@@ -186,8 +193,10 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="section-title">{l("Rapport IA", "AI Report", "تقرير الذكاء الاصطناعي")}</div>
+    <div className={embedded ? "space-y-5" : "space-y-6"}>
+      {!embedded ? (
+        <div className="section-title">{l("Rapport IA", "AI Report", "تقرير الذكاء الاصطناعي")}</div>
+      ) : null}
 
       {isAdmin && !embedded && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
@@ -216,7 +225,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.9fr]">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-premium">
           <div className="mb-5 flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
@@ -236,7 +245,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
             </div>
           </div>
 
-          <div className={`mb-6 grid grid-cols-1 gap-4 ${isAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+          <div className={`mb-5 grid grid-cols-1 gap-4 ${isAdmin ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2"}`}>
             {isAdmin && (
               <div>
                 <label className="mb-2 block text-xs font-semibold text-muted-foreground">
@@ -261,70 +270,50 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
               <label className="mb-2 block text-xs font-semibold text-muted-foreground">
                 {l("Periode", "Period", "الفترة")}
               </label>
-              <div className="flex gap-2">
+              <select
+                value={period}
+                onChange={(event) => setPeriod(event.target.value as ReportPeriod)}
+                className="w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+              >
                 {periodOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setPeriod(option.value)}
-                    className={`flex-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-all ${
-                      period === option.value
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "border-border text-secondary-foreground hover:bg-surface-3"
-                    }`}
-                  >
+                  <option key={option.value} value={option.value}>
                     {option.label}
-                  </button>
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
 
             <div>
               <label className="mb-2 block text-xs font-semibold text-muted-foreground">
                 {l("Langue", "Language", "اللغة")}
               </label>
-              <div className="flex gap-2">
-                {(["fr", "en", "ar"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setReportLang(value)}
-                    className={`flex-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-all ${
-                      reportLang === value
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "border-border text-secondary-foreground hover:bg-surface-3"
-                    }`}
-                  >
-                    {value.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-semibold text-muted-foreground">
-                {l("Audience", "Audience", "Audience")}
-              </label>
-              <div className="flex gap-2">
-                {audienceOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setReportAudience(option.value)}
-                    className={`flex-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-all ${
-                      reportAudience === option.value
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "border-border text-secondary-foreground hover:bg-surface-3"
-                    }`}
-                  >
+              <select
+                value={reportLang}
+                onChange={(event) => setReportLang(event.target.value as "fr" | "en" | "ar")}
+                className="w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {languageOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
                     {option.label}
-                  </button>
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="mb-5 rounded-xl border border-primary/10 bg-primary/[0.05] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
+            <span className="font-semibold text-foreground">
+              {l("Format du rapport", "Report format", "تنسيق التقرير")}
+            </span>
+            :{" "}
+            {l(
+              "une seule version claire pour le jury et exploitable pour l'equipe maintenance.",
+              "one clear version for the jury and still usable by the maintenance team.",
+              "نسخة واحدة واضحة لهيئة التحكيم وتبقى قابلة للاستعمال من قبل فريق الصيانة.",
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               type="button"
               onClick={() => void generateReport()}
@@ -346,7 +335,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-premium">
+        <div className="min-h-[320px] rounded-2xl border border-border bg-card p-6 shadow-premium">
           <div className="mb-4 flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold text-foreground">
@@ -368,10 +357,10 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
               )}
             </p>
           ) : (
-            <div className="max-h-[340px] space-y-2 overflow-y-auto">
+            <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
               {history.map((report) => (
                 <div key={report.id} className="rounded-lg border border-border/50 bg-surface-3 px-4 py-3">
-                  <div className="text-sm font-medium text-foreground">{repairText(report.titre)}</div>
+                  <div className="text-sm font-medium text-foreground">{cleanReportTitle(report.titre)}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {new Date(report.created_at).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-GB", {
                       dateStyle: "medium",

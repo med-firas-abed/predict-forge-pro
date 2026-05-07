@@ -20,6 +20,7 @@ dist-ssr/
 bun.lock
 bun.lockb
 .vite/
+.runtime/
 
 # ─── IDE / OS ─────────────────────────────────────────────────────────────────
 .vscode/*

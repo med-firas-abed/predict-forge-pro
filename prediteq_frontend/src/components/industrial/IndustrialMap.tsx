@@ -105,8 +105,8 @@ function makePopupHTML(
       : "";
 
   const rulValue =
-    machine.rulMode === "no_prediction"
-      ? `L10 ${machine.l10Years ?? "-"} ${localize("a", "y", "س")}`
+    machine.rulMode === "reference_only"
+      ? `Ref. ${machine.referenceLifetimeYears ?? "-"} ${localize("a", "y", "س")}`
       : machine.rul != null
         ? `${machine.rul} ${localize("j", "d", "ي")}`
         : machine.rulReferenceDays != null
@@ -114,8 +114,8 @@ function makePopupHTML(
           : localize("Initialisation RUL", "RUL warm-up", "تهيئة العمر المتبقي");
 
   const rulSub =
-    machine.rulMode === "no_prediction"
-      ? localize("Référence de vie du composant", "Component life reference", "مرجع عمر المكون")
+    machine.rulMode === "reference_only"
+      ? localize("Référence stable de durée de vie", "Stable lifetime reference", "Stable lifetime reference")
       : machine.rulIntervalLow != null && machine.rulIntervalHigh != null
         ? `${machine.rulIntervalLabel ?? "IC 80 %"} ${machine.rulIntervalLow}-${machine.rulIntervalHigh} ${localize("j", "d", "ي")}`
         : machine.rulci != null
@@ -129,7 +129,7 @@ function makePopupHTML(
     </div>
     <div style="padding:14px 16px;background:#fff;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <span style="font-size:.58rem;color:#64748b;letter-spacing:1.8px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-weight:600;">Health Index</span>
+        <span style="font-size:.58rem;color:#64748b;letter-spacing:1.8px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-weight:600;">Indice de santé (HI)</span>
         <span style="font-family:'JetBrains Mono',monospace;font-size:.86rem;font-weight:700;color:${accentHex};">${hiPct != null ? `${hiPct}%` : "—"}</span>
       </div>
       <div style="height:6px;background:#e2e8f0;border-radius:999px;margin-bottom:12px;overflow:hidden;">

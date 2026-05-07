@@ -35,18 +35,30 @@ export function IAPage() {
     () => getRequestedTab(location.pathname, location.search, isAdmin),
     [isAdmin, location.pathname, location.search],
   );
+  const pageLead =
+    activeTab === "planner"
+      ? l(
+          "Partir du pronostic machine, choisir les priorites flotte, puis transformer la prediction en taches validees.",
+          "Prioritize the fleet, prepare the actions, then validate the send to the maintenance calendar.",
+          "Prioritize the fleet, prepare the actions, then validate the send to the maintenance calendar.",
+        )
+      : l(
+          "Transformer le pronostic HI, stress et RUL en synthese claire, historique et PDF final.",
+          "Generate the formal report, review the history, and export the final PDF.",
+          "Generate the formal report, review the history, and export the final PDF.",
+        );
 
   const tabs = [
     ...(isAdmin
       ? [
           {
             id: "planner" as const,
-            label: l("Agent IA", "AI Agent", "Agent IA"),
+            label: l("Planification IA", "AI Planning", "Planification IA"),
             icon: Brain,
             description: l(
-              "Analyse des risques, plan d'action et tâches proposées.",
-              "Risk analysis, action plan, and proposed tasks.",
-              "Risk analysis, action plan, and proposed tasks.",
+              "Pronostic flotte, plan d'action et validation calendrier.",
+              "Fleet priorities, proposed actions, and tasks ready for validation.",
+              "Fleet priorities, proposed actions, and tasks ready for validation.",
             ),
           },
         ]
@@ -73,15 +85,14 @@ export function IAPage() {
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="section-title">
-              {l("Analyse & Rapport IA", "AI Analysis & Reporting", "AI Analysis & Reporting")}
+              {l("Prediction, decision & rapport IA", "AI prediction, decision & reporting", "AI prediction, decision & reporting")}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {l(
-                "Un seul espace pour analyser les risques, proposer des actions et produire le rapport final.",
-                "A single space to analyze risks, propose actions, and produce the final report.",
-                "A single space to analyze risks, propose actions, and produce the final report.",
-              )}
+              {pageLead}
             </p>
+          </div>
+          <div className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
+            {l("Predire -> expliquer -> decider -> executer", "Predict -> explain -> decide -> execute", "Predict -> explain -> decide -> execute")}
           </div>
         </div>
 
@@ -120,7 +131,7 @@ export function IAPage() {
         </div>
       </div>
 
-      {activeTab === "planner" && isAdmin ? <PlannerPage /> : <RapportIAPage embedded />}
+      {activeTab === "planner" && isAdmin ? <PlannerPage embedded /> : <RapportIAPage embedded />}
     </div>
   );
 }

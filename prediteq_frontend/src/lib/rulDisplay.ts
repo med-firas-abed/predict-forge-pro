@@ -21,10 +21,10 @@ export interface RulDisplayState {
   sub: string;
   source:
     | "prediction"
-    | "l10_reference"
+    | "reference_lifetime"
     | "cached_prediction"
     | "demo_reference"
-    | "warming_up";
+    | "initializing";
   isReference: boolean;
 }
 
@@ -49,7 +49,7 @@ export function buildRulDisplay({
   machine,
   predictionMode,
   prediction,
-  l10Years,
+  referenceLifetimeYears,
   referenceDays,
   localize,
   allowDemoReference = shouldSurfaceDemoReference(),
@@ -57,7 +57,7 @@ export function buildRulDisplay({
   machine?: Machine | null;
   predictionMode?: Machine["rulMode"] | null;
   prediction?: RulPredictionLike | null;
-  l10Years?: number | null;
+  referenceLifetimeYears?: number | null;
   referenceDays?: number | null;
   localize: Localize;
   allowDemoReference?: boolean;
@@ -88,22 +88,27 @@ export function buildRulDisplay({
     };
   }
 
-  if (predictionMode === "no_prediction") {
-    const referenceL10Years = l10Years ?? machine?.l10Years;
+  if (predictionMode === "reference_only") {
+    const referenceYears =
+      referenceLifetimeYears ?? machine?.referenceLifetimeYears;
     return {
       value:
-        isFiniteNumber(referenceL10Years)
-          ? `L10 ${formatDays(referenceL10Years)} ${localize("a", "y", "س")}`
-          : "L10",
+        isFiniteNumber(referenceYears)
+          ? `${formatDays(referenceYears)} ${localize("a", "y", "س")}`
+          : localize("Ref. stable", "Stable ref.", "Stable ref."),
       sub:
-        isFiniteNumber(referenceL10Years)
+        isFiniteNumber(referenceYears)
           ? localize(
-              `Référence L10 : ${formatDays(referenceL10Years)} ans`,
-              `L10 reference: ${formatDays(referenceL10Years)} years`,
-              `مرجع L10: ${formatDays(referenceL10Years)} سنة`,
+              `Référence stable de durée de vie : ${formatDays(referenceYears)} ans`,
+              `Stable lifetime reference: ${formatDays(referenceYears)} years`,
+              `Stable lifetime reference: ${formatDays(referenceYears)} years`,
             )
-          : localize("Référence L10", "L10 reference", "مرجع L10"),
-      source: "l10_reference",
+          : localize(
+              "Référence stable de durée de vie",
+              "Stable lifetime reference",
+              "Stable lifetime reference",
+            ),
+      source: "reference_lifetime",
       isReference: true,
     };
   }
@@ -150,7 +155,7 @@ export function buildRulDisplay({
       "The pipeline is still collecting enough history before publishing a reliable live RUL.",
       "لا يزال المسار يجمع ما يكفي من السجل قبل نشر عمر متبق حي موثوق",
     ),
-    source: "warming_up",
+    source: "initializing",
     isReference: true,
   };
 }

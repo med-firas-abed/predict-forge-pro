@@ -352,7 +352,7 @@ export function MachinesPage() {
                   </div>
 
                   <div className="min-w-[120px] text-center">
-                    <div className="industrial-label">Health Index</div>
+                    <div className="industrial-label">Indice de santé (HI)</div>
                     <div className="mt-1 font-mono text-2xl font-bold" style={{ color: statusConfig.hex }}>
                       {hiPct != null ? `${hiPct}%` : "—"}
                     </div>

@@ -49,11 +49,11 @@ function formatMonthLabel(year: number, month: number) {
 function getBaselineSourceLabel(source: string) {
   switch (source) {
     case "machine_history":
-      return "Référence : historique machine";
+      return "Base : historique machine";
     case "fleet_history":
-      return "Référence : moyenne flotte";
+      return "Base : moyenne flotte";
     default:
-      return "Référence : type d'intervention";
+      return "Base : type d'action";
   }
 }
 
@@ -323,10 +323,10 @@ export function CostsPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="section-title">Coûts et budget maintenance</div>
+          <div className="section-title">Impact budgetaire du pronostic machine</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cette page relie les dépenses déjà enregistrées aux coûts probables des prochaines actions
-            suggérées par le pipeline prédictif.
+            Ici, le budget ne part pas d'un calendrier fixe : il part du HI, du stress et du RUL, puis
+            estime ce que la prochaine action peut engager.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{historyWindowLabel}</p>
         </div>
@@ -342,10 +342,10 @@ export function CostsPage() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Vue budget immédiate</div>
+            <div className="section-title">Ce que la prediction engage maintenant</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              On compare ici le coût moyen déjà observé, le coût probable de la prochaine action et le
-              risque budgétaire si l'on reporte encore la décision.
+              On compare le coût déjà observé, le coût probable si l'on agit maintenant, puis le surcoût
+              possible si l'on attend encore.
             </p>
           </div>
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.65rem] font-semibold text-muted-foreground">
@@ -356,10 +356,10 @@ export function CostsPage() {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="rounded-2xl border border-border bg-surface-3 p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Coût moyen vs coût probable</h3>
+              <h3 className="text-sm font-semibold text-foreground">Historique vs prochaine action</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Gris = coût moyen historique, vert = prochaine action probable, orange = coût si l'on
-                reporte encore.
+                Gris = ce que la machine coûte d'habitude. Vert = ce qu'elle coûterait si l'on agit
+                maintenant. Orange = ce que l'on risque si l'on reporte encore.
               </p>
             </div>
             <ResponsiveContainer width="100%" height={300}>
@@ -397,33 +397,33 @@ export function CostsPage() {
 
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-3 p-5">
-              <div className="industrial-label">Projection immédiate</div>
+              <div className="industrial-label">Si on agit maintenant</div>
               <div className="mt-3 text-3xl font-bold text-foreground">{formatCurrency(projectedBudget)}</div>
               <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
-                Somme des prochaines actions probables sur la flotte, calculée à partir des signaux live
+                Somme des actions les plus probables sur la flotte, calculée à partir des lectures live
                 et de la base historique disponible.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Surcoût du report</div>
+                <div className="industrial-label">Si on attend</div>
                 <div className="mt-2 text-xl font-bold text-destructive">+{formatCurrency(delayedExposure)}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Montant supplémentaire si l'on décale encore la prochaine fenêtre
+                  Surcoût estimé si la prochaine fenêtre est encore repoussée
                 </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Actions à examiner</div>
+                <div className="industrial-label">Cas à arbitrer</div>
                 <div className="mt-2 text-xl font-bold text-warning">{actionsToReview}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Recommandations prioritaires à valider
+                  Machines à relire dans le plan d'action
                 </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Machine la plus coûteuse</div>
+                <div className="industrial-label">Plus gros engagement</div>
                 <div className="mt-2 text-base font-bold text-foreground">
                   {topProjectedMachine?.insight.machine.id ?? "-"}
                 </div>
@@ -435,12 +435,12 @@ export function CostsPage() {
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Coût moyen historique</div>
+                <div className="industrial-label">Ticket moyen connu</div>
                 <div className="mt-2 text-base font-bold text-foreground">
                   {rows.length > 0 ? formatCurrency(averageHistoricalTicket) : "-"}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Moyenne des coûts déjà enregistrés
+                  Moyenne des interventions déjà enregistrées
                 </div>
               </div>
             </div>
@@ -448,11 +448,11 @@ export function CostsPage() {
             <div className="rounded-2xl border border-border bg-surface-3 p-4">
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Prochaine étape</div>
+                <div className="text-sm font-semibold text-foreground">Étape suivante</div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Cette page aide à décider quoi traiter en priorité. On examine ensuite la recommandation,
-                puis la tâche validée est suivie dans le calendrier.
+                Cette page aide à choisir quoi traiter d'abord. Ensuite, on ouvre le plan d'action, on
+                valide, puis la tâche confirmée apparaît dans le calendrier.
               </p>
               <button
                 type="button"
@@ -460,7 +460,7 @@ export function CostsPage() {
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground"
               >
                 <Brain className="h-3.5 w-3.5" />
-                {isAdmin ? "Examiner les recommandations" : "Voir le calendrier"}
+                {isAdmin ? "Ouvrir le plan d'action" : "Voir le calendrier"}
               </button>
             </div>
           </div>
@@ -470,7 +470,7 @@ export function CostsPage() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
         <KpiCard
           icon={<DollarSign className="h-5 w-5" />}
-          label="Dépenses enregistrées"
+          label="Dépenses connues"
           value={
             <>
               {totalHistoricalCost.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
@@ -503,41 +503,41 @@ export function CostsPage() {
         />
         <KpiCard
           icon={<DollarSign className="h-5 w-5" />}
-          label="Projection immédiate"
+          label="Action issue du pronostic"
           value={
             <>
               {projectedBudget.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
             </>
           }
-          sub="Somme des prochaines actions probables"
+          sub="Projection immédiate sur la flotte"
           variant="blue"
         />
         <KpiCard
           icon={<AlertTriangle className="h-5 w-5" />}
-          label="Surcoût du report"
+          label="Risque si attente"
           value={
             <>
               {delayedExposure.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
             </>
           }
-          sub="Si l'on repousse encore l'action"
+          sub="Si on repousse encore l'action"
           variant="danger"
         />
         <KpiCard
           icon={<CalendarClock className="h-5 w-5" />}
-          label="Actions à examiner"
+          label="À faire valider"
           value={String(actionsToReview)}
-          sub="Recommandations prioritaires"
+          sub="Actions prioritaires"
           variant="warn"
         />
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4">
-          <div className="section-title">Machines les plus coûteuses à court terme</div>
+          <div className="section-title">Machines dont le pronostic engage le budget</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ces cartes montrent les machines dont la prochaine action probable représente aujourd'hui
-            l'engagement budgétaire le plus important.
+            Ce ne sont pas forcément les machines les plus anciennes. Ce sont celles dont l'état actuel,
+            le stress et le RUL rendent l'action la plus engageante aujourd'hui.
           </p>
         </div>
 
@@ -579,10 +579,10 @@ export function CostsPage() {
                     </div>
                   </div>
                   <div className="rounded-xl bg-card/70 p-2">
-                    <div className="text-[0.6rem] uppercase tracking-[0.18em] text-muted-foreground">
-                      Ajustement risque
+                    <div className="text-[0.6rem] uppercase tracking-[0.18em] text-muted-foreground">Fenêtre</div>
+                    <div className="mt-1 text-sm font-bold text-foreground">
+                      {entry.insight.maintenanceWindow ?? "À confirmer"}
                     </div>
-                    <div className="mt-1 text-sm font-bold text-foreground">x{entry.multiplier.toFixed(2)}</div>
                   </div>
                 </div>
 
@@ -592,15 +592,15 @@ export function CostsPage() {
                     {formatCurrency(entry.projectedCost)}
                   </div>
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                    {getBaselineSourceLabel(entry.baseSource)}
+                    {getBaselineSourceLabel(entry.baseSource)} x {entry.multiplier.toFixed(2)}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    +{formatCurrency(entry.delayPenalty)} si l'on reporte encore l'action
+                    +{formatCurrency(entry.delayPenalty)} si on reporte encore l'action
                   </div>
                 </div>
 
                 <p className="mt-3 text-xs leading-relaxed text-secondary-foreground">
-                  {entry.insight.summary}
+                  {entry.insight.plainReason}
                 </p>
 
                 <div className="mt-4 flex gap-2">
@@ -614,7 +614,7 @@ export function CostsPage() {
                     onClick={() => openPlanner(entry.insight.machine.id)}
                     className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
                   >
-                    {isAdmin ? "Examiner la recommandation" : "Voir le calendrier"}
+                    {isAdmin ? "Ouvrir le plan d'action" : "Voir le calendrier"}
                   </button>
                 </div>
               </div>
@@ -625,10 +625,10 @@ export function CostsPage() {
 
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-foreground">Du réel au prévisionnel</h3>
+          <h3 className="text-sm font-semibold text-foreground">Du passé vers le budget à venir</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Bleu et ocre = dépenses réellement enregistrées. Turquoise = tâches déjà validées dans le
-            calendrier. Vert = projection pipeline du mois en cours.
+            Bleu et ocre = dépenses déjà enregistrées. Turquoise = tâches déjà validées dans le calendrier.
+            Vert = projection du mois en cours à partir de l'état actuel de la flotte.
           </p>
           {historicalContextLabel ? (
             <p className="mt-2 text-xs text-muted-foreground">{historicalContextLabel}</p>

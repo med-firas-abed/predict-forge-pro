@@ -75,6 +75,7 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
   const m = machine;
   const cfg = STATUS_CONFIG[m.status];
   const hiPct = typeof m.hi === "number" ? Math.round(m.hi * 100) : null;
+  const referenceOnly = m.rulMode === "reference_only";
 
   return (
     <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
@@ -123,8 +124,8 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
               <div className="hi-fill" style={{ width: `${hiPct ?? 0}%` }} />
             </div>
             <div className="text-xs text-foreground mt-2.5">
-              RUL: {m.rulMode === 'no_prediction'
-                ? `L10 ${m.l10Years ?? '—'} ans — pas de précurseur`
+              RUL: {referenceOnly
+                ? `Ref. stable ${m.referenceLifetimeYears ?? '—'} ans — lecture de référence`
                 : m.rul !== null && m.rul !== undefined
                   ? `${m.rul}j${m.rulIntervalLow != null && m.rulIntervalHigh != null ? ` · ${m.rulIntervalLabel ?? 'IC 80 %'} ${m.rulIntervalLow}–${m.rulIntervalHigh}j` : m.rulci ? ` ± ${m.rulci}j` : ''}${m.stopRecommended ? ' · arrêt recommandé' : ''}`
                   : t("modal.inMaintenance")}
@@ -141,7 +142,12 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
               value: m.curr,
               max: 10,
               color: '#f59e0b',
-              label: m.currSource === "estimated_from_power" ? "Courant estimé" : t("modal.current"),
+              label:
+                m.currSource === "derived_ascent_power"
+                  ? "Courant de montée"
+                  : m.currSource === "estimated_from_power"
+                    ? "Courant estimé"
+                    : t("modal.current"),
               unit: 'A',
             },
             { value: m.temp, max: 100, color: '#e04060', label: t("modal.temperature"), unit: '°C' },

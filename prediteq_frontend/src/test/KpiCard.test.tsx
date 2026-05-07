@@ -9,7 +9,7 @@ function Icon() {
 describe("KpiCard", () => {
   const baseProps = {
     icon: <Icon />,
-    label: "Health Index",
+    label: "Indice de santé (HI)",
     value: "87%",
     sub: "Derniere mise a jour il y a 5 min",
     variant: "green" as const,
@@ -17,7 +17,7 @@ describe("KpiCard", () => {
 
   it("renders label, value and sub text", () => {
     render(<KpiCard {...baseProps} />);
-    expect(screen.getByText("Health Index")).toBeInTheDocument();
+    expect(screen.getByText("Indice de santé (HI)")).toBeInTheDocument();
     expect(screen.getByText("87%")).toBeInTheDocument();
     expect(screen.getByText("Derniere mise a jour il y a 5 min")).toBeInTheDocument();
   });

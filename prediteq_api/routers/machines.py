@@ -87,21 +87,34 @@ def _sync_machine_cache(manager, machine: dict) -> None:
     }
 
 
-def _attach_rul_v2_summary(manager, machine: dict) -> None:
+def _attach_calibrated_rul_summary(manager, machine: dict) -> None:
     try:
-        from routers.diagnostics_rul import build_rul_v2_response
+        from routers.diagnostics_rul import build_calibrated_rul_response
 
-        machine["rul_v2"] = build_rul_v2_response(manager, machine["code"])
+        calibrated_rul = build_calibrated_rul_response(manager, machine["code"])
+        machine["calibrated_rul"] = calibrated_rul
+        machine["rul_v2"] = calibrated_rul
     except HTTPException as exc:
         # 404/425 are normal during engine warmup or before the simulator
         # has seeded a machine; expose no summary without polluting logs.
         if exc.status_code in {404, 425}:
+            machine["calibrated_rul"] = None
             machine["rul_v2"] = None
             return
-        logger.warning("Could not build RUL v2 summary for %s: %s", machine.get("code"), exc)
+        logger.warning(
+            "Could not build calibrated RUL summary for %s: %s",
+            machine.get("code"),
+            exc,
+        )
+        machine["calibrated_rul"] = None
         machine["rul_v2"] = None
     except Exception as exc:
-        logger.warning("Could not build RUL v2 summary for %s: %s", machine.get("code"), exc)
+        logger.warning(
+            "Could not build calibrated RUL summary for %s: %s",
+            machine.get("code"),
+            exc,
+        )
+        machine["calibrated_rul"] = None
         machine["rul_v2"] = None
 
 
@@ -121,7 +134,7 @@ def _attach_runtime_view(machine: dict, manager) -> None:
     if demo_scenario is not None:
         machine["demo_scenario"] = demo_scenario
 
-    _attach_rul_v2_summary(manager, machine)
+    _attach_calibrated_rul_summary(manager, machine)
 
     raw = manager.last_raw.get(code)
     if raw:
@@ -136,6 +149,18 @@ def _attach_runtime_view(machine: dict, manager) -> None:
         }
         if raw.get("current_a") is not None:
             machine["last_sensors"]["current_a"] = round(raw.get("current_a", 0), 3)
+        if raw.get("current_a_cycle_mean") is not None:
+            machine["last_sensors"]["current_a_cycle_mean"] = round(
+                raw.get("current_a_cycle_mean", 0),
+                3,
+            )
+        if raw.get("current_source") is not None:
+            machine["last_sensors"]["current_source"] = str(raw.get("current_source"))
+        if raw.get("power_kw_ascent") is not None:
+            machine["last_sensors"]["power_kw_ascent"] = round(
+                raw.get("power_kw_ascent", 0),
+                3,
+            )
         if raw.get("load_kg") is not None:
             machine["last_sensors"]["load_kg"] = round(raw.get("load_kg", 0), 1)
         if raw.get("vibration_raw") is not None:
@@ -147,7 +172,21 @@ def _attach_runtime_view(machine: dict, manager) -> None:
 
     machine["cycles_today"] = manager._cycle_counts.get(code)
     machine["last_result"] = manager.last_results.get(code)
-    machine["rul_live"] = manager.predict_rul(code)
+    calibrated_rul = machine.get("calibrated_rul") or machine.get("rul_v2") or {}
+    prediction = (calibrated_rul.get("prediction") or {}) if isinstance(calibrated_rul, dict) else {}
+    if calibrated_rul.get("mode") == "prediction" and prediction.get("rul_days") is not None:
+        ci_low = prediction.get("rul_days_display_low")
+        ci_high = prediction.get("rul_days_display_high")
+        if ci_low is None or ci_high is None:
+            ci_low = prediction.get("rul_days_p10")
+            ci_high = prediction.get("rul_days_p90")
+        machine["rul_live"] = {
+            "rul_days": float(prediction["rul_days"]),
+            "ci_low": float(ci_low) if ci_low is not None else None,
+            "ci_high": float(ci_high) if ci_high is not None else None,
+        }
+    else:
+        machine["rul_live"] = manager.predict_rul(code)
 
 
 def _attach_decision_bundle(machines: list[dict], manager) -> None:
@@ -166,7 +205,7 @@ def _attach_decision_bundle(machines: list[dict], manager) -> None:
                 manager,
                 alerts_24h=machine["anom_count"],
                 open_tasks=machine["open_task_count"],
-                rul_v2=machine.get("rul_v2"),
+                calibrated_rul=machine.get("calibrated_rul") or machine.get("rul_v2"),
             )
         except Exception as exc:
             logger.warning(

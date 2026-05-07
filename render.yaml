@@ -17,10 +17,20 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: RESEND_API_KEY
+      - key: SMTP_HOST
         sync: false
-      - key: RESEND_FROM
-        sync: false            # verified sender email for Resend
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false            # sender email used by the backend
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: SMTP_USE_SSL
+        value: "false"
       - key: ADMIN_EMAIL
         sync: false
       - key: CORS_ORIGINS

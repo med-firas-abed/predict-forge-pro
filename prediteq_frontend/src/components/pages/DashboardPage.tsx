@@ -47,41 +47,42 @@ import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { STATUS_CONFIG } from "@/data/machines";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
-import { fetchDiagnosticsAll, useDiagnostics } from "@/hooks/useDiagnostics";
+import {
+  fetchDiagnosticsAll,
+  getBearingReference,
+  getCalibratedRul,
+  getCalibratedRulDisclosures,
+  getCalibratedRulWarmupDetail,
+  normalizeCalibratedRulMode,
+  useDiagnostics,
+} from "@/hooks/useDiagnostics";
 import { fetchMachineSensorHistory, useMachineSensors } from "@/hooks/useMachineSensors";
 import { useMachines } from "@/hooks/useMachines";
 import { useSimulatorController } from "@/hooks/useSimulatorController";
 import { getDemoScenarioFactors } from "@/lib/demoScenario";
 import { inferComponentFocus } from "@/lib/componentInference";
+import {
+  describeAudienceUsageRegime,
+  formatAudienceAxisLabel,
+  formatAudienceFeatureLabel,
+  shortenAudienceAction,
+} from "@/lib/juryNarrative";
 import { repairText } from "@/lib/repairText";
 import { buildRulDisplay } from "@/lib/rulDisplay";
 import { SIMULATOR_ROUTE } from "@/lib/simulator";
-
-const STRESS_LABELS = {
-  low: { label: "Faible", tone: "text-success", bar: "bg-success" },
-  moderate: { label: "Modéré", tone: "text-warning", bar: "bg-warning" },
-  high: { label: "Élevé", tone: "text-warning", bar: "bg-warning" },
-  critical: { label: "Critique", tone: "text-destructive", bar: "bg-destructive" },
-} as const;
-
-const STRESS_AXES: Record<string, string> = {
-  thermal: "Thermique",
-  vibration: "Vibratoire",
-  load: "Charge",
-  variability: "Variabilité",
-};
-
-const CONFIDENCE_BADGES = {
-  high: "Confiance élevée",
-  medium: "Confiance moyenne",
-  low: "Confiance faible",
-} as const;
 
 const MACHINE_STATUS_KPI_VARIANTS = {
   ok: "green",
   degraded: "warn",
   critical: "danger",
   maintenance: "blue",
+} as const;
+
+const KPI_PROGRESS_FILL_CLASS = {
+  blue: "bg-primary",
+  green: "bg-success",
+  warn: "bg-warning",
+  danger: "bg-destructive",
 } as const;
 
 const DEFAULT_DASHBOARD_MACHINE_ID = "ASC-A1";
@@ -154,44 +155,21 @@ export function DashboardPage() {
     critical: { label: l("Critique", "Critical", "Ø­Ø±Ø¬"), tone: "text-destructive", bar: "bg-destructive" },
   } as const;
   const localizedStressAxes: Record<string, string> = {
-    thermal: l("Thermique", "Thermal", "Ø­Ø±Ø§Ø±ÙŠ"),
-    vibration: l("Vibratoire", "Vibration", "Ø§Ù‡ØªØ²Ø§Ø²"),
+    thermal: l("Temperature", "Temperature", "Ø­Ø±Ø§Ø±Ø©"),
+    vibration: l("Vibration", "Vibration", "Ø§Ù‡ØªØ²Ø§Ø²"),
     load: l("Charge", "Load", "Ø­Ù…ÙˆÙ„Ø©"),
-    variability: l("Variabilité", "Variability", "ØªØ°Ø¨Ø°Ø¨"),
+    variability: l("Regime instable", "Unstable pattern", "Ù†Ù…Ø· ØºÙŠØ± Ù…Ø³ØªÙ‚Ø±"),
   };
   const localizedConfidenceBadges = {
-    high: l("Confiance élevée", "High confidence", "Ø«Ù‚Ø© Ø¹Ø§Ù„ÙŠØ©"),
-    medium: l("Confiance moyenne", "Medium confidence", "Ø«Ù‚Ø© Ù…ØªÙˆØ³Ø·Ø©"),
-    low: l("Confiance faible", "Low confidence", "Ø«Ù‚Ø© Ù…Ù†Ø®ÙØ¶Ø©"),
+    high: l("Lecture solide", "Solid reading", "Ù‚Ø±Ø§Ø¡Ø© Ù…ØªÙŠÙ†Ø©"),
+    medium: l("Lecture utilisable", "Usable reading", "Ù‚Ø±Ø§Ø¡Ø© Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…"),
+    low: l("A confirmer sur site", "Confirm on site", "ÙŠØ¬Ø¨ ØªØ£ÙƒÙŠØ¯Ù‡ Ø¹Ù„Ù‰ Ø§Ù„Ù…ÙˆÙ‚Ø¹"),
   } as const;
   const getReadableFeatureLabel = (feature: string | null | undefined) => {
     if (!feature) {
       return l("Aucun facteur dominant", "No dominant driver", "No dominant driver");
     }
-
-    switch (feature.toLowerCase()) {
-      case "vib":
-      case "vib_mms":
-      case "vibration":
-      case "rms_mms":
-        return l("Vibration moteur", "Motor vibration", "Motor vibration");
-      case "curr":
-      case "current":
-      case "current_a":
-        return l("Courant moteur", "Motor current", "Motor current");
-      case "temp":
-      case "temp_c":
-      case "temperature":
-        return l("Temperature moteur", "Motor temperature", "Motor temperature");
-      case "power_kw":
-        return l("Puissance absorbee", "Absorbed power", "Absorbed power");
-      case "humidity_rh":
-        return l("Humidite", "Humidity", "Humidity");
-      case "phase":
-        return l("Desequilibre de phase", "Phase imbalance", "Phase imbalance");
-      default:
-        return feature.replace(/_/g, " ");
-    }
+    return formatAudienceFeatureLabel(feature, l);
   };
 
   const rankedInsights = useMemo(
@@ -287,14 +265,19 @@ export function DashboardPage() {
   } = useMachineSensors(selected?.id);
 
   const selectedDecision = selected?.decision ?? null;
-  const predictionMode =
-    diagnostics?.rul_v2?.mode ?? selectedInsight?.predictionMode ?? selected?.rulMode ?? null;
-  const prediction = diagnostics?.rul_v2?.prediction ?? null;
+  const calibratedRul = getCalibratedRul(diagnostics);
+  const bearingReference = getBearingReference(calibratedRul);
+  const calibratedDisclosures = getCalibratedRulDisclosures(calibratedRul);
+  const calibratedWarmupDetail = getCalibratedRulWarmupDetail(calibratedRul);
+  const predictionMode = normalizeCalibratedRulMode(
+    calibratedRul?.mode ?? selectedInsight?.predictionMode ?? selected?.rulMode ?? null,
+  );
+  const prediction = calibratedRul?.prediction ?? null;
   const stress = diagnostics?.stress_index ?? null;
   const maintenanceWindow =
     selectedInsight?.maintenanceWindow ??
     selectedDecision?.maintenanceWindow ??
-    diagnostics?.rul_v2?.maintenance_window ??
+    calibratedRul?.maintenance_window ??
     prediction?.maintenance_window ??
     null;
   const topDriverName =
@@ -302,6 +285,7 @@ export function DashboardPage() {
     selectedInsight?.topDriver ??
     selectedDecision?.topDriver ??
     null;
+  const topDriverLabel = topDriverName ? formatAudienceFeatureLabel(topDriverName, l) : null;
   const dominantAxis =
     stress?.dominant ?? selectedInsight?.dominantAxis ?? selectedDecision?.dominantAxis ?? null;
   const stressBand = stress?.band ?? selectedInsight?.stressBand ?? selectedDecision?.stressBand ?? null;
@@ -313,7 +297,11 @@ export function DashboardPage() {
   const confidenceLabel = confidenceLevel ? localizedConfidenceBadges[confidenceLevel] : null;
   const explainContributions = [...(diagnostics?.rul_explain?.contributions ?? [])]
     .sort((left, right) => Math.abs(right.impact_days) - Math.abs(left.impact_days))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((contribution) => ({
+      ...contribution,
+      feature: formatAudienceFeatureLabel(contribution.feature, l),
+    }));
   const maxExplainImpact = Math.max(
     1,
     ...explainContributions.map((contribution) => Math.abs(contribution.impact_days)),
@@ -332,13 +320,14 @@ export function DashboardPage() {
     machine: selected,
     predictionMode,
     prediction,
-    l10Years: diagnostics?.rul_v2?.l10?.years_adjusted ?? null,
+    referenceLifetimeYears: bearingReference?.years_adjusted ?? null,
     localize: l,
   });
   const selectedRulValue = rulDisplay.value;
   const rulSub = rulDisplay.sub;
   const hasLivePrediction = predictionMode === "prediction" && Boolean(prediction);
-  const isReferenceMode = predictionMode === "no_prediction" || rulDisplay.source === "l10_reference";
+  const isReferenceMode =
+    predictionMode === "reference_only" || rulDisplay.source === "reference_lifetime";
   const explainDialogTitle = hasLivePrediction
     ? l("Détail du pronostic", "Prognosis details", "Prognosis details")
     : isReferenceMode
@@ -352,9 +341,9 @@ export function DashboardPage() {
       )
     : isReferenceMode
       ? l(
-          "Repères suivis par le modèle tant qu'aucun RUL live n'est publié.",
-          "Signals monitored by the model while no live RUL is being published.",
-          "Signals monitored by the model while no live RUL is being published.",
+          "Repères conservés lorsque le pronostic live n'est pas encore disponible.",
+          "Signals retained when the live prognosis is not available yet.",
+          "Signals retained when the live prognosis is not available yet.",
         )
       : l(
           "Repères utilisés pour préparer la première lecture RUL fiable.",
@@ -388,15 +377,15 @@ export function DashboardPage() {
           prediction?.rul_days_display_low ?? prediction?.rul_days_p10 ?? "-"
         }-${prediction?.rul_days_display_high ?? prediction?.rul_days_p90 ?? "-"} j`
       : isReferenceMode
-        ? diagnostics?.rul_v2?.disclaimers?.fpt_gate ??
+        ? calibratedDisclosures.availability_note ??
           selectedInsight?.trustNote ??
           l(
-            "Le pronostic live reste masqué tant que la dérive n'est pas assez installée.",
-            "The live prognosis stays hidden until the drift is established enough.",
-            "The live prognosis stays hidden until the drift is established enough.",
+            "Le tableau conserve une référence stable tant que le pronostic live n'est pas exploitable.",
+            "The dashboard keeps a stable reference while the live prognosis is not usable yet.",
+            "The dashboard keeps a stable reference while the live prognosis is not usable yet.",
           )
-        : diagnostics?.rul_v2?.warming_up_detail ??
-          diagnostics?.rul_v2?.disclaimers?.warm_up ??
+        : calibratedWarmupDetail ??
+          calibratedDisclosures.warmup_note ??
           selectedInsight?.trustNote ??
           l(
             "Le pipeline collecte encore assez d'historique pour fiabiliser le premier RUL live.",
@@ -423,9 +412,9 @@ export function DashboardPage() {
       )
     : isReferenceMode
       ? l(
-          "Ces facteurs font varier la projection interne du modèle, même si aucun RUL live n'est publié à ce stade.",
-          "These factors still move the model's internal projection even though no live RUL is published yet.",
-          "These factors still move the model's internal projection even though no live RUL is published yet.",
+          "Ces facteurs continuent d'orienter la projection interne du modèle, même si l'interface garde encore une référence stable.",
+          "These factors still drive the model's internal projection even while the interface keeps a stable reference.",
+          "These factors still drive the model's internal projection even while the interface keeps a stable reference.",
         )
       : l(
           "Ces facteurs serviront à stabiliser la première lecture live dès que l'historique sera suffisant.",
@@ -447,20 +436,20 @@ export function DashboardPage() {
     hasLivePrediction
       ? selectedInsight?.summary ??
           l(
-            "La priorité combine RUL, Health Index, stress machine et contexte d'usage pour aider la décision terrain.",
-            "Priority combines RUL, Health Index, machine stress, and usage context to support field decisions.",
-            "Priority combines RUL, Health Index, machine stress, and usage context to support field decisions.",
+            "La priorite combine duree restante, santé observée, pression actuelle et contexte d'usage pour aider la decision terrain.",
+            "Priority combines remaining life, observed health, current pressure, and usage context to support field decisions.",
+            "Priority combines remaining life, observed health, current pressure, and usage context to support field decisions.",
           )
       : isReferenceMode
-        ? diagnostics?.rul_v2?.disclaimers?.fpt_gate ??
+        ? calibratedDisclosures.availability_note ??
           selectedInsight?.trustNote ??
           l(
-            "Le dashboard conserve ici une référence simple tant que la méthode n'autorise pas encore un RUL live.",
-            "The dashboard keeps a simple reference here until the method allows a live RUL.",
-            "The dashboard keeps a simple reference here until the method allows a live RUL.",
+            "Le dashboard conserve ici une référence stable tant que le pronostic live n'est pas encore disponible.",
+            "The dashboard keeps a stable reference here while the live prognosis is not available yet.",
+            "The dashboard keeps a stable reference here while the live prognosis is not available yet.",
           )
-        : diagnostics?.rul_v2?.warming_up_detail ??
-          diagnostics?.rul_v2?.disclaimers?.warm_up ??
+        : calibratedWarmupDetail ??
+          calibratedDisclosures.warmup_note ??
           selectedInsight?.trustNote ??
           l(
             "La lecture reste en préparation pendant que le pipeline consolide suffisamment d'historique.",
@@ -529,15 +518,21 @@ export function DashboardPage() {
     );
   }
 
-  const dominantAxisLabel = dominantAxis ? localizedStressAxes[dominantAxis] ?? dominantAxis : null;
+  const dominantAxisLabel = dominantAxis ? formatAudienceAxisLabel(dominantAxis, l) : null;
   const dataSourceLabel =
     selectedInsight?.dataSource === "live_runtime"
       ? l("Flux en direct", "Live stream", "Flux en direct")
       : selectedInsight?.dataSource === "simulator_demo"
-        ? l("Replay démo", "Demo replay", "Replay démo")
+        ? l("Replay démo calibré", "Calibrated demo replay", "Replay démo calibré")
         : selectedInsight?.dataSource === "persisted_reference"
           ? l("Référence persistée", "Reference snapshot", "Référence persistée")
           : l("Flux en attente", "Waiting for stream", "Flux en attente");
+  const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
+  const demoPipelineNote = l(
+    "Lecture issue d'un replay demo calibre. En exploitation reelle, la meme chaine utilisera les vraies mesures vibration, puissance, temperature et humidite.",
+    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
+    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
+  );
   const freshnessLabel =
     selectedInsight?.updatedAt != null
       ? new Date(selectedInsight.updatedAt).toLocaleString(numberLocale, {
@@ -585,14 +580,7 @@ export function DashboardPage() {
       ? Math.max(0, Math.min(100, Math.round(selected.hi * 100)))
       : null;
   const machineKpiVariant = MACHINE_STATUS_KPI_VARIANTS[selected.status];
-  const stressKpiVariant =
-    stressBand === "critical"
-      ? "danger"
-      : stressBand === "high" || stressBand === "moderate"
-        ? "warn"
-        : stressBand === "low"
-          ? "green"
-          : machineKpiVariant;
+  const machineKpiProgressFillClass = KPI_PROGRESS_FILL_CLASS[machineKpiVariant];
   const stressKpiSub = stressStyle
     ? dominantAxisLabel
       ? `${stressStyle.label} - ${dominantAxisLabel}`
@@ -612,9 +600,9 @@ export function DashboardPage() {
       )
     : isReferenceMode
       ? l(
-          "Reference de duree de vie affichee tant qu'aucun RUL live n'est publie.",
-          "Lifetime reference shown while no live RUL is published yet.",
-          "Lifetime reference shown while no live RUL is published yet.",
+          "Reference de duree de vie affichee seulement quand le pronostic live n'est pas encore disponible.",
+          "Lifetime reference shown only when the live prognosis is not available yet.",
+          "Lifetime reference shown only when the live prognosis is not available yet.",
         )
       : l(
           "Lecture de duree de vie en preparation pendant la phase de calibration.",
@@ -640,19 +628,19 @@ export function DashboardPage() {
   const localizedScenarioUsageCase =
     {
       "ASC-A1": l(
-        "Cadence elevee, avec des charges legeres a moyennes.",
-        "High cadence, mostly light-to-medium payloads.",
-        "High cadence, mostly light-to-medium payloads.",
+        "Cycle modere, charges legeres et installation protegee.",
+        "Moderate duty cycle, light payloads, protected installation.",
+        "Moderate duty cycle, light payloads, protected installation.",
       ),
       "ASC-B2": l(
-        "Trafic equilibre avec des cycles recurrents a demi-charge.",
-        "Balanced warehouse traffic with recurring half-load cycles.",
-        "Balanced warehouse traffic with recurring half-load cycles.",
+        "Trafic mixte regulier avec demi-charges et pics aux heures de pointe.",
+        "Regular mixed traffic with half-load cycles and rush-hour peaks.",
+        "Regular mixed traffic with half-load cycles and rush-hour peaks.",
       ),
       "ASC-C3": l(
-        "Machine vieillissante avec des charges lourdes et un environnement plus contraignant.",
-        "Aging machine with heavy payloads and harsher ambient conditions.",
-        "Aging machine with heavy payloads and harsher ambient conditions.",
+        "Ligne intensive avec charges lourdes et ambiance plus severe.",
+        "Intensive duty line with heavy payloads and harsh ambient conditions.",
+        "Intensive duty line with heavy payloads and harsh ambient conditions.",
       ),
     }[selected.id] ??
     repairText(
@@ -666,19 +654,19 @@ export function DashboardPage() {
   const localizedScenarioExplanation =
     {
       "ASC-A1": l(
-        "Machine la plus recente du parc : chargement maitrise, peu de surcharge durable et ambiance plus favorable.",
-        "Newest machine in the fleet: disciplined loading, no persistent overload, and a more favorable environment.",
-        "Newest machine in the fleet: disciplined loading, no persistent overload, and a more favorable environment.",
+        "Meme generation de flotte, mais usage plus calme : service plus court, charges plus legeres, ambiance plus seche et presque aucune surcharge.",
+        "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
+        "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
       ),
       "ASC-B2": l(
-        "Machine a mi-vie : usage quotidien modere, quelques pics de charge et une usure qui progresse par paliers.",
-        "Mid-life machine: moderate daily usage, some load peaks, and wear progressing by stages.",
-        "Mid-life machine: moderate daily usage, some load peaks, and wear progressing by stages.",
+        "Meme age que les autres, avec un rythme normal, des charges mixtes et un stress ambiant modere.",
+        "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
+        "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
       ),
       "ASC-C3": l(
-        "Machine en fin de vie : charges frequentes proches du maximum, ambiance plus chaude et marge restante plus courte.",
-        "End-of-life machine: frequent near-max loads, hotter environment, and a shorter remaining margin.",
-        "End-of-life machine: frequent near-max loads, hotter environment, and a shorter remaining margin.",
+        "Meme age de flotte, mais usage plus dur : longues amplitudes, charges proches du maximum, ambiance plus chaude et humide, vibration plus marquee.",
+        "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
+        "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
       ),
     }[selected.id] ??
     repairText(
@@ -961,6 +949,29 @@ export function DashboardPage() {
       text: zoneContextExplanation,
     },
   ];
+  const usageRegimeLabel = describeAudienceUsageRegime(selectedScenario, l);
+  const sameFleetPrefix = l(
+    "Meme age de flotte, mais",
+    "Same fleet age, but",
+    "Same fleet age, but",
+  );
+  const dashboardActionLead = shortenAudienceAction(
+    quickActionLabel,
+    componentFocus.familyLabel,
+    l,
+  );
+  const dashboardSignalLabel = topDriverLabel ?? priorityTriggerLabel;
+  const dashboardReadingLabel = prediction?.hi_zone ?? selectedDecision?.zone ?? cfg.label;
+  const dashboardContextLabel =
+    selectedScenario?.cycles_per_day != null
+      ? `${Math.round(selectedScenario.cycles_per_day).toLocaleString(numberLocale)} ${l("cycles/jour", "cycles/day", "cycles/day")} - ${usageRegimeLabel}`
+      : usageRegimeLabel;
+  const dashboardActionReason =
+    selected.status === "critical"
+      ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} oriente d'abord le controle vers ${componentFocus.familyLabel.toLowerCase()} et la marge restante est courte.`
+      : selected.status === "degraded"
+        ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} reduit progressivement la marge et demande un controle cible.`
+        : `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: les signaux restent compatibles avec une exploitation normale.`;
   const machineContextIntro = l(
     "Cette vue expose le regime d'usage, les contraintes du scenario et la part de contexte qui alimente les resultats du dashboard.",
     "This panel exposes the operating regime, scenario constraints, and the context contribution behind dashboard results.",
@@ -984,8 +995,10 @@ export function DashboardPage() {
     {
       dataKey: "curr" as const,
       label:
-        selected.currSource === "estimated_from_power"
-          ? l("Courant estimé", "Estimated current", "Estimated current")
+        selected.currSource === "derived_ascent_power"
+          ? l("Courant de montée", "Ascent current", "Ascent current")
+          : selected.currSource === "estimated_from_power"
+            ? l("Courant estimé", "Estimated current", "Estimated current")
           : t("modal.current"),
       color: "#d4915a",
       value: liveSensors?.curr ?? null,
@@ -1015,9 +1028,9 @@ export function DashboardPage() {
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               {l(
-                "Lancez ici la démo en direct. Le simulateur continue ensuite à alimenter le tableau de bord, les diagnostics et les alertes.",
-                "Launch the live demo here. The simulator will then keep feeding the dashboard, diagnostics, and alerts.",
-                "Ø´ØºÙ‘Ù„ Ø§Ù„Ø¹Ø±Ø¶ Ø§Ù„Ù…Ø¨Ø§Ø´Ø± Ù…Ù† Ù‡Ù†Ø§. Ø¨Ø¹Ø¯ Ø°Ù„Ùƒ ÙŠÙˆØ§ØµÙ„ Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ ØªØºØ°ÙŠØ© Ù„ÙˆØ­Ø© Ø§Ù„Ù‚ÙŠØ§Ø¯Ø© ÙˆØ§Ù„ØªØ´Ø®ÙŠØµØ§Øª ÙˆØ§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª.",
+                "Lancez ici le replay demo calibre. Le simulateur alimente ensuite le tableau de bord, les diagnostics et les alertes avec la meme logique que celle prevue sur mesures reelles.",
+                "Launch the calibrated demo replay here. The simulator then feeds the dashboard, diagnostics, and alerts with the same logic planned for real measurements.",
+                "Launch the calibrated demo replay here. The simulator then feeds the dashboard, diagnostics, and alerts with the same logic planned for real measurements.",
               )}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -1186,6 +1199,15 @@ export function DashboardPage() {
           </div>
         </div>
 
+        {isDemoReplay ? (
+          <div className="mb-5 rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
+            <span className="font-semibold text-foreground">
+              {l("Lecture demo", "Demo reading", "Demo reading")}
+            </span>
+            : {demoPipelineNote}
+          </div>
+        ) : null}
+
         <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
             icon={<Heart className="w-5 h-5" />}
@@ -1210,16 +1232,16 @@ export function DashboardPage() {
               <div className="hi-fill" style={{ width: `${selectedHiPercent ?? 0}%` }} />
             </div>
           </KpiCard>
-          {predictionMode === "no_prediction" ? (
+          {predictionMode === "reference_only" ? (
             <KpiCard
               icon={<Clock className="w-5 h-5" />}
               label="RUL"
               description={rulCardDescription}
               value={
                 <>
-                  {selected.l10Years ?? "L10"}
+                  {selected.referenceLifetimeYears ?? l("Ref.", "Ref.", "Ref.")}
                   <span className="text-base opacity-40">
-                    {selected.l10Years != null ? " a" : ""}
+                    {selected.referenceLifetimeYears != null ? " a" : ""}
                   </span>
                 </>
               }
@@ -1260,12 +1282,12 @@ export function DashboardPage() {
               </>
             }
             sub={stressKpiSub}
-            variant={stressKpiVariant}
+            variant={machineKpiVariant}
           >
             {stressValue != null ? (
               <div className="progress-track mt-3">
                 <div
-                  className={`h-full rounded-full ${stressStyle?.bar ?? "bg-primary/60"}`}
+                  className={`h-full rounded-full ${machineKpiProgressFillClass}`}
                   style={{ width: `${Math.max(4, Math.round(stressValue * 100))}%` }}
                 />
               </div>
@@ -1395,7 +1417,7 @@ export function DashboardPage() {
                 <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-surface-3 p-4">
                   <div>
                     <div className="industrial-label">
-                      {l("Lecture dominante", "Dominant reading", "Dominant reading")}
+                      {l("Ce qui domine", "What dominates", "What dominates")}
                     </div>
                     <div className="mt-1 text-lg font-bold text-foreground">
                       {localizedStressAxes[stress.dominant] ?? stress.dominant}
@@ -1437,9 +1459,9 @@ export function DashboardPage() {
 
                 <div className="rounded-xl border border-border bg-surface-3 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
                   {l(
-                    "Stress = charge actuelle. HI = usure passée. RUL = temps restant.",
-                    "Stress = current load. HI = past wear. RUL = remaining time.",
-                    "Stress = current load. HI = past wear. RUL = remaining time.",
+                    "Stress = pression actuelle. HI = santé cumulée. RUL = marge restante.",
+                    "Stress = current pressure. HI = cumulative health. RUL = remaining margin.",
+                    "Stress = current pressure. HI = cumulative health. RUL = remaining margin.",
                   )}
                 </div>
               </div>
@@ -1469,10 +1491,6 @@ export function DashboardPage() {
                 className={diagnosticButtonClass}
                 onClick={() => navigate(`/diagnostics?machine=${encodeURIComponent(selected.id)}`)}
               >
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-foreground/35" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary-foreground" />
-                </span>
                 {l("Ouvrir le diagnostic", "Open diagnostics", "فتح التشخيص")}
                 <ArrowUpRight className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
               </Button>
@@ -1522,82 +1540,73 @@ export function DashboardPage() {
                   <div className="rounded-xl bg-surface-3 p-4">
                     <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <ShieldAlert className="h-3.5 w-3.5" />
-                      {l("Action recommandée", "Recommended action", "Ø§Ù„Ø§Ø¬Ø±Ø§Ø¡ Ø§Ù„Ù…ÙˆØµÙ‰ Ø¨Ù‡")}
+                      {l("Priorite terrain", "Field priority", "Field priority")}
                     </div>
                     <div className="text-sm font-semibold text-foreground">
-                      {quickActionLabel}
+                      {dashboardActionLead}
                     </div>
                     <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      {maintenanceWindow ??
-                        l(
-                          "Fenêtre de maintenance indisponible",
-                          "Maintenance window unavailable",
-                          "Ù†Ø§ÙØ°Ø© Ø§Ù„ØµÙŠØ§Ù†Ø© ØºÙŠØ± Ù…ØªØ§Ø­Ø©",
-                        )}
+                      {dashboardActionReason}
                     </div>
                     <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      {l("Rythme observé", "Observed pace", "Ø§Ù„ÙˆØªÙŠØ±Ø© Ø§Ù„Ù…Ø±ØµÙˆØ¯Ø©")}:{" "}
+                      {l("Contexte", "Context", "Context")}:{" "}
                       <span className="font-semibold text-foreground">
-                        {prediction.cycles_per_day_observed?.toLocaleString(numberLocale) ?? "-"}
-                      </span>{" "}
-                      {l("cycles/jour", "cycles/day", "Ø¯ÙˆØ±Ø§Øª/ÙŠÙˆÙ…")}
+                        {dashboardContextLabel}
+                      </span>
                     </div>
                     <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {l("Conversion usage", "Usage conversion", "ØªØ­ÙˆÙŠÙ„ Ø§Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…")}:{" "}
-                      <span className="font-semibold text-foreground">/{prediction.factor_used}</span>{" "}
-                      ({prediction.factor_source === "observed"
-                        ? l("usage réel", "real usage", "Ø§Ø³ØªØ®Ø¯Ø§Ù… ÙØ¹Ù„ÙŠ")
-                        : l("calibration par défaut", "default calibration", "Ù…Ø¹Ø§ÙŠØ±Ø© Ø§ÙØªØ±Ø§Ø¶ÙŠØ©")})
+                      {l("Signal dominant", "Main signal", "Main signal")}:{" "}
+                      <span className="font-semibold text-foreground">{dashboardSignalLabel}</span>
                     </div>
-                    <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      {l("État prédit", "Predicted state", "Ø§Ù„Ø­Ø§Ù„Ø© Ø§Ù„Ù…ØªÙˆÙ‚Ø¹Ø©")}:{" "}
-                      <span className="font-semibold text-foreground">{prediction.hi_zone}</span>
+                    <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {l("Etat machine", "Machine state", "Machine state")}:{" "}
+                      <span className="font-semibold text-foreground">{dashboardReadingLabel}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div className="rounded-xl border border-border bg-surface-3 px-4 py-3">
-                    <div className="industrial-label">{l("Référence modèle", "Model reference", "Ù…Ø±Ø¬Ø¹ Ø§Ù„Ù†Ù…ÙˆØ°Ø¬")}</div>
+                    <div className="industrial-label">{l("Profil d'usage", "Usage profile", "Usage profile")}</div>
                     <div className="mt-1 text-lg font-bold text-foreground">
-                      {prediction.rul_min_simulator}
+                      {usageRegimeLabel}
                     </div>
                   </div>
                   <div className="rounded-xl border border-border bg-surface-3 px-4 py-3">
-                    <div className="industrial-label">{l("Confiance", "Confidence", "Ø§Ù„Ø«Ù‚Ø©")}</div>
+                    <div className="industrial-label">{l("Fiabilite lecture", "Reading reliability", "Reading reliability")}</div>
                     <div className="mt-1 text-lg font-bold text-foreground">
-                      {prediction.confidence.toUpperCase()}
+                      {confidenceLabel ?? l("Lecture en cours", "Reading in progress", "Reading in progress")}
                     </div>
                   </div>
                 </div>
               </div>
-            ) : predictionMode === "no_prediction" ? (
+            ) : predictionMode === "reference_only" ? (
               <div className="space-y-4">
                 <div className="rounded-xl bg-surface-3 p-4">
                   <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <ShieldAlert className="h-3.5 w-3.5" />
-                    {l("RUL non déclenché", "RUL not triggered", "RUL not triggered")}
+                    {l("Référence stable active", "Stable reference active", "Stable reference active")}
                   </div>
                   <div className="text-sm font-semibold text-foreground">
                     {l(
-                      "Machine stable : le pronostic chiffré reste masqué tant qu'aucune dérive fiable n'est détectée.",
-                      "Stable machine: the numeric prognosis stays hidden until a reliable drift is detected.",
-                      "Stable machine: the numeric prognosis stays hidden until a reliable drift is detected.",
+                      "Le pronostic live n'est pas disponible pour cette lecture, donc le tableau conserve une référence simple et stable.",
+                      "The live prognosis is not available for this reading, so the dashboard keeps a simple and stable reference.",
+                      "The live prognosis is not available for this reading, so the dashboard keeps a simple and stable reference.",
                     )}
                   </div>
                   <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
                     {l(
-                      "Le KPI RUL du haut conserve la référence L10 pour donner un repère simple sans surcharger la lecture.",
-                      "The top RUL KPI keeps the L10 reference to provide a simple cue without overloading the reading.",
-                      "The top RUL KPI keeps the L10 reference to provide a simple cue without overloading the reading.",
+                      "Le KPI RUL du haut affiche une référence de durée de vie pour garder un repère lisible sans surcharger la lecture.",
+                      "The top RUL KPI shows a lifetime reference to keep a readable cue without overloading the view.",
+                      "The top RUL KPI shows a lifetime reference to keep a readable cue without overloading the view.",
                     )}
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-surface-3 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
                   {l(
-                    "Quand le HI commencera à franchir le seuil méthodologique, le tableau affichera ici un RUL chiffré avec son intervalle de confiance.",
-                    "Once the HI crosses the methodological threshold, this panel will show a numeric RUL with its confidence interval.",
-                    "Once the HI crosses the methodological threshold, this panel will show a numeric RUL with its confidence interval.",
+                    "Dès qu'un pronostic live exploitable sera disponible, ce panneau affichera un RUL chiffré avec son intervalle de confiance.",
+                    "As soon as a usable live prognosis is available, this panel will show a numeric RUL with its confidence interval.",
+                    "As soon as a usable live prognosis is available, this panel will show a numeric RUL with its confidence interval.",
                   )}
                 </div>
               </div>
@@ -1674,27 +1683,27 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl bg-surface-3 p-4">
-                  <div className="industrial-label">{l("Facteur principal", "Main driver", "Ø§Ù„Ø¹Ø§Ù…Ù„ Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠ")}</div>
+                  <div className="industrial-label">{l("Ce qui pese le plus", "Main pressure point", "Main pressure point")}</div>
                   <div className="mt-1 text-lg font-bold text-foreground">
-                    {topDriverName ?? l("Non disponible", "Unavailable", "ØºÙŠØ± Ù…ØªØ§Ø­")}
+                    {topDriverLabel ?? l("Non disponible", "Unavailable", "ØºÙŠØ± Ù…ØªØ§Ø­")}
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
                     {hasLivePrediction
                       ? l(
-                          "Trois leviers techniques qui poussent le pronostic à la hausse ou à la baisse.",
-                          "Three technical drivers that push the prognosis up or down.",
-                          "Three technical drivers that push the prognosis up or down.",
+                          "Les signaux qui raccourcissent ou rallongent le plus la marge restante.",
+                          "The signals that shorten or extend the remaining margin the most.",
+                          "The signals that shorten or extend the remaining margin the most.",
                         )
                       : isReferenceMode
                         ? l(
-                            "Trois variables que le modèle surveille pendant que le dashboard garde une référence stable.",
-                            "Three variables the model keeps watching while the dashboard stays on a stable reference.",
-                            "Three variables the model keeps watching while the dashboard stays on a stable reference.",
+                            "Les signaux que le modele surveille pendant que le dashboard garde une reference stable.",
+                            "The signals the model keeps watching while the dashboard stays on a stable reference.",
+                            "The signals the model keeps watching while the dashboard stays on a stable reference.",
                           )
                         : l(
-                            "Trois variables qui servent à préparer la première lecture RUL fiable.",
-                            "Three variables helping prepare the first reliable RUL reading.",
-                            "Three variables helping prepare the first reliable RUL reading.",
+                            "Les signaux qui servent a preparer la premiere lecture RUL fiable.",
+                            "The signals helping prepare the first reliable RUL reading.",
+                            "The signals helping prepare the first reliable RUL reading.",
                           )}
                   </div>
                 </div>
@@ -1750,7 +1759,7 @@ export function DashboardPage() {
                   onClick={() => setIsExplainOpen(true)}
                 >
                   <Info className="w-4 h-4" />
-                  {l("Facteurs du modèle", "Model drivers", "Model drivers")}
+                  {l("Voir pourquoi", "See why", "See why")}
                 </Button>
               </div>
             )}

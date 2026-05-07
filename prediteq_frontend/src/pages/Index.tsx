@@ -183,7 +183,13 @@ const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const route = location.pathname;
+  const searchParams = new URLSearchParams(location.search);
   const currentPage = routeToPage[route];
+  const allowAdminCreateSignup =
+    route === "/signup" &&
+    currentUser?.role === "admin" &&
+    currentUser?.status === "approved" &&
+    searchParams.get("mode") === "admin-create";
 
   const navigateTo = (path: string) => {
     navigate(path);
@@ -201,7 +207,7 @@ const Index = () => {
   }
 
   const showLogin = !currentUser && route === "/login";
-  const showSignup = !currentUser && route === "/signup";
+  const showSignup = route === "/signup" && (!currentUser || allowAdminCreateSignup);
   const showForgot = !currentUser && route === "/forgot-password";
   const showReset = route === "/reset-password";
   const showPending =
@@ -253,7 +259,7 @@ const Index = () => {
     );
   }
 
-  if (currentUser && isAuthRoute) {
+  if (currentUser && isAuthRoute && !allowAdminCreateSignup) {
     if (currentUser.status === "approved") {
       return <Navigate to="/dashboard" replace />;
     }

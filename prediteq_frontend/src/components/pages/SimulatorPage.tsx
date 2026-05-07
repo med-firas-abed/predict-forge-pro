@@ -54,38 +54,38 @@ const SIMULATOR_COPY: Record<
 > = {
   "ASC-A1": {
     usageCase: {
-      fr: "Cadence élevée, avec des charges légères à moyennes.",
-      en: "High cadence, mostly light-to-medium payloads.",
-      ar: "High cadence, mostly light-to-medium payloads.",
+      fr: "Cycle modéré, charges légères et installation protégée.",
+      en: "Moderate duty cycle, light payloads, protected installation.",
+      ar: "Moderate duty cycle, light payloads, protected installation.",
     },
     explanation: {
-      fr: "Machine la plus récente du parc : trajets fréquents, chargement maîtrisé et environnement plus frais.",
-      en: "Newest machine in the fleet: frequent trips, disciplined loading, and a cooler environment.",
-      ar: "Newest machine in the fleet: frequent trips, disciplined loading, and a cooler environment.",
+      fr: "Même génération de flotte, mais usage plus calme : service plus court, charges plus légères, ambiance plus sèche et presque aucune surcharge.",
+      en: "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
+      ar: "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
     },
   },
   "ASC-B2": {
     usageCase: {
-      fr: "Trafic d'entrepôt équilibré avec des cycles récurrents à demi-charge.",
-      en: "Balanced warehouse traffic with recurring half-load cycles.",
-      ar: "Balanced warehouse traffic with recurring half-load cycles.",
+      fr: "Trafic mixte régulier avec demi-charges et pics aux heures de pointe.",
+      en: "Regular mixed traffic with half-load cycles and rush-hour peaks.",
+      ar: "Regular mixed traffic with half-load cycles and rush-hour peaks.",
     },
     explanation: {
-      fr: "Machine à mi-vie : usage quotidien modéré avec usure progressive et quelques pics ponctuels.",
-      en: "Mid-life machine: moderate daily usage with gradual wear and occasional peaks.",
-      ar: "Mid-life machine: moderate daily usage with gradual wear and occasional peaks.",
+      fr: "Même âge que les autres, avec un rythme normal, des charges mixtes et un stress ambiant modéré.",
+      en: "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
+      ar: "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
     },
   },
   "ASC-C3": {
     usageCase: {
-      fr: "Machine vieillissante avec de fortes charges et des conditions ambiantes plus sévères.",
-      en: "Aging machine with heavy payloads and harsher ambient conditions.",
-      ar: "Aging machine with heavy payloads and harsher ambient conditions.",
+      fr: "Ligne intensive avec charges lourdes et ambiance sévère.",
+      en: "Intensive duty line with heavy payloads and harsh ambient conditions.",
+      ar: "Intensive duty line with heavy payloads and harsh ambient conditions.",
     },
     explanation: {
-      fr: "Machine en fin de vie : charges fréquentes proches du maximum, environnement plus chaud et RUL visible très court.",
-      en: "End-of-life machine: frequent near-max loads, hotter ambient conditions, and a very short visible RUL.",
-      ar: "End-of-life machine: frequent near-max loads, hotter ambient conditions, and a very short visible RUL.",
+      fr: "Même âge de flotte, mais usage plus dur : longues amplitudes, charges proches du maximum, ambiance plus chaude et humide, vibration plus marquée.",
+      en: "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
+      ar: "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
     },
   },
 };
@@ -238,7 +238,7 @@ export function SimulatorPage() {
           };
         case "load_variability":
           return {
-            label: l("Variabilité de charge", "Load variability", "Load variability"),
+            label: l("Variation de charge", "Load variation", "Load variation"),
             tone: "bg-amber-500",
           };
         case "overload_bias":
@@ -356,11 +356,23 @@ export function SimulatorPage() {
 
         <p className="mb-5 text-sm text-muted-foreground">
           {l(
-            "Ici, on lance la démo puis on suit, pour chaque machine, l'état de santé, le niveau de risque et la marge restante.",
-            "Start the demo here, then follow each machine's health, risk level, and remaining margin.",
-            "Start the demo here, then follow each machine's health, risk level, and remaining margin.",
+            "Ici, on lance un replay demo calibre puis on suit, pour chaque machine, l'etat de sante, le niveau de risque et la marge restante.",
+            "Start the calibrated demo replay here, then follow each machine's health, risk level, and remaining margin.",
+            "Start the calibrated demo replay here, then follow each machine's health, risk level, and remaining margin.",
           )}
         </p>
+
+        <div className="mb-5 rounded-xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
+          <span className="font-semibold text-foreground">
+            {l("Logique de calcul", "Computation logic", "Computation logic")}
+          </span>
+          :{" "}
+          {l(
+            "Aujourd'hui, la lecture vient d'un replay demo calibre. En exploitation reelle, la meme chaine utilisera les vraies mesures vibration, puissance, temperature et humidite remontees par les machines.",
+            "Today, the reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity data sent by the machines.",
+            "Today, the reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity data sent by the machines.",
+          )}
+        </div>
 
         {demoStoryMachines.length > 0 && (
           <div className="mb-5 rounded-xl border border-border bg-surface-3 p-4">
@@ -602,7 +614,7 @@ export function SimulatorPage() {
                 predictionMode:
                   runtimeMachine?.rulMode ?? runtimeMachine?.decision?.predictionMode ?? null,
                 prediction: buildMachinePrediction(runtimeMachine),
-                l10Years: runtimeMachine?.l10Years ?? null,
+                referenceLifetimeYears: runtimeMachine?.referenceLifetimeYears ?? null,
                 referenceDays:
                   runtimeMachine?.rulReferenceDays ??
                   scenario.reference_rul_days ??
@@ -674,7 +686,7 @@ export function SimulatorPage() {
 
                         <div className="rounded-xl border border-border bg-surface-3 px-3 py-3">
                           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            {l("État de santé en direct", "Live health index", "Live health index")}
+                            {l("État de santé en direct", "Live machine health (HI)", "Live machine health (HI)")}
                           </div>
                           <div className="mt-1 text-base font-bold text-foreground">
                             {typeof hi === "number" ? `${(hi * 100).toFixed(1)}%` : "--"}

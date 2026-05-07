@@ -1,0 +1,25 @@
+{
+  "folders": [
+    { "name": "docs", "path": "docs" },
+    { "name": "prediteq_ml", "path": "prediteq_ml" },
+    { "name": "prediteq_api", "path": "prediteq_api" },
+    { "name": "prediteq_frontend", "path": "prediteq_frontend" }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.runtime": true,
+      "**/__pycache__": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/test-results": true,
+      "**/*.log": true
+    },
+    "search.exclude": {
+      "**/.runtime": true,
+      "**/__pycache__": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/test-results": true
+    }
+  }
+}

@@ -18,7 +18,7 @@ AXIS_LABELS: dict[str, str] = {
     "thermal": "Thermique",
     "vibration": "Vibratoire",
     "load": "Charge",
-    "variability": "Variabilité",
+    "variability": "Régime instable",
 }
 
 STRESS_LABELS: dict[str, str] = {
@@ -36,7 +36,7 @@ CONFIDENCE_LABELS: dict[str, str] = {
 
 DATA_SOURCE_LABELS: dict[str, str] = {
     "live_runtime": "flux en direct",
-    "simulator_demo": "replay démo",
+    "simulator_demo": "replay démo calibré",
     "persisted_reference": "référence persistée",
     "no_data": "aucun flux récent",
 }
@@ -48,7 +48,7 @@ URGENCY_META: dict[PredictiveBand, dict[str, Any]] = {
     "critical": {"label": "Urgent", "hex": "#f43f5e"},
 }
 
-_RUL_V2_UNSET = object()
+_CALIBRATED_RUL_UNSET = object()
 
 
 def _safe_float(value: Any) -> float | None:
@@ -316,11 +316,11 @@ def build_machine_decision_snapshot(
     *,
     alerts_24h: int = 0,
     open_tasks: int = 0,
-    rul_v2: dict | None | object = _RUL_V2_UNSET,
+    calibrated_rul: dict | None | object = _CALIBRATED_RUL_UNSET,
 ) -> dict[str, Any]:
     from routers.diagnostics_rul import (
         _build_diagnose_features,
-        build_rul_v2_response,
+        build_calibrated_rul_response,
         compute_stress_index,
         diagnose,
         hi_to_zone,
@@ -330,24 +330,32 @@ def build_machine_decision_snapshot(
     live = dict(manager.last_results.get(code) or {})
     raw = dict(manager.last_raw.get(code) or {})
 
-    if rul_v2 is _RUL_V2_UNSET:
+    if calibrated_rul is _CALIBRATED_RUL_UNSET:
         try:
-            rul_v2_payload = build_rul_v2_response(manager, code)
+            calibrated_rul_payload = build_calibrated_rul_response(manager, code)
         except HTTPException as exc:
             if exc.status_code in {404, 425}:
-                rul_v2_payload = None
+                calibrated_rul_payload = None
             else:
-                logger.warning("Could not build decision RUL v2 payload for %s: %s", code, exc)
-                rul_v2_payload = None
+                logger.warning(
+                    "Could not build decision calibrated RUL payload for %s: %s",
+                    code,
+                    exc,
+                )
+                calibrated_rul_payload = None
         except Exception as exc:
-            logger.warning("Could not build decision RUL v2 payload for %s: %s", code, exc)
-            rul_v2_payload = None
+            logger.warning(
+                "Could not build decision calibrated RUL payload for %s: %s",
+                code,
+                exc,
+            )
+            calibrated_rul_payload = None
     else:
-        rul_v2_payload = rul_v2 if isinstance(rul_v2, dict) else None
+        calibrated_rul_payload = calibrated_rul if isinstance(calibrated_rul, dict) else None
 
-    prediction = (rul_v2_payload or {}).get("prediction") or {}
+    prediction = (calibrated_rul_payload or {}).get("prediction") or {}
 
-    hi = _safe_float((rul_v2_payload or {}).get("hi_current"))
+    hi = _safe_float((calibrated_rul_payload or {}).get("hi_current"))
     if hi is None:
         hi = _safe_float(live.get("hi_smooth"))
     if hi is None:
@@ -355,7 +363,7 @@ def build_machine_decision_snapshot(
 
     zone = (
         live.get("zone")
-        or (rul_v2_payload or {}).get("zone")
+        or (calibrated_rul_payload or {}).get("zone")
         or (hi_to_zone(hi) if hi is not None else None)
     )
     status = _hi_to_status(zone, hi, machine.get("statut"))
@@ -413,15 +421,15 @@ def build_machine_decision_snapshot(
     else:
         top_driver = dominant_axis
 
-    prediction_mode = (rul_v2_payload or {}).get("mode")
+    prediction_mode = (calibrated_rul_payload or {}).get("mode")
     if prediction_mode is None and hi is not None and hi >= 0.8:
-        prediction_mode = "no_prediction"
+        prediction_mode = "reference_only"
     elif prediction_mode is None and code in manager.engines:
-        prediction_mode = "warming_up"
+        prediction_mode = "initializing"
     rul_days = _safe_float(prediction.get("rul_days"))
     confidence = prediction.get("confidence")
     maintenance_window = (
-        (rul_v2_payload or {}).get("maintenance_window")
+        (calibrated_rul_payload or {}).get("maintenance_window")
         or prediction.get("maintenance_window")
     )
     stop_recommended = bool(prediction.get("stop_recommended"))
@@ -444,9 +452,9 @@ def build_machine_decision_snapshot(
             base_score = 28
     elif status == "degraded":
         base_score = 42
-    elif prediction_mode == "warming_up":
+    elif prediction_mode == "initializing":
         base_score = 28 if hi is None or hi >= 0.8 else 42
-    elif prediction_mode == "no_prediction":
+    elif prediction_mode == "reference_only":
         base_score = 16 if hi is None or hi >= 0.8 else 30
 
     health_penalty = round((1 - hi) * 18) if hi is not None else 6
@@ -499,7 +507,7 @@ def build_machine_decision_snapshot(
         recommended_action = maintenance_window or "Vérifier la machine avant le prochain cycle de maintenance préventive."
     else:
         summary = f"{code} reste stable : aucun signe précurseur fort de dégradation rapide n'est observé."
-        plain_reason = "Le Health Index reste confortable et les signaux récents ne montrent pas de dérive nette."
+        plain_reason = "L'indice de santé reste confortable et les signaux récents ne montrent pas de dérive nette."
         impact = "Aucun arrêt à court terme n'est suggéré par les données récentes."
         recommended_action = maintenance_window or "Conserver la surveillance normale et la maintenance planifiée."
 
@@ -527,21 +535,21 @@ def build_machine_decision_snapshot(
         impact = "Le niveau d'alerte expert invite à vérifier la machine sur le terrain sans attendre une dérive supplémentaire du RUL."
 
     trust_note: str
-    if critical_diagnoses and prediction_mode == "no_prediction":
+    if critical_diagnoses and prediction_mode == "reference_only":
         trust_note = (
-            "Le RUL live reste masqué tant que le HI demeure au-dessus du seuil méthodologique, "
+            "Le pronostic live n'est pas encore exploitable sur cette lecture, "
             "mais les règles expertes justifient ici un contrôle terrain prioritaire."
         )
-    elif critical_diagnoses and prediction_mode == "warming_up":
+    elif critical_diagnoses and prediction_mode == "initializing":
         trust_note = (
             "Le pronostic RUL se calibre encore, mais les règles expertes justifient déjà un contrôle terrain prioritaire."
         )
     elif prediction_mode == "prediction" and confidence:
         trust_note = f"Prédiction publiée avec un niveau de confiance {CONFIDENCE_LABELS.get(str(confidence), 'indéterminé')}."
-    elif prediction_mode == "warming_up":
+    elif prediction_mode == "initializing":
         trust_note = "Le système attend encore suffisamment d'historique avant de consolider le pronostic."
-    elif prediction_mode == "no_prediction":
-        trust_note = "Le système préfère conserver une référence stable plutôt que d'afficher un faux RUL."
+    elif prediction_mode == "reference_only":
+        trust_note = "Le système conserve une référence stable plutôt qu'un RUL live non fiable."
     elif data_source == "persisted_reference":
         trust_note = "Lecture issue du dernier état persisté, sans flux capteur récent."
     else:
@@ -549,13 +557,21 @@ def build_machine_decision_snapshot(
 
     evidence: list[str] = []
     if hi is not None:
-        evidence.append(f"HI {_format_fr_number(hi * 100, 0)} % ({zone or hi_to_zone(hi)})")
+        evidence.append(f"Indice de santé (HI) {_format_fr_number(hi * 100, 0)} % ({zone or hi_to_zone(hi)})")
     if rul_days is not None:
         evidence.append(f"RUL estimé à {_format_fr_number(rul_days, 1)} j")
-    elif prediction_mode == "no_prediction":
-        l10_years = _safe_float(((rul_v2_payload or {}).get("l10") or {}).get("years_adjusted"))
-        if l10_years is not None:
-            evidence.append(f"Référence L10 {_format_fr_number(l10_years, 1)} ans")
+    elif prediction_mode == "reference_only":
+        bearing_reference_years = _safe_float(
+            ((calibrated_rul_payload or {}).get("bearing_reference") or {}).get("years_adjusted")
+        )
+        if bearing_reference_years is None:
+            bearing_reference_years = _safe_float(
+                ((calibrated_rul_payload or {}).get("l10") or {}).get("years_adjusted")
+            )
+        if bearing_reference_years is not None:
+            evidence.append(
+                f"Référence stable de durée de vie {_format_fr_number(bearing_reference_years, 1)} ans"
+            )
     if leading_cause:
         evidence.append(f"Alerte experte : {leading_cause}")
     if dominant_axis:

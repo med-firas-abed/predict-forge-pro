@@ -56,6 +56,7 @@ class StatusResponse(BaseModel):
     status: str
     machine_id: Optional[str] = None
     machine_code: Optional[str] = None
+    machine_name: Optional[str] = None
 
 
 class PendingUser(BaseModel):
@@ -66,7 +67,12 @@ class PendingUser(BaseModel):
     status: str
     machine_id: Optional[str] = None
     machine_code: Optional[str] = None
+    machine_name: Optional[str] = None
     created_at: Optional[str] = None
+
+
+class UpdateUserMachineRequest(BaseModel):
+    machine_id: Optional[str] = None
 
 
 class PublicMachine(BaseModel):
@@ -210,7 +216,7 @@ def login(body: LoginRequest):
     # Check profile status
     try:
         profile_res = sb.table("profiles") \
-            .select("*, machines(code)") \
+            .select("*, machines(code, nom)") \
             .eq("id", user.id) \
             .execute()
         if not profile_res.data:
@@ -240,6 +246,7 @@ def login(body: LoginRequest):
             "role": profile.get("role", "user"),
             "machine_id": profile.get("machine_id"),
             "machine_code": machine.get("code") if machine else None,
+            "machine_name": machine.get("nom") if machine else None,
             "full_name": profile.get("full_name", ""),
         },
     }
@@ -253,7 +260,7 @@ async def get_my_status(user: CurrentUser = Depends(_get_user_from_token)):
     sb = get_supabase()
     try:
         profile_res = sb.table("profiles") \
-            .select("*, machines(code)") \
+            .select("*, machines(code, nom)") \
             .eq("id", user.id) \
             .execute()
     except Exception as e:
@@ -272,6 +279,7 @@ async def get_my_status(user: CurrentUser = Depends(_get_user_from_token)):
         status=p.get("status", "pending"),
         machine_id=p.get("machine_id"),
         machine_code=machine.get("code") if machine else None,
+        machine_name=machine.get("nom") if machine else None,
     )
 
 
@@ -282,7 +290,7 @@ async def list_all_users(admin: CurrentUser = Depends(require_admin)):
     """List all users with emails resolved from auth.users."""
     sb = get_supabase()
     res = sb.table("profiles") \
-        .select("*, machines(code)") \
+        .select("*, machines(code, nom)") \
         .order("created_at", desc=True) \
         .execute()
 
@@ -305,6 +313,7 @@ async def list_all_users(admin: CurrentUser = Depends(require_admin)):
             "status": p.get("status", "pending"),
             "machine_id": p.get("machine_id"),
             "machine_code": machine.get("code") if machine else None,
+            "machine_name": machine.get("nom") if machine else None,
             "created_at": p.get("created_at"),
             "approved_at": p.get("approved_at"),
         })
@@ -318,7 +327,7 @@ async def list_pending_users(admin: CurrentUser = Depends(require_admin)):
     """List all pending user accounts, separated by role."""
     sb = get_supabase()
     res = sb.table("profiles") \
-        .select("*, machines(code)") \
+        .select("*, machines(code, nom)") \
         .eq("status", "pending") \
         .order("created_at", desc=True) \
         .execute()
@@ -333,6 +342,7 @@ async def list_pending_users(admin: CurrentUser = Depends(require_admin)):
             status="pending",
             machine_id=p.get("machine_id"),
             machine_code=machine.get("code") if machine else None,
+            machine_name=machine.get("nom") if machine else None,
             created_at=p.get("created_at"),
         ))
     return users
@@ -427,6 +437,88 @@ async def reject_user(user_id: str, admin: CurrentUser = Depends(require_admin))
     log_audit(admin.id, admin.email, "user.reject", {"target_user_id": user_id})
 
     return {"status": "rejected", "user_id": user_id}
+
+
+@router.patch("/admin/users/{user_id}/machine")
+async def update_user_machine(
+    user_id: str,
+    body: UpdateUserMachineRequest,
+    admin: CurrentUser = Depends(require_admin),
+):
+    """Reassign an approved/pending user to another machine."""
+    sb = get_supabase()
+    machine_id = _validate_machine_id(body.machine_id)
+
+    if not machine_id:
+        raise HTTPException(400, "machine_id is required")
+
+    res = sb.table("profiles").select("*").eq("id", user_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Utilisateur introuvable")
+    target = res.data[0]
+
+    if target.get("role") != "user":
+        raise HTTPException(400, "Seuls les comptes utilisateur peuvent etre reaffectes")
+
+    try:
+        machine_res = (
+            sb.table("machines")
+            .select("id, code, nom")
+            .eq("id", machine_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        logger.error("Machine lookup on admin reassignment: %s", e)
+        raise HTTPException(502, "Erreur base de donnees")
+
+    if not machine_res.data:
+        raise HTTPException(400, "Machine inconnue")
+
+    machine = machine_res.data[0]
+    previous_machine_id = target.get("machine_id")
+
+    try:
+        sb.table("profiles").update({"machine_id": machine_id}).eq("id", user_id).execute()
+    except Exception as e:
+        logger.error("Profile machine reassignment failed for %s: %s", user_id, e)
+        raise HTTPException(502, "Erreur lors de la reaffectation")
+
+    try:
+        update_auth_user = getattr(sb.auth.admin, "update_user_by_id", None)
+        if callable(update_auth_user):
+            update_auth_user(
+                user_id,
+                {
+                    "user_metadata": {
+                        "full_name": target.get("full_name", ""),
+                        "role": target.get("role", "user"),
+                        "machine_id": machine_id,
+                    }
+                },
+            )
+    except Exception as e:
+        logger.warning("Could not update auth metadata for %s after reassignment: %s", user_id, e)
+
+    log_audit(
+        admin.id,
+        admin.email,
+        "user.reassign_machine",
+        {
+            "target_user_id": user_id,
+            "previous_machine_id": previous_machine_id,
+            "new_machine_id": machine_id,
+            "new_machine_code": machine.get("code"),
+        },
+    )
+
+    return {
+        "status": "updated",
+        "user_id": user_id,
+        "machine_id": machine_id,
+        "machine_code": machine.get("code"),
+        "machine_name": machine.get("nom"),
+    }
 
 
 # ─── DELETE /admin/users/{id} ─────────────────────────────────────────────────

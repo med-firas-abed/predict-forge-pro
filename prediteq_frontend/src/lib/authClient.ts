@@ -44,7 +44,7 @@ export async function updateAuthPassword(password: string) {
 export async function fetchProfileRow(profileId: string) {
   return supabase
     .from("profiles")
-    .select("*, machines(code)")
+    .select("*, machines(code, nom)")
     .eq("id", profileId)
     .single();
 }
@@ -52,6 +52,6 @@ export async function fetchProfileRow(profileId: string) {
 export async function fetchAllProfileRows() {
   return supabase
     .from("profiles")
-    .select("*, machines(code)")
+    .select("*, machines(code, nom)")
     .order("created_at", { ascending: false });
 }

@@ -152,7 +152,6 @@ export function ChatWidget() {
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.07),transparent_42%,rgba(15,118,110,0.06)_100%)]" />
             <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[1.15rem] border border-primary/12 bg-gradient-to-br from-primary/18 via-primary/10 to-emerald-500/18 transition-transform group-hover:scale-[1.03]">
               <Bot className="h-5 w-5 text-primary" />
-              <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-4 ring-card animate-pulse" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">

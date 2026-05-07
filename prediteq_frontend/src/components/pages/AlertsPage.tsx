@@ -61,7 +61,7 @@ function sortSignals(left: GroupedAlert, right: GroupedAlert) {
 function getSeverityMeta(severity: AlertLevel) {
   if (severity === "urgence") {
     return {
-      label: "Controle prioritaire",
+      label: "A traiter tout de suite",
       shortLabel: "Critique",
       panelClass: "border-destructive/25 bg-destructive/5",
       badgeClass: "bg-destructive/10 text-destructive",
@@ -71,7 +71,7 @@ function getSeverityMeta(severity: AlertLevel) {
 
   if (severity === "surveillance") {
     return {
-      label: "Sous surveillance",
+      label: "A surveiller de pres",
       shortLabel: "Surveillance",
       panelClass: "border-warning/25 bg-warning/5",
       badgeClass: "bg-warning/10 text-warning",
@@ -91,6 +91,7 @@ function getSeverityMeta(severity: AlertLevel) {
 export function AlertsPage() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const { machines } = useMachines(currentUser?.machineId);
   const { alertes, acquitterAlertes } = useAlertes(currentUser?.machineId);
   const { emailHistory } = useAlertEmailHistory(currentUser?.machineId);
@@ -228,16 +229,58 @@ export function AlertsPage() {
   }, [emailHistory, endDate, machineFilter, startDate]);
   const visibleEmailHistory = filteredEmailHistory.slice(0, 10);
 
+  const openPlanner = (machineId?: string) => {
+    if (isAdmin) {
+      const query = machineId
+        ? `/ia?tab=planner&machine=${encodeURIComponent(machineId)}`
+        : "/ia?tab=planner";
+      navigate(query);
+      return;
+    }
+
+    navigate("/maintenance");
+  };
+
   return (
     <div className="space-y-6">
-      <div className="section-title">Centre d'alertes</div>
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="section-title">Alertes issues du pronostic machine</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ici, une alerte n'est pas juste un seuil brut : chaque cas est relie aux signaux machine,
+              au HI, au stress et au RUL pour guider la prochaine action terrain.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openPlanner()}
+            className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+          >
+            {isAdmin ? "Ouvrir le plan d'action" : "Voir le calendrier"}
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-foreground">
+            {activeMachineCount} machine{activeMachineCount > 1 ? "s" : ""} a traiter
+          </span>
+          <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
+            {activeSignalCount} signal{activeSignalCount > 1 ? "aux" : ""} encore ouvert{activeSignalCount > 1 ? "s" : ""}
+          </span>
+          <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
+            {filteredEmailHistory.length} email{filteredEmailHistory.length > 1 ? "s" : ""} de trace recente
+          </span>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Machines a traiter maintenant</div>
+            <div className="section-title">Cas actifs priorises par le pronostic</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Une ligne = une machine. Les signaux encore ouverts restent disponibles a la demande.
+              Une carte = une machine. Les signaux ouverts sont regroupes, puis relus avec le HI, le stress
+              et le RUL pour decider quoi verifier d'abord.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -303,7 +346,7 @@ export function AlertsPage() {
 
                       <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_0.9fr]">
                         <div className="rounded-xl border border-border bg-card/80 p-4">
-                          <div className="industrial-label">Pourquoi maintenant</div>
+                          <div className="industrial-label">Signal dominant</div>
                           <div className="mt-2 text-sm font-semibold text-foreground">
                             {leadSignal?.title ?? "Signal a confirmer"}
                           </div>
@@ -313,12 +356,12 @@ export function AlertsPage() {
                         </div>
 
                         <div className="rounded-xl border border-border bg-card/80 p-4">
-                          <div className="industrial-label">Action recommandee</div>
+                          <div className="industrial-label">Decision terrain conseillee</div>
                           <div className="mt-2 text-sm font-semibold text-foreground">
                             {insight?.recommendedAction ?? "Verifier la machine avant reprise en charge normale."}
                           </div>
                           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                            {insight?.summary ?? "Le detail technique reste accessible dans le diagnostic de la machine."}
+                            {insight?.impact ?? "Le detail technique reste accessible dans le diagnostic de la machine."}
                           </p>
                         </div>
                       </div>
@@ -331,6 +374,14 @@ export function AlertsPage() {
                       >
                         Voir diagnostic
                         <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openPlanner(row.machineId)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card/80 px-3.5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface-3"
+                      >
+                        {isAdmin ? "Ouvrir le plan d'action" : "Voir le calendrier"}
                       </button>
 
                       <button
@@ -416,7 +467,13 @@ export function AlertsPage() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
-        <div className="mb-4 section-title">Filtres</div>
+        <div className="mb-4">
+          <div className="section-title">Filtrer la lecture</div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Les cas actifs restent en haut. Les filtres servent surtout a cibler une machine, une periode ou
+            un niveau de severite.
+          </p>
+        </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div>
             <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Severite</label>
@@ -467,16 +524,17 @@ export function AlertsPage() {
         </div>
 
         <div className="mt-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
-          L'historique reste secondaire ici : la vue principale se limite aux cas encore actifs, regroupes par machine.
+          La vue principale reste volontairement operationnelle : un cas actif = une machine a relire maintenant.
         </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Historique des emails d'alerte</div>
+            <div className="section-title">Trace des emails d'alerte</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Trace recente des notifications envoyees ou tentees par le pipeline et la simulation.
+              Journal recent des notifications envoyees ou tentees. Cette trace sert a l'audit, pas a la
+              priorisation principale.
             </p>
           </div>
           <div className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
@@ -543,9 +601,9 @@ export function AlertsPage() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Historique replie</div>
+            <div className="section-title">Historique des alertes cloturees</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Les anciens signaux restent disponibles en bas de page sans reprendre la main sur l'operationnel.
+              Les anciens signaux restent disponibles ici sans reprendre la main sur les cas encore actifs.
             </p>
           </div>
           <button

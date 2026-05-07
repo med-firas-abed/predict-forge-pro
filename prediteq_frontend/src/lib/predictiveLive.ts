@@ -55,11 +55,11 @@ export function formatHiPercent(hi: number | null, locale = "fr-FR") {
 }
 
 export function formatPredictiveRul(insight: PredictiveInsight, locale = "fr-FR") {
-  if (insight.predictionMode === "no_prediction") {
-    if (typeof insight.machine.l10Years === "number") {
-      return `L10 ${formatCompactNumber(insight.machine.l10Years, locale, 1)} a`;
+  if (insight.predictionMode === "reference_only") {
+    if (typeof insight.machine.referenceLifetimeYears === "number") {
+      return `Ref. ${formatCompactNumber(insight.machine.referenceLifetimeYears, locale, 1)} a`;
     }
-    return "Prédiction en veille";
+    return "Référence stable";
   }
 
   if (typeof insight.rulDays === "number") {
@@ -74,7 +74,7 @@ export function formatPredictiveRul(insight: PredictiveInsight, locale = "fr-FR"
     return `~${formatCompactNumber(insight.machine.rulReferenceDays, locale, 0)} j`;
   }
 
-  if (insight.predictionMode === "warming_up") {
+  if (insight.predictionMode === "initializing") {
     return "Initialisation RUL";
   }
 

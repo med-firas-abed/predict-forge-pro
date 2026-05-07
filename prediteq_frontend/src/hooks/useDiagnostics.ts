@@ -94,28 +94,31 @@ export interface StressIndex {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RUL v2 — FPT-conditional + observed-rate + ISO 281 adjusted L10
-// Mirrors prediteq_api/routers/diagnostics_rul.py:rul_v2 endpoint
+// Calibrated RUL payload — restored calendar scale + observed usage + ISO 281 reference
+// Mirrors prediteq_api/routers/diagnostics_rul.py:/calibrated-rul payload
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type RulV2Mode = "no_prediction" | "warming_up" | "prediction";
-export type FactorSource = "observed" | "calibration_default";
-export type L10Source = "measured" | "fallback";
+export type CalibratedRulMode = "reference_only" | "initializing" | "prediction";
+export type LegacyCalibratedRulMode = "no_prediction" | "warming_up" | "prediction";
+export type AnyCalibratedRulMode = CalibratedRulMode | LegacyCalibratedRulMode;
+export type FactorSource = "observed" | "calibration_default" | "synthetic_scale";
+export type BearingReferenceSource = "measured" | "fallback";
 export type RulReferenceKind = "demo_reference" | "last_valid";
 
-export interface RulV2L10 {
+export interface BearingReference {
   years_adjusted: number;
   p_observed_kw: number | null;
   p_nominal_kw: number;
-  source: L10Source;
+  source: BearingReferenceSource;
   reference: string;
   bearing_model: string;
-  l10_nominal_years: number;
+  nominal_years?: number;
+  l10_nominal_years?: number;
 }
 
 export type HiZone = "Excellent" | "Good" | "Degraded" | "Critical" | "Unknown";
 
-export interface RulV2Prediction {
+export interface CalibratedRulPrediction {
   // Affichage primaire — calendrier GMAO (sortie RF traduite par rythme observé)
   rul_days: number;
   rul_days_p10: number | null;
@@ -144,31 +147,43 @@ export interface RulV2Prediction {
   stop_recommended: boolean;
 }
 
-export interface RulV2ReferencePrediction {
+export interface CalibratedRulReferencePrediction {
   kind: RulReferenceKind;
   rul_days: number;
 }
 
-export interface RulV2Disclaimers {
-  fpt_gate: string;
-  rate_basis: string;
-  l10_basis: string;
-  warm_up: string;
-  model_scope: string;
+export interface CalibratedRulDisclosures {
+  availability_note?: string;
+  calendar_basis?: string;
+  bearing_reference_basis?: string;
+  warmup_note?: string;
+  model_scope_note?: string;
+  /** Legacy compatibility aliases that may still arrive from persisted payloads. */
+  fpt_gate?: string;
+  rate_basis?: string;
+  l10_basis?: string;
+  warm_up?: string;
+  model_scope?: string;
 }
 
-export interface RulV2Response {
+export interface CalibratedRulResponse {
   machine_code: string;
-  mode: RulV2Mode;
+  mode: AnyCalibratedRulMode;
+  legacy_mode?: LegacyCalibratedRulMode;
   hi_current: number | null;
   zone: string | null;
-  l10: RulV2L10;
-  disclaimers: RulV2Disclaimers;
-  prediction: RulV2Prediction | null;
-  reference_prediction?: RulV2ReferencePrediction | null;
+  bearing_reference?: BearingReference | null;
+  l10?: BearingReference | null;
+  disclosures?: CalibratedRulDisclosures | null;
+  disclaimers?: CalibratedRulDisclosures | null;
+  prediction: CalibratedRulPrediction | null;
+  reference_prediction?: CalibratedRulReferencePrediction | null;
   /** Recommandation calendrier GMAO — toujours présente quel que soit le mode */
   maintenance_window: string | null;
-  fpt_threshold: number;
+  /** Compatibility metadata from the backend; no product-side masking relies on it. */
+  warmup_hi_threshold?: number;
+  fpt_threshold?: number;
+  warmup_detail?: string;
   warming_up_detail?: string;
 }
 
@@ -178,9 +193,49 @@ export interface DiagnosticsAll {
   diagnose: DiagnoseResponse | null;
   rul_explain: RulExplain | null;
   stress_index: StressIndex | null;
-  rul_v2: RulV2Response | null;
+  calibrated_rul: CalibratedRulResponse | null;
+  rul_v2: CalibratedRulResponse | null;
   disclaimers: DisclaimersBundle;
   errors: Record<string, { status_code: number; detail: string }>;
+}
+
+export function normalizeCalibratedRulMode(
+  mode: AnyCalibratedRulMode | null | undefined,
+): CalibratedRulMode | null {
+  if (!mode) return null;
+  if (mode === "no_prediction") return "reference_only";
+  if (mode === "warming_up") return "initializing";
+  return mode;
+}
+
+export function getCalibratedRul(data: DiagnosticsAll | null | undefined) {
+  return data?.calibrated_rul ?? data?.rul_v2 ?? null;
+}
+
+export function getBearingReference(
+  rul: CalibratedRulResponse | null | undefined,
+): BearingReference | null {
+  return rul?.bearing_reference ?? rul?.l10 ?? null;
+}
+
+export function getCalibratedRulDisclosures(
+  rul: CalibratedRulResponse | null | undefined,
+) {
+  const raw = rul?.disclosures ?? rul?.disclaimers ?? null;
+  return {
+    availability_note: raw?.availability_note ?? raw?.fpt_gate ?? "",
+    calendar_basis: raw?.calendar_basis ?? raw?.rate_basis ?? "",
+    bearing_reference_basis:
+      raw?.bearing_reference_basis ?? raw?.l10_basis ?? "",
+    warmup_note: raw?.warmup_note ?? raw?.warm_up ?? "",
+    model_scope_note: raw?.model_scope_note ?? raw?.model_scope ?? "",
+  };
+}
+
+export function getCalibratedRulWarmupDetail(
+  rul: CalibratedRulResponse | null | undefined,
+) {
+  return rul?.warmup_detail ?? rul?.warming_up_detail ?? null;
 }
 
 const DIAGNOSTICS_REFETCH_MS = 5_000;
@@ -260,19 +315,18 @@ export function useStressIndex(machineCode: string | null | undefined) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RUL v2 — FPT-conditional, observed-rate, L10 adjusted (ISO 281)
-// Endpoint primaire pour les nouveaux composants RulV2Card / DashboardCard.
+// Primary calibrated-RUL endpoint for detailed and dashboard views.
 // Aligné sur le polling machine à 5 s pour garder la vue détail cohérente
 // pendant les démos du simulateur.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function useRulV2(machineCode: string | null | undefined) {
+export function useCalibratedRul(machineCode: string | null | undefined) {
   return useQuery({
-    queryKey: ["diagnostics", "rul-v2", machineCode ?? "none"],
+    queryKey: ["diagnostics", "calibrated-rul", machineCode ?? "none"],
     enabled: !!machineCode,
     queryFn: () =>
-      apiFetch<RulV2Response>(
-        `/diagnostics/${encodeURIComponent(machineCode!)}/rul-v2`
+      apiFetch<CalibratedRulResponse>(
+        `/diagnostics/${encodeURIComponent(machineCode!)}/calibrated-rul`
       ),
     refetchInterval: DIAGNOSTICS_REFETCH_MS,
     staleTime: 5_000,

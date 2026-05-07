@@ -35,7 +35,7 @@ _T = {
     "generated":        {"fr": "Généré le", "en": "Generated on", "ar": "تم الإنشاء في"},
     "summary":          {"fr": "Résumé Exécutif", "en": "Executive Summary", "ar": "ملخص تنفيذي"},
     "machine_overview": {"fr": "Vue d'ensemble des Machines", "en": "Machine Overview", "ar": "نظرة عامة على الآلات"},
-    "hi_analysis":      {"fr": "Analyse Health Index", "en": "Health Index Analysis", "ar": "تحليل مؤشر الصحة"},
+    "hi_analysis":      {"fr": "Analyse de l'indice de santé", "en": "Machine Health Analysis", "ar": "تحليل مؤشر الصحة"},
     "rul_analysis":     {"fr": "Analyse RUL", "en": "RUL Analysis", "ar": "تحليل العمر المتبقي"},
     "alert_stats":      {"fr": "Statistiques des Alertes", "en": "Alert Statistics", "ar": "إحصائيات التنبيهات"},
     "gmao_tasks":       {"fr": "Tâches GMAO", "en": "GMAO Tasks", "ar": "مهام الصيانة"},
@@ -45,15 +45,15 @@ _T = {
     "machine":          {"fr": "Machine", "en": "Machine", "ar": "آلة"},
     "status":           {"fr": "Statut", "en": "Status", "ar": "الحالة"},
     "location":         {"fr": "Localisation", "en": "Location", "ar": "الموقع"},
-    "current_hi":       {"fr": "HI Actuel", "en": "Current HI", "ar": "مؤشر الصحة الحالي"},
+    "current_hi":       {"fr": "Indice de santé actuel", "en": "Current HI", "ar": "مؤشر الصحة الحالي"},
     "trend":            {"fr": "Tendance", "en": "Trend", "ar": "الاتجاه"},
-    "avg_hi":           {"fr": "HI Moyen", "en": "Average HI", "ar": "متوسط المؤشر"},
-    "min_hi":           {"fr": "HI Min", "en": "Min HI", "ar": "أدنى مؤشر"},
-    "max_hi":           {"fr": "HI Max", "en": "Max HI", "ar": "أعلى مؤشر"},
+    "avg_hi":           {"fr": "Indice de santé moyen", "en": "Average HI", "ar": "متوسط المؤشر"},
+    "min_hi":           {"fr": "Indice de santé min", "en": "Min HI", "ar": "أدنى مؤشر"},
+    "max_hi":           {"fr": "Indice de santé max", "en": "Max HI", "ar": "أعلى مؤشر"},
     "total_alerts":     {"fr": "Total alertes", "en": "Total alerts", "ar": "إجمالي التنبيهات"},
     "urgence":          {"fr": "urgence", "en": "urgent", "ar": "عاجل"},
     "surveillance":     {"fr": "surveillance", "en": "monitoring", "ar": "مراقبة"},
-    "rul_current":      {"fr": "RUL Actuel", "en": "Current RUL", "ar": "العمر المتبقي الحالي"},
+    "rul_current":      {"fr": "Marge restante actuelle (RUL)", "en": "Current RUL", "ar": "العمر المتبقي الحالي"},
     "days":             {"fr": "jours", "en": "days", "ar": "أيام"},
     "improving":        {"fr": "↗ En amélioration", "en": "↗ Improving", "ar": "↗ تحسن"},
     "stable":           {"fr": "→ Stable", "en": "→ Stable", "ar": "→ مستقر"},
@@ -455,7 +455,9 @@ def generate_report(
     if not machines:
         return _t("no_data", lang)
 
-    title = f"{_t('title_report', lang)} - {_period_label(period, lang)} - {_audience_label(audience, lang)}"
+    title = f"{_t('title_report', lang)} - {_period_label(period, lang)}"
+    if audience != "dual":
+        title = f"{title} - {_audience_label(audience, lang)}"
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     try:
         thresholds = get_thresholds()

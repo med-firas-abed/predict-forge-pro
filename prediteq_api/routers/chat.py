@@ -202,6 +202,30 @@ TOOLS = [
 _MACHINE_CODE_RE = re.compile(r'^[A-Z]{2,5}-[A-Z0-9]{1,5}$')
 
 
+def _public_rul_snapshot(manager, machine_code: str) -> dict | None:
+    """Use the same calibrated RUL snapshot as the UI and DB."""
+    try:
+        from routers.diagnostics_rul import build_calibrated_rul_response
+
+        payload = build_calibrated_rul_response(manager, machine_code)
+        prediction = (payload.get("prediction") or {}) if isinstance(payload, dict) else {}
+        if payload.get("mode") == "prediction" and prediction.get("rul_days") is not None:
+            ci_low = prediction.get("rul_days_display_low")
+            ci_high = prediction.get("rul_days_display_high")
+            if ci_low is None or ci_high is None:
+                ci_low = prediction.get("rul_days_p10")
+                ci_high = prediction.get("rul_days_p90")
+            return {
+                "rul_days": float(prediction["rul_days"]),
+                "ci_low": float(ci_low) if ci_low is not None else None,
+                "ci_high": float(ci_high) if ci_high is not None else None,
+                "mode": payload.get("mode"),
+            }
+    except Exception:
+        pass
+    return manager.predict_rul(machine_code)
+
+
 def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
     if not _MACHINE_CODE_RE.match(machine_code):
         return {"error": "Code machine invalide"}
@@ -218,7 +242,7 @@ def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
         return {"error": "Accès interdit à cette machine"}
 
     last = manager.last_results.get(machine_code, {})
-    rul = manager.predict_rul(machine_code)
+    rul = _public_rul_snapshot(manager, machine_code)
     raw = manager.last_raw.get(machine_code, {})
     status = manager.get_status(machine_code)
     cycles = manager._cycle_counts.get(machine_code, 0)
@@ -341,11 +365,11 @@ def _exec_get_shap(machine_code: str, user: CurrentUser) -> dict:
     # Human-readable feature names
     LABELS = {
         'rms_mms': 'Vibration RMS', 'drms_dt': 'Variation vibration',
-        'rms_variability': 'Variabilité vibration', 'p_mean_kw': 'Puissance moyenne',
+        'rms_variability': 'Instabilité vibration', 'p_mean_kw': 'Puissance moyenne',
         'p_rms_kw': 'Puissance RMS', 'dp_dt': 'Variation puissance',
         'e_cycle_kwh': 'Énergie par cycle', 'duration_ratio': 'Ratio durée montée',
         't_mean_c': 'Température moyenne', 'dt_dt': 'Variation température',
-        'hr_std': 'Variabilité humidité', 'corr_t_p': 'Corrélation temp/puissance',
+        'hr_std': 'Instabilité humidité', 'corr_t_p': 'Lien température/puissance',
     }
 
     return {
@@ -382,7 +406,7 @@ def _exec_get_fleet(user: CurrentUser) -> list:
 
     for code, info in scoped_machines:
         last = manager.last_results.get(code, {})
-        rul = manager.predict_rul(code)
+        rul = _public_rul_snapshot(manager, code)
         decision = build_machine_decision_snapshot(
             {**info, "code": code},
             manager,

@@ -22,8 +22,13 @@ class Settings(BaseSettings):
     MQTT_USE_SSL: bool = True
 
     GROQ_API_KEY: str = ""
-    RESEND_API_KEY: str = ""
-    RESEND_FROM: str = "PrediTeq Alerts <onboarding@resend.dev>"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
     ADMIN_EMAIL: str = ""
     DASHBOARD_URL: str = "https://prediteq-saas.vercel.app"
     SURFACE_DEMO_METADATA: bool | None = None

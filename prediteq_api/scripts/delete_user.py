@@ -112,20 +112,20 @@ def main() -> int:
     # Suppression profil
     try:
         sb.table("profiles").delete().eq("id", user_id).execute()
-        print("  ✓ Profil supprimé")
+        print("  OK profil supprime")
     except Exception as e:
-        print(f"  ✗ Erreur suppression profil : {e}", file=sys.stderr)
+        print(f"  ERREUR suppression profil : {e}", file=sys.stderr)
         return 5
 
     # Suppression auth user
     try:
         sb.auth.admin.delete_user(user_id)
-        print("  ✓ Utilisateur Supabase Auth supprimé")
+        print("  OK utilisateur Supabase Auth supprime")
     except Exception as e:
-        print(f"  ✗ Erreur suppression auth user (profil déjà supprimé) : {e}", file=sys.stderr)
+        print(f"  ERREUR suppression auth user (profil deja supprime) : {e}", file=sys.stderr)
         return 6
 
-    print("OK — compte supprimé définitivement.")
+    print("OK - compte supprime definitivement.")
     return 0
 
 

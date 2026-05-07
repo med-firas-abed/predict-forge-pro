@@ -22,6 +22,7 @@ export interface AppUser {
   status: AccountStatus;
   machineId?: string;
   machineCode?: string;
+  machineName?: string;
   createdAt: string;
   approvedAt?: string;
 }
@@ -42,6 +43,7 @@ interface AuthContextType {
   approveUser: (id: string) => Promise<void>;
   rejectUser: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  reassignUserMachine: (id: string, machineId: string) => Promise<void>;
   refreshUsers: () => Promise<void>;
 }
 
@@ -70,7 +72,14 @@ function rowToUser(row: Record<string, unknown>, email?: string): AppUser {
     role: (row.role ?? "user") as UserRole,
     status: (row.status ?? "pending") as AccountStatus,
     machineId: (row.machine_id as string) || undefined,
-    machineCode: machine ? (machine.code as string) : undefined,
+    machineCode: firstNonEmpty(
+      typeof row.machine_code === "string" ? row.machine_code : undefined,
+      machine ? (machine.code as string) : undefined,
+    ),
+    machineName: firstNonEmpty(
+      typeof row.machine_name === "string" ? row.machine_name : undefined,
+      machine ? (machine.nom as string) : undefined,
+    ),
     createdAt: (row.created_at ?? "") as string,
     approvedAt: (row.approved_at as string) || undefined,
   };
@@ -107,6 +116,7 @@ function parseE2EUser(value: unknown): AppUser | null {
     status: raw.status,
     machineId: typeof raw.machineId === "string" && raw.machineId.length > 0 ? raw.machineId : undefined,
     machineCode: typeof raw.machineCode === "string" && raw.machineCode.length > 0 ? raw.machineCode : undefined,
+    machineName: typeof raw.machineName === "string" && raw.machineName.length > 0 ? raw.machineName : undefined,
     createdAt: raw.createdAt,
     approvedAt: typeof raw.approvedAt === "string" && raw.approvedAt.length > 0 ? raw.approvedAt : undefined,
   };
@@ -191,6 +201,7 @@ interface BackendLoginResponse {
     role: UserRole;
     machine_id?: string | null;
     machine_code?: string | null;
+    machine_name?: string | null;
     full_name?: string;
   };
 }
@@ -202,6 +213,7 @@ interface StatusApiResponse {
   status: AccountStatus;
   machine_id?: string | null;
   machine_code?: string | null;
+  machine_name?: string | null;
   full_name?: string | null;
   fullName?: string | null;
   created_at?: string | null;
@@ -216,6 +228,7 @@ interface ProfileSeed {
   fullName?: string;
   machineId?: string;
   machineCode?: string;
+  machineName?: string;
   createdAt?: string;
   approvedAt?: string;
 }
@@ -255,6 +268,7 @@ function profileSeedFromAuthUser(
     fullName: firstNonEmpty(fallback?.fullName, metadataFullName),
     machineId: fallback?.machineId,
     machineCode: fallback?.machineCode,
+    machineName: fallback?.machineName,
     createdAt: firstNonEmpty(fallback?.createdAt, user.created_at ?? undefined),
     approvedAt: firstNonEmpty(fallback?.approvedAt, metadataApprovedAt),
   };
@@ -267,6 +281,7 @@ function profileSeedFromAppUser(user: AppUser): ProfileSeed {
     fullName: user.fullName,
     machineId: user.machineId,
     machineCode: user.machineCode,
+    machineName: user.machineName,
     createdAt: user.createdAt,
     approvedAt: user.approvedAt,
   };
@@ -294,6 +309,7 @@ async function fetchProfileViaApi(seed?: ProfileSeed): Promise<AppUser | null> {
       status: status.status,
       machineId: status.machine_id || seed?.machineId || undefined,
       machineCode: status.machine_code || seed?.machineCode || undefined,
+      machineName: status.machine_name || seed?.machineName || undefined,
       createdAt: firstNonEmpty(status.created_at, status.createdAt, seed?.createdAt) ?? "",
       approvedAt: firstNonEmpty(status.approved_at, status.approvedAt, seed?.approvedAt),
     };
@@ -492,6 +508,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: data.status,
         machineId: data.user.machine_id || undefined,
         machineCode: data.user.machine_code || undefined,
+        machineName: data.user.machine_name || undefined,
         createdAt: "",
         approvedAt: undefined,
       });
@@ -560,6 +577,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshUsers();
   }, [refreshUsers]);
 
+  const reassignUserMachine = useCallback(async (id: string, machineId: string) => {
+    await apiFetch(`/admin/users/${id}/machine`, {
+      method: "PATCH",
+      body: JSON.stringify({ machine_id: machineId }),
+    });
+    await refreshUsers();
+  }, [refreshUsers]);
+
   return (
     <AuthContext.Provider value={{
       currentUser,
@@ -567,11 +592,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       login, signup, logout,
       allUsers,
-      approveUser, rejectUser, deleteUser,
+      approveUser, rejectUser, deleteUser, reassignUserMachine,
       refreshUsers,
     }}>
       {children}
     </AuthContext.Provider>
   );
 }
-

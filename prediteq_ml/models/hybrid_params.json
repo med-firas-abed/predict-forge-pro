@@ -1,14 +1,14 @@
 {
   "hybrid_alpha": 0.2,
-  "hybrid_threshold": 0.2900000000000001,
+  "hybrid_threshold": 0.2800000000000001,
   "calibration_objective": "train-only smoothed HI correlation",
   "if_norm": {
-    "min": 0.3897564464839849,
-    "max": 0.6672450638545254
+    "min": 0.3887199850391151,
+    "max": 0.6709094750816458
   },
   "rms_norm": {
-    "min": -1.628413983471844,
-    "max": 28.315215546439806
+    "min": -1.6088253910244468,
+    "max": 30.69056583870513
   },
   "rms_healthy_mean": 1.1503934642801676,
   "rms_healthy_std": 0.20432152454701527

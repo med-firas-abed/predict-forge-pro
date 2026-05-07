@@ -42,6 +42,37 @@ LOCAL_OVERRIDES_PATH = Path(__file__).resolve().parents[1] / ".runtime" / "seuil
 _cache: dict = dict(DEFAULTS)
 
 
+def _normalize_recipient(candidate: str | None, *, source: str = "alert") -> str | None:
+    if not candidate:
+        return None
+
+    email = str(candidate).strip()
+    if not email or "@" not in email:
+        return None
+
+    normalized = email.lower()
+    domain = normalized.split("@", 1)[1] if "@" in normalized else ""
+    if domain in PLACEHOLDER_EMAIL_DOMAINS:
+        logger.info("Ignoring placeholder %s email for alerts: %s", source, email)
+        return None
+    return email
+
+
+def _dedupe_recipients(candidates: list[str | None]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        email = _normalize_recipient(candidate)
+        if not email:
+            continue
+        key = email.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(email)
+    return deduped
+
+
 def _read_local_overrides() -> dict:
     if not LOCAL_OVERRIDES_PATH.exists():
         return {}
@@ -104,26 +135,88 @@ def _get_approved_admin_emails() -> list[str]:
         logger.warning("Could not load approved admin profiles for alerts: %s", e)
         return []
 
-    emails: list[str] = []
+    emails: list[str | None] = []
     for profile in profiles:
-        try:
-            auth_user = sb.auth.admin.get_user_by_id(profile["id"])
-            email = auth_user.user.email if auth_user and auth_user.user else None
-            if email:
-                emails.append(str(email).strip())
-        except Exception as e:
-            logger.warning("Could not resolve admin email for %s: %s", profile.get("id"), e)
+        email = _resolve_profile_email(sb, profile.get("id"))
+        if email:
+            emails.append(email)
 
-    filtered: list[str] = []
-    for email in emails:
-        normalized = str(email).strip().lower()
-        domain = normalized.split("@", 1)[1] if "@" in normalized else ""
-        if domain in PLACEHOLDER_EMAIL_DOMAINS:
-            logger.info("Ignoring placeholder admin email for alerts: %s", email)
+    return _dedupe_recipients(emails)
+
+
+def _resolve_profile_email(sb, profile_id: str | None) -> str | None:
+    if not profile_id:
+        return None
+    try:
+        auth_user = sb.auth.admin.get_user_by_id(profile_id)
+        email = auth_user.user.email if auth_user and auth_user.user else None
+        return _normalize_recipient(email, source="profile")
+    except Exception as e:
+        logger.warning("Could not resolve profile email for %s: %s", profile_id, e)
+        return None
+
+
+def _get_machine_user_emails(machine_id: str | None) -> list[str]:
+    if not machine_id:
+        return []
+
+    try:
+        sb = get_supabase()
+        profiles = (
+            sb.table("profiles")
+            .select("id")
+            .eq("role", "user")
+            .eq("status", "approved")
+            .eq("machine_id", machine_id)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        logger.warning("Could not load approved machine users for alerts (%s): %s", machine_id, e)
+        return []
+
+    emails: list[str | None] = []
+    for profile in profiles:
+        email = _resolve_profile_email(sb, profile.get("id"))
+        if email:
+            emails.append(email)
+
+    return _dedupe_recipients(emails)
+
+
+def _get_machine_user_contacts(machine_id: str | None) -> list[dict]:
+    if not machine_id:
+        return []
+
+    try:
+        sb = get_supabase()
+        profiles = (
+            sb.table("profiles")
+            .select("id, full_name")
+            .eq("role", "user")
+            .eq("status", "approved")
+            .eq("machine_id", machine_id)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        logger.warning("Could not load approved machine user contacts for alerts (%s): %s", machine_id, e)
+        return []
+
+    contacts_by_email: dict[str, dict] = {}
+    for profile in profiles:
+        email = _resolve_profile_email(sb, profile.get("id"))
+        if not email:
             continue
-        filtered.append(str(email).strip())
+        contacts_by_email[email.lower()] = {
+            "id": profile.get("id"),
+            "full_name": str(profile.get("full_name") or "").strip(),
+            "email": email,
+        }
 
-    return list(dict.fromkeys(email for email in filtered if email))
+    return list(contacts_by_email.values())
 
 
 def get_thresholds() -> dict:
@@ -141,14 +234,81 @@ def get_admin_alert_recipients() -> list[str]:
     return []
 
 
-def get_alert_recipients() -> list[str]:
-    configured = [
-        _cache.get("manager_email"),
-        _cache.get("technician_email"),
+def describe_alert_recipients(machine_id: str | None = None) -> dict:
+    admin_emails = get_admin_alert_recipients()
+    machine_users = _get_machine_user_contacts(machine_id)
+    configured_manager = _normalize_recipient(_cache.get("manager_email"), source="manager_email")
+    configured_technician = _normalize_recipient(_cache.get("technician_email"), source="technician_email")
+
+    recipient_map: dict[str, dict] = {}
+
+    def _register(
+        email: str | None,
+        source: str,
+        *,
+        contact_name: str | None = None,
+    ) -> None:
+        normalized = _normalize_recipient(email, source=source)
+        if not normalized:
+            return
+
+        key = normalized.lower()
+        entry = recipient_map.setdefault(
+            key,
+            {
+                "email": normalized,
+                "sources": [],
+                "contact_names": [],
+            },
+        )
+
+        if source not in entry["sources"]:
+            entry["sources"].append(source)
+
+        if contact_name:
+            clean_name = str(contact_name).strip()
+            if clean_name and clean_name not in entry["contact_names"]:
+                entry["contact_names"].append(clean_name)
+
+    for email in admin_emails:
+        _register(email, "admin")
+
+    for user in machine_users:
+        _register(
+            user.get("email"),
+            "machine_user",
+            contact_name=user.get("full_name"),
+        )
+
+    _register(configured_manager, "manager_email")
+    _register(configured_technician, "technician_email")
+
+    recipients = sorted(
+        recipient_map.values(),
+        key=lambda item: str(item.get("email") or "").lower(),
+    )
+
+    return {
+        "machine_id": machine_id,
+        "admins": admin_emails,
+        "machine_users": machine_users,
+        "configured": {
+            "manager_email": configured_manager,
+            "technician_email": configured_technician,
+        },
+        "recipients": recipients,
+    }
+
+
+def get_alert_recipients(machine_id: str | None = None) -> list[str]:
+    preview = describe_alert_recipients(machine_id)
+    recipients = [
+        str(entry.get("email")).strip()
+        for entry in preview.get("recipients", [])
+        if entry.get("email")
     ]
-    recipients = get_admin_alert_recipients() + [str(value).strip() for value in configured if value]
     if recipients:
-        return list(dict.fromkeys(recipients))
+        return recipients
     if settings.ADMIN_EMAIL:
         return [settings.ADMIN_EMAIL]
     return []
@@ -201,6 +361,40 @@ async def get_seuils_public():
         "hi_critical": _cache["hi_critical"],
         "hi_surveillance": _cache["hi_surveillance"],
     }
+
+
+@router.get("/recipients-preview")
+async def get_recipients_preview(admin: CurrentUser = Depends(require_admin)):
+    sb = get_supabase()
+    try:
+        machines = (
+            sb.table("machines")
+            .select("id, code, nom")
+            .order("code")
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        logger.error("Could not load machines for recipients preview: %s", e)
+        raise HTTPException(502, "Erreur base de donnees")
+
+    preview: list[dict] = []
+    for machine in machines:
+        summary = describe_alert_recipients(str(machine.get("id") or ""))
+        preview.append(
+            {
+                "machine_id": machine.get("id"),
+                "machine_code": machine.get("code"),
+                "machine_name": machine.get("nom"),
+                "admins": summary["admins"],
+                "machine_users": summary["machine_users"],
+                "configured": summary["configured"],
+                "recipients": summary["recipients"],
+            }
+        )
+
+    return preview
 
 
 @router.get("")

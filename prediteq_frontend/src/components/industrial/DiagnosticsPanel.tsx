@@ -31,7 +31,14 @@ import { KpiCard } from "@/components/industrial/KpiCard";
 import { useApp } from "@/contexts/AppContext";
 import { repairText } from "@/lib/repairText";
 import {
+  getBearingReference,
+  getCalibratedRul,
+  getCalibratedRulDisclosures,
+  getCalibratedRulWarmupDetail,
+  normalizeCalibratedRulMode,
   useDiagnostics,
+  type BearingReference,
+  type CalibratedRulResponse,
   type ConfidenceLevel,
   type Diagnosis,
   type RulInterval,
@@ -39,8 +46,6 @@ import {
   type DisclaimersBundle,
   type StressIndex,
   type StressBand,
-  type RulV2Response,
-  type RulV2L10,
 } from "@/hooks/useDiagnostics";
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -424,7 +429,7 @@ const STRESS_AXIS_META: Record<
     ref: "Plaque SITI : I_rated = 4.85 A (50-115 %)",
   },
   variability: {
-    label: "Variabilité",
+    label: "Régime instable",
     icon: Waves,
     ref: "Thomson & Fenger 2001 (sigma/mu <= 0.30)",
   },
@@ -564,8 +569,8 @@ function StressIndexCard({ stress }: StressIndexCardProps) {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// RUL v2 â€” FPT-conditional + observed-rate + L10 adjusted (ISO 281)
-// 3 modes : no_prediction (FPT gate), warming_up, prediction
+// Calibrated RUL payload + observed usage + ISO 281 bearing reference
+// 3 modes : stable reference, initializing, prediction
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function MaintenanceWindowCallout({
@@ -611,14 +616,15 @@ function MaintenanceWindowCallout({
   );
 }
 
-function L10ReferenceLine({ l10 }: { l10: RulV2L10 }) {
-  if (l10.source === "fallback") {
+function BearingReferenceLine({ reference }: { reference: BearingReference }) {
+  const nominalYears = reference.nominal_years ?? reference.l10_nominal_years ?? 0;
+  if (reference.source === "fallback") {
     return (
       <div className="text-[0.7rem] text-muted-foreground leading-relaxed">
         Référence constructeur du roulement{" "}
-        <span className="font-semibold">{l10.bearing_model}</span> :{" "}
+        <span className="font-semibold">{reference.bearing_model}</span> :{" "}
         <span className="font-semibold tabular-nums">
-          {l10.l10_nominal_years} ans
+          {nominalYears} ans
         </span>{" "}
         à charge nominale.{" "}
         <span className="italic">
@@ -630,21 +636,24 @@ function L10ReferenceLine({ l10 }: { l10: RulV2L10 }) {
   return (
     <div className="text-[0.7rem] text-muted-foreground leading-relaxed">
       Référence{" "}
-      <span className="font-semibold">{l10.bearing_model}</span> ajustée à votre
+      <span className="font-semibold">{reference.bearing_model}</span> ajustée à votre
       charge moyenne mesurée (
       <span className="tabular-nums">
-        {(l10.p_observed_kw ?? 0).toFixed(2)} kW
+        {(reference.p_observed_kw ?? 0).toFixed(2)} kW
       </span>
       ) :{" "}
       <span className="font-semibold text-foreground tabular-nums">
-        {l10.years_adjusted} ans
+        {reference.years_adjusted} ans
       </span>{" "}
-      - {l10.reference}
+      - {reference.reference}
     </div>
   );
 }
 
-function NoPredictionPanel({ rul }: { rul: RulV2Response }) {
+function ReferenceOnlyPanel({ rul }: { rul: CalibratedRulResponse }) {
+  const reference = getBearingReference(rul);
+  const disclosures = getCalibratedRulDisclosures(rul);
+  const nominalYears = reference?.nominal_years ?? reference?.l10_nominal_years ?? 0;
   return (
     <div className="space-y-4">
       {/* Bandeau Ã©tat "machine saine" */}
@@ -652,46 +661,46 @@ function NoPredictionPanel({ rul }: { rul: RulV2Response }) {
         <CheckCircle2 className="w-5 h-5 text-success mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-foreground">
-            Aucun précurseur de défaillance détecté
+            Pronostic live indisponible pour cette lecture
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            Health Index ={" "}
+            HI actuel ={" "}
             <span className="tabular-nums font-semibold">
               {rul.hi_current?.toFixed(3) ?? "-"}
             </span>
             {" - "}
-            seuil pronostic : HI &lt; {rul.fpt_threshold.toFixed(2)} (ISO
-            10816-3 zone A "neuf / remis à neuf").
+            le système conserve ici une référence de durée de vie tant qu'un
+            pronostic live exploitable n'est pas disponible.
           </div>
         </div>
       </div>
 
-      {/* L10 rÃ©fÃ©rence â€” c'est la donnÃ©e principale ici */}
+      {/* Référence de durée de vie — c'est le repère principal ici */}
       <div className="p-4 rounded-xl bg-surface-3/40 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Settings2 className="w-3.5 h-3.5" />
-          Durée de vie statistique du composant
+          Référence de durée de vie
         </div>
-        {rul.l10.source === "measured" ? (
+        {reference?.source === "measured" ? (
           <div className="flex items-end gap-3">
             <div className="text-3xl font-bold tabular-nums text-foreground">
-              {rul.l10.years_adjusted}
+              {reference.years_adjusted}
             </div>
             <div className="text-sm text-muted-foreground pb-1">
-              ans (ajustée à votre usage)
+              ans (repère ajusté à la charge)
             </div>
           </div>
         ) : (
           <div className="flex items-end gap-3">
             <div className="text-3xl font-bold tabular-nums text-muted-foreground">
-              {rul.l10.l10_nominal_years}
+              {nominalYears}
             </div>
             <div className="text-sm text-muted-foreground pb-1">
-              ans (nominal - calibration en cours)
+              ans (repère nominal)
             </div>
           </div>
         )}
-        <L10ReferenceLine l10={rul.l10} />
+        {reference && <BearingReferenceLine reference={reference} />}
       </div>
 
       {/* Recommandation maintenance â€” toujours prÃ©sente */}
@@ -702,17 +711,19 @@ function NoPredictionPanel({ rul }: { rul: RulV2Response }) {
         />
       )}
 
-      {/* Disclaimer FPT */}
+      {/* Note de disponibilité */}
       <div className="text-[0.7rem] text-muted-foreground italic leading-relaxed">
-        {rul.disclaimers.fpt_gate}
+        {disclosures.availability_note}
       </div>
     </div>
   );
 }
 
-function WarmingUpPanel({ rul }: { rul: RulV2Response }) {
-  const reference = rul.reference_prediction;
-  const hasReference = typeof reference?.rul_days === "number";
+function InitializingPanel({ rul }: { rul: CalibratedRulResponse }) {
+  const bearingReference = getBearingReference(rul);
+  const warmupDetail = getCalibratedRulWarmupDetail(rul);
+  const demoReference = rul.reference_prediction;
+  const hasReference = typeof demoReference?.rul_days === "number";
 
   return (
     <div className="space-y-4">
@@ -725,7 +736,7 @@ function WarmingUpPanel({ rul }: { rul: RulV2Response }) {
           <div className="text-xs text-muted-foreground mt-1">
             {hasReference
               ? "Une référence de démonstration est affichée immédiatement, puis le RUL en direct prendra le relais dès que le buffer HI sera prêt."
-              : rul.warming_up_detail ??
+              : warmupDetail ??
                 "Buffer HI insuffisant pour produire un pronostic - 60 min d'historique requis."}
           </div>
         </div>
@@ -738,7 +749,7 @@ function WarmingUpPanel({ rul }: { rul: RulV2Response }) {
           </div>
           <div className="flex items-end gap-3">
             <div className="text-3xl font-bold tabular-nums text-foreground">
-              {reference.rul_days}
+              {demoReference?.rul_days}
             </div>
             <div className="text-sm text-muted-foreground pb-1">
               jours, en attendant le RUL en direct
@@ -747,7 +758,7 @@ function WarmingUpPanel({ rul }: { rul: RulV2Response }) {
         </div>
       )}
       <div className="p-4 rounded-xl bg-surface-3/40">
-        <L10ReferenceLine l10={rul.l10} />
+        {bearingReference && <BearingReferenceLine reference={bearingReference} />}
       </div>
       {rul.maintenance_window && (
         <MaintenanceWindowCallout text={rul.maintenance_window} />
@@ -760,10 +771,12 @@ function PredictionPanel({
   rul,
   badgeLabels,
 }: {
-  rul: RulV2Response;
+  rul: CalibratedRulResponse;
   badgeLabels: DisclaimersBundle["badge_labels"];
 }) {
   const pred = rul.prediction!;
+  const reference = getBearingReference(rul);
+  const disclosures = getCalibratedRulDisclosures(rul);
   const badge = badgeLabels[pred.confidence];
   const variant = CONFIDENCE_VARIANT[pred.confidence];
   const displayLow = pred.rul_days_display_low ?? pred.rul_days_p10;
@@ -834,7 +847,11 @@ function PredictionPanel({
             {pred.cycles_per_day_observed?.toLocaleString("fr-FR") ?? "—"}
           </span>{" "}
           cycles/jour
-          {pred.factor_source === "calibration_default" ? (
+          {pred.factor_source === "synthetic_scale" ? (
+            <span className="italic ml-1">
+              (échelle restituée du temps synthétique)
+            </span>
+          ) : pred.factor_source === "calibration_default" ? (
             <span className="italic ml-1">
               (calibration par défaut — pas encore 7 j de données observées)
             </span>
@@ -883,15 +900,15 @@ function PredictionPanel({
         />
       )}
 
-      {/* L10 référence (toujours affichée pour calibrer les attentes) */}
+      {/* Référence de durée de vie (affichée pour cadrer les attentes) */}
       <div className="p-3 rounded-xl bg-surface-3/40">
-        <L10ReferenceLine l10={rul.l10} />
+        {reference && <BearingReferenceLine reference={reference} />}
       </div>
 
       {/* Disclaimers : rythme observé + portée du modèle */}
       <div className="text-[0.7rem] text-muted-foreground italic leading-relaxed space-y-1">
-        <div>{rul.disclaimers.rate_basis}</div>
-        <div>{rul.disclaimers.model_scope}</div>
+        <div>{disclosures.calendar_basis}</div>
+        <div>{disclosures.model_scope_note}</div>
       </div>
 
       {/* Détails techniques pliables (RF brut, conversion, CVI) */}
@@ -911,16 +928,18 @@ function PredictionPanel({
           </div>
           <div>
             <span className="font-semibold text-foreground">
-              Conversion par rythme observé :
+              Conversion calendrier :
             </span>{" "}
             facteur{" "}
             <span className="font-mono tabular-nums">
               ÷{pred.factor_used}
             </span>{" "}
             (
-            {pred.factor_source === "observed"
+            {pred.factor_source === "synthetic_scale"
+              ? "échelle synthétique restituée"
+              : pred.factor_source === "observed"
               ? "rythme machine 7 j"
-              : "calibration par défaut ÷9"}
+              : "calibration par défaut"}
             ) →{" "}
             <span className="font-mono tabular-nums font-semibold">
               {pred.rul_days} j affichés
@@ -961,15 +980,16 @@ function PredictionPanel({
   );
 }
 
-function RulV2Card({
+function CalibratedRulCard({
   rul,
   badgeLabels,
 }: {
-  rul: RulV2Response;
+  rul: CalibratedRulResponse;
   badgeLabels: DisclaimersBundle["badge_labels"];
 }) {
-  if (rul.mode === "no_prediction") return <NoPredictionPanel rul={rul} />;
-  if (rul.mode === "warming_up") return <WarmingUpPanel rul={rul} />;
+  const mode = normalizeCalibratedRulMode(rul.mode);
+  if (mode === "reference_only") return <ReferenceOnlyPanel rul={rul} />;
+  if (mode === "initializing") return <InitializingPanel rul={rul} />;
   return <PredictionPanel rul={rul} badgeLabels={badgeLabels} />;
 }
 
@@ -1021,40 +1041,43 @@ export function DiagnosticsPanel({ machineCode }: DiagnosticsPanelProps) {
     );
   }
 
-  const { rul_interval, rul_v2, diagnose, rul_explain, stress_index, disclaimers, errors } = data;
+  const { rul_interval, diagnose, rul_explain, stress_index, disclaimers, errors } = data;
+  const calibratedRul = getCalibratedRul(data);
+  const calibratedMode = normalizeCalibratedRulMode(calibratedRul?.mode);
 
   return (
     <div className="space-y-5">
-      {/* â”€â”€ RUL v2 â€” FPT + rythme observÃ© + L10 ajustÃ© (carte principale) â”€â”€ */}
+      {/* Pronostic RF calibré + rythme observé + référence roulement */}
       <div className="bg-card border border-border rounded-2xl p-5 shadow-premium">
         <div className="flex items-center gap-2 mb-4">
           <CalendarClock className="w-4 h-4 text-primary" />
           <div className="section-title flex-1">
             Vie utile restante - pronostic conditionnel PHM
           </div>
-          {rul_v2?.mode === "prediction" && (
+          {calibratedMode === "prediction" && (
             <span className="text-[0.6rem] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
               IEEE 1856 actif
             </span>
           )}
-          {rul_v2?.mode === "no_prediction" && (
+          {calibratedMode === "reference_only" && (
             <span className="text-[0.6rem] font-semibold px-2 py-0.5 rounded-full bg-success/15 text-success uppercase tracking-wider">
-              FPT
+              Référence
             </span>
           )}
         </div>
-        {rul_v2 ? (
-          <RulV2Card rul={rul_v2} badgeLabels={disclaimers.badge_labels} />
+        {calibratedRul ? (
+          <CalibratedRulCard rul={calibratedRul} badgeLabels={disclaimers.badge_labels} />
         ) : (
           <div className="text-xs text-muted-foreground p-4 bg-surface-3/40 rounded-xl">
-            {errors?.rul_v2?.detail ??
+            {errors?.calibrated_rul?.detail ??
+              errors?.rul_v2?.detail ??
               "Pronostic v2 indisponible - démarrer le simulateur ou attendre un message MQTT."}
           </div>
         )}
         <div className="text-[0.6rem] text-muted-foreground mt-4 leading-relaxed border-t border-border/40 pt-3">
-          Conformité PHM : <span className="font-semibold">IEEE 1856-2017 §6.2</span>{" "}
-          (FPT-conditional prognosis), <span className="font-semibold">ISO 281:2007</span>{" "}
-          (L10 cube law sur charge dynamique équivalente),{" "}
+          Conformité PHM : <span className="font-semibold">IEEE 1856-2017</span>{" "}
+          (cadre pronostic et suivi d'état), <span className="font-semibold">ISO 281:2007</span>{" "}
+          (référence roulement sur charge dynamique équivalente),{" "}
           <span className="font-semibold">Saxena & Goebel 2008</span> (NASA CMAPSS,
           conversion par cycles d'opération).
         </div>

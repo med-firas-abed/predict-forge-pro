@@ -66,6 +66,34 @@ class ReportRequest(BaseModel):
     audience: ReportAudience = "dual"
 
 
+def _get_public_rul_snapshot(manager, code: str) -> tuple[dict | None, dict | None]:
+    """Return the calibrated RUL snapshot used by the product UI."""
+    try:
+        from routers.diagnostics_rul import build_calibrated_rul_response
+
+        payload = build_calibrated_rul_response(manager, code)
+        prediction = (payload.get("prediction") or {}) if isinstance(payload, dict) else {}
+        if payload.get("mode") == "prediction" and prediction.get("rul_days") is not None:
+            ci_low = prediction.get("rul_days_display_low")
+            ci_high = prediction.get("rul_days_display_high")
+            if ci_low is None or ci_high is None:
+                ci_low = prediction.get("rul_days_p10")
+                ci_high = prediction.get("rul_days_p90")
+            return (
+                {
+                    "rul_days": float(prediction["rul_days"]),
+                    "ci_low": float(ci_low) if ci_low is not None else None,
+                    "ci_high": float(ci_high) if ci_high is not None else None,
+                    "mode": payload.get("mode"),
+                },
+                payload,
+            )
+        return None, payload if isinstance(payload, dict) else None
+    except Exception:
+        fallback = manager.predict_rul(code)
+        return fallback, None
+
+
 def _gather_context(
     code: str,
     user: CurrentUser,
@@ -115,7 +143,7 @@ def _gather_context(
 
     manager = get_manager()
     last_result = manager.last_results.get(code)
-    rul_result = manager.predict_rul(code)
+    rul_result, calibrated_rul_payload = _get_public_rul_snapshot(manager, code)
     engine_status = manager.get_status(code)
     alert_count = fetch_alert_counts([machine_uuid]).get(machine_uuid, 0)
     open_task_count = fetch_open_task_counts([machine_uuid]).get(machine_uuid, 0)
@@ -133,6 +161,8 @@ def _gather_context(
         "couts_3_mois": costs_res.data,
         "hi_live": last_result,
         "rul_live": rul_result,
+        "calibrated_rul": calibrated_rul_payload,
+        "rul_v2": calibrated_rul_payload,
         "engine_status": engine_status,
         "decision_snapshot": decision_snapshot,
     }
@@ -391,7 +421,8 @@ async def auto_generate_report(body: AutoReportRequest,
         now = datetime.now(timezone.utc)
         machine_part = machine_code or "Toutes"
         period_label = _period_label(body.period, body.lang)
-        period_label = f"{period_label} - {_audience_label(body.audience)}"
+        if body.audience != "dual":
+            period_label = f"{period_label} - {_audience_label(body.audience)}"
         titre = f"Rapport {period_label} — {machine_part} — {now.strftime('%d/%m/%Y %H:%M')}"
         sb.table('rapports').insert({
             'machine_code': machine_code,

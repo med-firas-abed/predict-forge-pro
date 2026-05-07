@@ -1278,7 +1278,7 @@ export function ExperimentPage() {
         </p>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-2xl p-5 shadow-premium text-center">
-            <div className="text-xs text-muted-foreground mb-2">{l("Indice de Santé", "Health Index", "مؤشر الصحة")}</div>
+            <div className="text-xs text-muted-foreground mb-2">{l("Indice de santé (HI)", "Machine health (HI)", "مؤشر الصحة")}</div>
             <div className="text-4xl font-bold" style={{ color: hiColor(machineState?.hi_smooth) }}>
               {machineState?.hi_smooth !== undefined ? (machineState.hi_smooth * 100).toFixed(0) : "—"}
               <span className="text-lg font-normal text-muted-foreground"> %</span>

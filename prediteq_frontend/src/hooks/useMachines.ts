@@ -24,7 +24,7 @@ const STATUT_MAP: Record<string, Machine["status"]> = {
 };
 
 const KW_TO_AMPS = 1000 / (Math.sqrt(3) * 400 * 0.8);
-const MACHINE_CACHE_KEY = "prediteq-machine-cache-v2";
+const MACHINE_CACHE_KEY = "prediteq-machine-cache-v4";
 
 function formatLastUpdate(value?: string | null) {
   if (!value) return "";
@@ -41,6 +41,15 @@ function formatLastUpdate(value?: string | null) {
 
 function numberOrNull(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizePredictionMode(
+  mode: Machine["rulMode"] | string | null | undefined,
+): Machine["rulMode"] | null {
+  if (!mode) return null;
+  if (mode === "no_prediction") return "reference_only";
+  if (mode === "warming_up") return "initializing";
+  return mode as Machine["rulMode"];
 }
 
 function safeStorageGet(key: string): string | null {
@@ -90,7 +99,9 @@ function mapDecision(raw: Record<string, unknown> | null | undefined): MachineDe
     zone: repairText((raw.zone as string | null) ?? null),
     hi: numberOrNull(raw.hi),
     rulDays: numberOrNull(raw.rul_days),
-    predictionMode: (raw.prediction_mode as MachineDecision["predictionMode"]) ?? null,
+    predictionMode: normalizePredictionMode(
+      (raw.prediction_mode as MachineDecision["predictionMode"]) ?? null,
+    ),
     confidence: (raw.confidence as MachineDecision["confidence"]) ?? null,
     maintenanceWindow: repairText((raw.maintenance_window as string | null) ?? null),
     stopRecommended: Boolean(raw.stop_recommended),
@@ -148,28 +159,36 @@ function supabaseRowToMachine(row: Record<string, unknown>): Machine {
   const statut = (row.statut ?? "operational") as string;
   const sensors = row.last_sensors as Record<string, unknown> | null | undefined;
   const decision = mapDecision(row.decision as Record<string, unknown> | null | undefined);
-  const rulV2 = row.rul_v2 as Record<string, unknown> | null | undefined;
-  const prediction = rulV2?.prediction as Record<string, unknown> | null | undefined;
+  const calibratedRul =
+    (row.calibrated_rul as Record<string, unknown> | null | undefined) ??
+    (row.rul_v2 as Record<string, unknown> | null | undefined);
+  const prediction = calibratedRul?.prediction as Record<string, unknown> | null | undefined;
   const referencePrediction =
-    rulV2?.reference_prediction as Record<string, unknown> | null | undefined;
-  const l10 = rulV2?.l10 as Record<string, unknown> | null | undefined;
-  const liveZone = decision?.zone ?? row.zone_live ?? rulV2?.zone;
+    calibratedRul?.reference_prediction as Record<string, unknown> | null | undefined;
+  const bearingReference =
+    (calibratedRul?.bearing_reference as Record<string, unknown> | null | undefined) ??
+    (calibratedRul?.l10 as Record<string, unknown> | null | undefined);
+  const liveZone = decision?.zone ?? row.zone_live ?? calibratedRul?.zone;
 
   const hiValue =
     decision?.hi ??
-    (typeof rulV2?.hi_current === "number"
-      ? rulV2.hi_current
+    (typeof calibratedRul?.hi_current === "number"
+      ? calibratedRul.hi_current
       : typeof row.hi_courant === "number"
         ? (row.hi_courant as number)
         : null);
 
   const powerKw = numberOrNull(sensors?.power_kw);
+  const sensorCurrentSource =
+    typeof sensors?.current_source === "string" ? sensors.current_source : null;
   const measuredCurrentAmps = numberOrNull(sensors?.current_a);
   const currentAmps =
     measuredCurrentAmps ??
     (typeof powerKw === "number" ? Math.round(powerKw * KW_TO_AMPS * 100) / 100 : null);
   const currentSource: Machine["currSource"] =
-    measuredCurrentAmps != null
+    sensorCurrentSource === "derived_ascent_power"
+      ? "derived_ascent_power"
+      : measuredCurrentAmps != null && sensorCurrentSource !== "estimated_from_power"
       ? "measured"
       : typeof powerKw === "number"
         ? "estimated_from_power"
@@ -177,7 +196,9 @@ function supabaseRowToMachine(row: Record<string, unknown>): Machine {
   const machineModel = normalizeMachineModel(row.modele);
   const floorCount = normalizeMachineFloors(row.etages);
 
-  const rulMode = decision?.predictionMode ?? ((rulV2?.mode as Machine["rulMode"]) || undefined);
+  const rulMode = normalizePredictionMode(
+    decision?.predictionMode ?? ((calibratedRul?.mode as Machine["rulMode"]) || undefined),
+  );
   const rulIntervalLow = typeof prediction?.rul_days_display_low === "number"
     ? prediction.rul_days_display_low
     : null;
@@ -214,11 +235,13 @@ function supabaseRowToMachine(row: Record<string, unknown>): Machine {
     rulIntervalLow,
     rulIntervalHigh,
     rulIntervalLabel: repairText((prediction?.display_interval_label as string) || null),
-    l10Years:
-      typeof l10?.years_adjusted === "number"
-        ? l10.years_adjusted
-        : typeof l10?.l10_nominal_years === "number"
-          ? l10.l10_nominal_years
+    referenceLifetimeYears:
+      typeof bearingReference?.years_adjusted === "number"
+        ? bearingReference.years_adjusted
+        : typeof bearingReference?.nominal_years === "number"
+          ? bearingReference.nominal_years
+          : typeof bearingReference?.l10_nominal_years === "number"
+            ? bearingReference.l10_nominal_years
           : null,
     rulReferenceDays:
       typeof referencePrediction?.rul_days === "number" ? referencePrediction.rul_days : null,
