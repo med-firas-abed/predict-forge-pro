@@ -753,8 +753,13 @@ async def rul_v2(machine_code: str,
 # ─── Endpoint agrégé /all ───────────────────────────────────────────────────
 
 @router.get("/{machine_code}/all")
-async def diagnostics_all(machine_code: str,
-                           user: CurrentUser = Depends(require_auth)):
+async def diagnostics_all(
+    machine_code: str,
+    include_interval: bool = True,
+    include_diagnose: bool = True,
+    include_explain: bool = True,
+    user: CurrentUser = Depends(require_auth),
+):
     """Agrégat : RUL-IC + diagnose + SHAP + stress + RUL-v2 + disclaimers.
 
     Idéal pour le composant frontend `DiagnosticsPanel` : 1 seul appel,
@@ -781,28 +786,31 @@ async def diagnostics_all(machine_code: str,
     }
 
     # 1. RUL interval
-    try:
-        response["rul_interval"] = await rul_with_interval(machine_code, user)
-    except HTTPException as e:
-        response["errors"]["rul_interval"] = {
-            "status_code": e.status_code, "detail": e.detail,
-        }
+    if include_interval:
+        try:
+            response["rul_interval"] = await rul_with_interval(machine_code, user)
+        except HTTPException as e:
+            response["errors"]["rul_interval"] = {
+                "status_code": e.status_code, "detail": e.detail,
+            }
 
     # 2. Diagnose
-    try:
-        response["diagnose"] = await diagnose_machine(machine_code, user)
-    except HTTPException as e:
-        response["errors"]["diagnose"] = {
-            "status_code": e.status_code, "detail": e.detail,
-        }
+    if include_diagnose:
+        try:
+            response["diagnose"] = await diagnose_machine(machine_code, user)
+        except HTTPException as e:
+            response["errors"]["diagnose"] = {
+                "status_code": e.status_code, "detail": e.detail,
+            }
 
     # 3. SHAP
-    try:
-        response["rul_explain"] = await explain_rul(machine_code, user)
-    except HTTPException as e:
-        response["errors"]["rul_explain"] = {
-            "status_code": e.status_code, "detail": e.detail,
-        }
+    if include_explain:
+        try:
+            response["rul_explain"] = await explain_rul(machine_code, user)
+        except HTTPException as e:
+            response["errors"]["rul_explain"] = {
+                "status_code": e.status_code, "detail": e.detail,
+            }
 
     # 4. Stress Index — métrique instantanée additive (HI = passé,
     #    RUL = futur, SI = présent). Sans dépendance ML, ne devrait

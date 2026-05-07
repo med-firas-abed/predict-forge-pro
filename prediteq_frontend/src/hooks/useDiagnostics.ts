@@ -240,9 +240,39 @@ export function getCalibratedRulWarmupDetail(
 
 const DIAGNOSTICS_REFETCH_MS = 5_000;
 
-export async function fetchDiagnosticsAll(machineCode: string): Promise<DiagnosticsAll> {
+export interface DiagnosticsQueryOptions {
+  includeInterval?: boolean;
+  includeDiagnose?: boolean;
+  includeExplain?: boolean;
+}
+
+function buildDiagnosticsAllUrl(
+  machineCode: string,
+  options?: DiagnosticsQueryOptions,
+) {
+  const params = new URLSearchParams();
+
+  if (options?.includeInterval === false) {
+    params.set("include_interval", "false");
+  }
+  if (options?.includeDiagnose === false) {
+    params.set("include_diagnose", "false");
+  }
+  if (options?.includeExplain === false) {
+    params.set("include_explain", "false");
+  }
+
+  const query = params.toString();
+  const base = `/diagnostics/${encodeURIComponent(machineCode)}/all`;
+  return query ? `${base}?${query}` : base;
+}
+
+export async function fetchDiagnosticsAll(
+  machineCode: string,
+  options?: DiagnosticsQueryOptions,
+): Promise<DiagnosticsAll> {
   const payload = await apiFetch<DiagnosticsAll>(
-    `/diagnostics/${encodeURIComponent(machineCode)}/all`
+    buildDiagnosticsAllUrl(machineCode, options)
   );
   return repairTextDeep(payload);
 }
@@ -251,13 +281,23 @@ export async function fetchDiagnosticsAll(machineCode: string): Promise<Diagnost
 // Hook principal — un seul endpoint /diagnostics/{code}/all, rafraîchi 5 s
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function useDiagnostics(machineCode: string | null | undefined) {
+export function useDiagnostics(
+  machineCode: string | null | undefined,
+  options?: DiagnosticsQueryOptions,
+) {
   return useQuery({
-    queryKey: ["diagnostics", "all", machineCode ?? "none"],
+    queryKey: [
+      "diagnostics",
+      "all",
+      machineCode ?? "none",
+      options?.includeInterval !== false,
+      options?.includeDiagnose !== false,
+      options?.includeExplain !== false,
+    ],
     enabled: !!machineCode,
     queryFn: async () => {
       if (!machineCode) throw new Error("machineCode required");
-      return fetchDiagnosticsAll(machineCode);
+      return fetchDiagnosticsAll(machineCode, options);
     },
     refetchInterval: DIAGNOSTICS_REFETCH_MS,
     staleTime: 10_000,

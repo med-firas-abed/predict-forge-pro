@@ -86,6 +86,11 @@ const KPI_PROGRESS_FILL_CLASS = {
 } as const;
 
 const DEFAULT_DASHBOARD_MACHINE_ID = "ASC-A1";
+const DASHBOARD_DIAGNOSTICS_OPTIONS = {
+  includeInterval: false,
+  includeDiagnose: false,
+  includeExplain: false,
+} as const;
 
 function buildSensorWindowTitle(
   spanMinutes: number,
@@ -200,8 +205,15 @@ export function DashboardPage() {
 
     for (const machineCode of machineCodesKey.split("|").filter(Boolean)) {
       void queryClient.prefetchQuery({
-        queryKey: ["diagnostics", "all", machineCode],
-        queryFn: () => fetchDiagnosticsAll(machineCode),
+        queryKey: [
+          "diagnostics",
+          "all",
+          machineCode,
+          false,
+          false,
+          false,
+        ],
+        queryFn: () => fetchDiagnosticsAll(machineCode, DASHBOARD_DIAGNOSTICS_OPTIONS),
         staleTime: 5_000,
       });
       void queryClient.prefetchQuery({
@@ -255,7 +267,10 @@ export function DashboardPage() {
           `#${selectedRank}/${Math.max(totalRankedMachines, 1)} fleet`,
         )
       : null;
-  const { data: diagnostics, isLoading: isLoadingDiagnostics } = useDiagnostics(selected?.id);
+  const { data: diagnostics, isLoading: isLoadingDiagnostics } = useDiagnostics(
+    selected?.id,
+    DASHBOARD_DIAGNOSTICS_OPTIONS,
+  );
 
   const {
     history: sensorHistory,
