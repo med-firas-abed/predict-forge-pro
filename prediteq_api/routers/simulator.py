@@ -66,6 +66,7 @@ router = APIRouter(prefix="/simulator", tags=["simulator"])
 
 _task: asyncio.Task | None = None
 _demo_prewarm_task: asyncio.Task | None = None
+_notification_tasks: set[asyncio.Task] = set()
 _state: dict = {
     "running": False,
     "speed": 60,
@@ -986,6 +987,199 @@ def _send_demo_critical_notifications(manager) -> dict:
     }
 
 
+def _prepare_demo_critical_notifications_non_blocking(manager) -> tuple[dict, list[dict]]:
+    """Prepare critical alerts synchronously, defer SMTP sending to the background."""
+    try:
+        sb = get_supabase()
+    except Exception as exc:
+        logger.warning("Simulator demo alert/email setup failed: %s", exc)
+        return {
+            "recipients": [],
+            "attempted_codes": [],
+            "sent_codes": [],
+            "failed_recipients": [],
+        }, []
+
+    attempted_codes: list[str] = []
+    all_recipients: list[str] = []
+    jobs: list[dict] = []
+
+    for code in MACHINE_CODES:
+        scenario = get_demo_scenario(code)
+        if not scenario or str(scenario.get("health_state")) != "critical":
+            continue
+
+        last = manager.last_results.get(code) or {}
+        hi = float(last.get("hi_smooth") or scenario.get("target_hi") or 0.0)
+        zone = str(last.get("zone") or _demo_zone_from_hi(hi))
+        if zone != "Critical" and hi >= 0.30:
+            logger.info(
+                "Simulator demo email skipped for %s: runtime zone=%s hi=%.3f",
+                code,
+                zone,
+                hi,
+            )
+            continue
+
+        attempted_codes.append(code)
+        machine_info = manager.get_machine_info(code) or {}
+        machine_uuid = str(machine_info.get("id") or manager.get_uuid(code) or "")
+        machine_nom = str(machine_info.get("nom") or code)
+        recipients = get_alert_recipients(machine_uuid or None)
+        if not recipients:
+            logger.warning(
+                "Simulator demo email skipped for %s: no alert recipients configured",
+                code,
+            )
+            continue
+        all_recipients.extend(recipients)
+
+        rul_result = None
+        try:
+            from routers.diagnostics_rul import build_calibrated_rul_response
+
+            rul_payload = build_calibrated_rul_response(manager, code)
+            prediction = (rul_payload.get("prediction") or {}) if isinstance(rul_payload, dict) else {}
+            if rul_payload.get("mode") == "prediction" and prediction.get("rul_days") is not None:
+                ci_low = prediction.get("rul_days_display_low")
+                ci_high = prediction.get("rul_days_display_high")
+                if ci_low is None or ci_high is None:
+                    ci_low = prediction.get("rul_days_p10")
+                    ci_high = prediction.get("rul_days_p90")
+                rul_result = {
+                    "rul_days": float(prediction["rul_days"]),
+                    "ci_low": float(ci_low) if ci_low is not None else None,
+                    "ci_high": float(ci_high) if ci_high is not None else None,
+                }
+        except Exception:
+            rul_result = manager.predict_rul(code)
+
+        subject = f"[URGENCE - Simulation] {machine_nom} â€” machine critique dÃ©tectÃ©e"
+        html = build_urgence_html(machine_nom, code, hi, rul_result, [])
+
+        try:
+            rul_note = ""
+            if rul_result and rul_result.get("rul_days") is not None:
+                rul_note = f", RUL = {float(rul_result['rul_days']):.1f} jours"
+            sb.table("alertes").insert({
+                "machine_id": machine_uuid,
+                "type": "hi",
+                "titre": f"Machine critique au lancement du replay - {code}",
+                "description": (
+                    f"Replay demo demarre avec HI = {hi:.4f}{rul_note}. "
+                    "Notification email declenchee vers les destinataires relies a cette machine."
+                ),
+                "severite": "urgence",
+            }).execute()
+        except Exception as exc:
+            logger.warning("Simulator demo alert insert failed for %s: %s", code, exc)
+
+        for recipient in recipients:
+            jobs.append({
+                "machine_id": machine_uuid,
+                "machine_code": code,
+                "machine_name": machine_nom,
+                "recipient_email": recipient,
+                "subject": subject,
+                "html": html,
+            })
+
+    return {
+        "recipients": list(dict.fromkeys(all_recipients)),
+        "attempted_codes": attempted_codes,
+        "sent_codes": [],
+        "failed_recipients": [],
+    }, jobs
+
+
+def _deliver_demo_notification_jobs(jobs: list[dict]) -> dict:
+    sent_codes: list[str] = []
+    failed_recipients: list[str] = []
+    attempted_by_code: dict[str, int] = {}
+    success_by_code: dict[str, int] = {}
+
+    for job in jobs:
+        code = str(job["machine_code"])
+        attempted_by_code[code] = attempted_by_code.get(code, 0) + 1
+        sent = send_alert_email(
+            str(job["recipient_email"]),
+            str(job["subject"]),
+            str(job["html"]),
+        )
+        append_email_event(
+            machine_id=str(job["machine_id"]),
+            machine_code=code,
+            machine_name=str(job["machine_name"]),
+            recipient_email=str(job["recipient_email"]),
+            success=sent,
+            alert_type="hi",
+            source="simulator",
+            severity="urgence",
+            subject=str(job["subject"]),
+            note="Demo critical scenario triggered at simulator start.",
+        )
+        if sent:
+            success_by_code[code] = success_by_code.get(code, 0) + 1
+        else:
+            failed_recipients.append(str(job["recipient_email"]))
+
+    for code, attempted_count in attempted_by_code.items():
+        success_count = success_by_code.get(code, 0)
+        if success_count > 0:
+            sent_codes.append(code)
+            logger.info(
+                "Simulator demo critical email sent for %s to %d/%d recipients",
+                code,
+                success_count,
+                attempted_count,
+            )
+        else:
+            logger.warning(
+                "Simulator demo critical email failed for %s (%d recipients)",
+                code,
+                attempted_count,
+            )
+
+    return {
+        "sent_codes": sent_codes,
+        "failed_recipients": list(dict.fromkeys(failed_recipients)),
+    }
+
+
+async def _dispatch_demo_notification_jobs(summary: dict, jobs: list[dict]) -> None:
+    if not summary.get("attempted_codes"):
+        return
+
+    if not jobs:
+        logger.info(
+            "Simulator demo notifications: attempted=%s sent=[] recipients=[]",
+            summary["attempted_codes"],
+        )
+        return
+
+    delivery = await asyncio.to_thread(_deliver_demo_notification_jobs, jobs)
+    logger.info(
+        "Simulator demo notifications: attempted=%s sent=%s recipients=%s",
+        summary["attempted_codes"],
+        delivery["sent_codes"],
+        summary["recipients"],
+    )
+
+
+def _track_background_task(task: asyncio.Task, label: str) -> None:
+    _notification_tasks.add(task)
+
+    def _on_done(done: asyncio.Task) -> None:
+        _notification_tasks.discard(done)
+        if done.cancelled():
+            return
+        exc = done.exception()
+        if exc is not None:
+            logger.error("%s failed: %s", label, exc)
+
+    task.add_done_callback(_on_done)
+
+
 # ─── Replay loop ──────────────────────────────────────────────────────────────
 
 async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
@@ -1004,16 +1198,6 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
                 _bootstrap_demo_histories, manager
             )
             await asyncio.to_thread(_persist_demo_machine_snapshots, manager)
-            notification_summary = await asyncio.to_thread(
-                _send_demo_critical_notifications, manager
-            )
-            if notification_summary["attempted_codes"]:
-                logger.info(
-                    "Simulator demo notifications: attempted=%s sent=%s recipients=%s",
-                    notification_summary["attempted_codes"],
-                    notification_summary["sent_codes"],
-                    notification_summary["recipients"],
-                )
 
             max_len = max(len(info["public"]) for info in scenarios.values())
             _state["machines"] = {
@@ -1028,6 +1212,21 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
                 }
                 for code, info in scenarios.items()
             }
+
+            notification_summary, notification_jobs = await asyncio.to_thread(
+                _prepare_demo_critical_notifications_non_blocking, manager
+            )
+            if notification_summary["attempted_codes"]:
+                notification_task = asyncio.create_task(
+                    _dispatch_demo_notification_jobs(
+                        notification_summary,
+                        notification_jobs,
+                    )
+                )
+                _track_background_task(
+                    notification_task,
+                    "Simulator demo notifications",
+                )
 
             delay = 1.0 / speed
             for tick in range(max_len):
