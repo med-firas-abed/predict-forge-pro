@@ -49,6 +49,8 @@ aroteq_reports_screens/
 # ─── Heavy non-app artifacts (would bloat / break builds) ────────────────────
 rapport_firas/
 rapport_firas.zip
+rapport_firas_v2/
+rapport_firas_v2.zip
 external-skills/
 .opencode/
 references/
