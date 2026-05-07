@@ -9,13 +9,19 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _smtp_password() -> str:
+    # Gmail app passwords are often copied with spaces every 4 chars.
+    # Accept both formats so Render env setup stays noob-friendly.
+    return "".join(str(settings.SMTP_PASSWORD or "").split())
+
+
 def _smtp_is_configured() -> bool:
     return bool(
         settings.SMTP_HOST
         and settings.SMTP_PORT
         and settings.SMTP_FROM
         and settings.SMTP_USERNAME
-        and settings.SMTP_PASSWORD
+        and _smtp_password()
     )
 
 
@@ -37,7 +43,7 @@ def _send_via_smtp(to: str, subject: str, html_body: str) -> bool:
                 context=ssl.create_default_context(),
                 timeout=20,
             ) as server:
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                server.login(settings.SMTP_USERNAME, _smtp_password())
                 server.send_message(message)
         else:
             with smtplib.SMTP(
@@ -49,7 +55,7 @@ def _send_via_smtp(to: str, subject: str, html_body: str) -> bool:
                 if settings.SMTP_USE_TLS:
                     server.starttls(context=ssl.create_default_context())
                     server.ehlo()
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                server.login(settings.SMTP_USERNAME, _smtp_password())
                 server.send_message(message)
 
         logger.info("SMTP email sent to %s: %s", to, subject)
