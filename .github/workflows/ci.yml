@@ -12,6 +12,10 @@ permissions:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      VITE_SUPABASE_URL: https://example.supabase.co
+      VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJleGFtcGxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.signature
     defaults:
       run:
         working-directory: prediteq_frontend
