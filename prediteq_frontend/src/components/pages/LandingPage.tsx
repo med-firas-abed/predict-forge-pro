@@ -86,16 +86,16 @@ const T = {
   steps: {
     title: { fr: "La Feuille de Route vers\nZéro Arrêt", en: "The Roadmap to\nZero Downtime" },
     items: [
-      { title: { fr: "Installation des Capteurs", en: "Install Sensors" }, desc: { fr: "Nos techniciens installent les capteurs IoT sur vos machines existantes ou les intègrent directement aux équipements que nous fabriquons. Compatibilité OPC-UA et MQTT.", en: "Our technicians install IoT sensors on your existing machines or integrate them directly into the equipment we manufacture. OPC-UA and MQTT compatible." } },
-      { title: { fr: "L'IA Analyse", en: "AI Analyzes" }, desc: { fr: "Notre plateforme crée un jumeau numérique de vos équipements, apprenant les comportements nominaux à travers des milliards de points de données.", en: "Our platform creates a digital twin of your equipment, learning nominal behaviors through billions of data points." } },
+      { title: { fr: "Installation des Capteurs", en: "Install Sensors" }, desc: { fr: "Nos techniciens installent les capteurs IoT sur vos machines existantes ou les intègrent directement aux équipements que nous fabriquons, puis relient les signaux à la plateforme PrediTeq.", en: "Our technicians install IoT sensors on your existing machines or integrate them directly into the equipment we manufacture, then connect those signals to the PrediTeq platform." } },
+      { title: { fr: "L'IA Analyse", en: "AI Analyzes" }, desc: { fr: "Notre plateforme analyse les comportements nominaux et les dérives à partir des signaux multi-capteurs, pour produire HI, diagnostics et pronostic.", en: "Our platform analyzes nominal behavior and drift from multi-sensor signals to produce HI, diagnostics, and prognosis." } },
       { title: { fr: "Prédire les Pannes", en: "Predict Failures" }, desc: { fr: "Recevez des alertes fiables des semaines avant les pannes potentielles, incluant le type de défaillance et sa sévérité estimée.", en: "Receive high-confidence alerts weeks before potential failures, including failure type and estimated severity." } },
-      { title: { fr: "Agir en Avance", en: "Act Early" }, desc: { fr: "Alertes intelligentes, rapports IA automatisés et planification de maintenance avant que les pannes ne surviennent.", en: "Smart alerts, automated AI reports, and maintenance scheduling before failures occur. Zero unplanned downtime is the target." } },
+      { title: { fr: "Agir en Avance", en: "Act Early" }, desc: { fr: "Alertes intelligentes, rapports IA automatisés et planification de maintenance avant que les pannes ne surviennent.", en: "Smart alerts, automated AI reports, and maintenance scheduling before failures occur." } },
     ],
   },
   stats: {
-    accuracy: { fr: "Précision du Modèle", en: "Model Accuracy" },
-    latency: { fr: "Latence RMSE", en: "RMSE Latency" },
-    uptime: { fr: "Disponibilité Plateforme", en: "Platform Uptime" },
+    accuracy: { fr: "Holdout R²", en: "Holdout R²" },
+    latency: { fr: "RMSE Jours", en: "RMSE Days" },
+    uptime: { fr: "Hybrid F1", en: "Hybrid F1" },
     roi: { fr: "ROI Moyen", en: "Average ROI" },
   },
   cases: {
@@ -109,18 +109,18 @@ const T = {
   pricing: {
     label: { fr: "Tarifs", en: "Pricing" },
     title: { fr: "Offres Adaptées à Votre Industrie", en: "Scalable Intelligence Tiers" },
-    sub: { fr: "Choisissez l'offre adaptée à votre parc machines. Capteurs IoT inclus dans chaque formule.", en: "Choose the plan that fits your industrial footprint. IoT sensors included in every plan." },
+    sub: { fr: "Choisissez l'offre adaptée à votre parc machines. Le périmètre exact est ajusté selon le projet.", en: "Choose the plan that fits your industrial footprint. The exact scope is adjusted to the project." },
     mo: { fr: "/mois", en: "/mo" },
     plans: [
-      { name: { fr: "Essentiel", en: "Starter" }, price: "990 DT", sub: { fr: "Jusqu'à 5 machines", en: "Up to 5 machines" }, features: { fr: ["Kit capteurs IoT (température, vibration)", "Indice de santé (HI) en temps réel", "Prédiction RUL basique", "Alertes par email", "Tableau de bord 1 site"], en: ["IoT sensor kit (temperature, vibration)", "Real-time machine health (HI)", "Basic RUL prediction", "Email alerts", "1-site dashboard"] }, popular: false },
-      { name: { fr: "Professionnel", en: "Professional" }, price: "2 490 DT", sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de santé (HI) avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA à la demande"], en: ["Advanced sensor kit (6 parameters)", "Advanced machine health (HI)", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "On-demand AI reports"] }, popular: true },
+      { name: { fr: "Essentiel", en: "Starter" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Jusqu'à 5 machines", en: "Up to 5 machines" }, features: { fr: ["Kit capteurs IoT (température, vibration)", "Indice de santé (HI) en temps réel", "Prédiction RUL basique", "Alertes par email", "Tableau de bord 1 site"], en: ["IoT sensor kit (temperature, vibration)", "Real-time machine health (HI)", "Basic RUL prediction", "Email alerts", "1-site dashboard"] }, popular: false },
+      { name: { fr: "Professionnel", en: "Professional" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de santé (HI) avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA à la demande"], en: ["Advanced sensor kit (6 parameters)", "Advanced machine health (HI)", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "On-demand AI reports"] }, popular: true },
       { name: { fr: "Entreprise", en: "Enterprise" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Machines illimitées", en: "Unlimited machines" }, features: { fr: ["Tout l'offre Professionnel", "Capteurs sur-mesure pour vos lignes", "Entraînement de modèle IA personnalisé", "Déploiement on-premise possible", "Tableau de bord en marque blanche", "Rapports IA en temps réel"], en: ["Everything in Professional", "Custom sensors for your production lines", "Custom AI model training", "On-premise deployment option", "White-label dashboard", "Real-time AI reports"] }, popular: false },
     ],
   },
   cta: {
     h2a: { fr: "Prêt à éliminer", en: "Ready to eliminate" },
     h2b: { fr: "les arrêts imprévus ?", en: "unplanned downtime?" },
-    sub: { fr: "Rejoignez les industriels qui utilisent PrediTeq pour prédire les pannes. Nos capteurs s'installent sur vos machines existantes. Essai gratuit — sans engagement.", en: "Join industrial operators using PrediTeq to predict failures before they happen. Our sensors install on your existing machines. Start your free trial — no commitment required." },
+    sub: { fr: "Rejoignez les industriels qui utilisent PrediTeq pour prédire les pannes. Nos capteurs s'installent sur vos machines existantes. Démonstration et déploiement selon le projet.", en: "Join industrial operators using PrediTeq to predict failures before they happen. Our sensors install on your existing machines. Demo and rollout depend on the project scope." },
     btn: { fr: "Commencer Maintenant", en: "Get Started Now" },
   },
   footer: {
@@ -574,8 +574,19 @@ function HowItWorks() {
 
           {/* Machine photo */}
           <div className="hidden md:flex items-center justify-center">
-            <div className={`w-full max-w-md rounded-2xl border overflow-hidden ${dark ? 'border-white/10' : 'border-gray-200'}`}>
-              <img src="/photo_machine_aroteq.png" alt="AroTeq Industrial Machine" className="w-full h-auto object-cover rounded-2xl" />
+            <div className="w-full max-w-lg space-y-4">
+              <div className={`rounded-2xl border overflow-hidden ${dark ? 'border-white/10' : 'border-gray-200'}`}>
+                <img src="/photo_machine_aroteq.png" alt="AroTeq Industrial Machine" className="w-full h-auto object-cover rounded-2xl" />
+              </div>
+              <div className={`rounded-2xl border overflow-hidden shadow-[0_24px_48px_-32px_rgba(15,23,42,0.7)] ${dark ? 'border-white/10 bg-white/[0.02]' : 'border-gray-200 bg-white'}`}>
+                <div className="aspect-[16/9] w-full overflow-hidden">
+                  <img
+                    src="/landing-preview-dashboard.png?v=20260508c"
+                    alt="PrediTeq dashboard preview"
+                    className="h-full w-full object-cover object-top"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
