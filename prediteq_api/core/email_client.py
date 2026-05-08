@@ -22,6 +22,10 @@ def _brevo_is_configured() -> bool:
     return bool(settings.BREVO_API_KEY and settings.EMAIL_SENDER_EMAIL)
 
 
+def _emailjs_is_configured() -> bool:
+    return bool(settings.EMAILJS_PUBLIC_KEY and settings.EMAILJS_TEMPLATE_ID)
+
+
 def _smtp_is_configured() -> bool:
     return bool(
         settings.SMTP_HOST
@@ -30,6 +34,49 @@ def _smtp_is_configured() -> bool:
         and settings.SMTP_USERNAME
         and _smtp_password()
     )
+
+
+def _send_via_emailjs(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
+    payload = {
+        "service_id": settings.EMAILJS_SERVICE_ID or "default_service",
+        "template_id": settings.EMAILJS_TEMPLATE_ID,
+        "user_id": settings.EMAILJS_PUBLIC_KEY,
+        "accessToken": settings.EMAILJS_PRIVATE_KEY,
+        "template_params": {
+            "to_email": to,
+            "subject": subject,
+            "sender_name": settings.EMAIL_SENDER_NAME,
+            "sender_email": settings.EMAIL_SENDER_EMAIL,
+            "dashboard_url": settings.DASHBOARD_URL,
+            "message_html": html_body,
+        },
+    }
+    req = urllib_request.Request(
+        url=f"{settings.EMAILJS_API_BASE.rstrip('/')}/api/v1.0/email/send",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "origin": settings.DASHBOARD_URL,
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=20) as response:
+            status = getattr(response, "status", 200)
+            body = response.read().decode("utf-8", errors="replace")
+            if 200 <= status < 300:
+                logger.info("EmailJS email sent to %s: %s", to, subject)
+                return True, None
+            logger.error("EmailJS email failed for %s: HTTP %s %s", to, status, body)
+            return False, f"EmailJS HTTP {status}: {body[:240]}"
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.error("EmailJS email failed for %s: HTTP %s %s", to, exc.code, body)
+        return False, f"EmailJS HTTP {exc.code}: {body[:240]}"
+    except Exception as exc:
+        logger.error("EmailJS email failed for %s: %s", to, exc)
+        return False, str(exc)
 
 
 def _send_via_brevo(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
@@ -113,6 +160,8 @@ def _send_via_smtp(to: str, subject: str, html_body: str) -> tuple[bool, str | N
 
 def send_alert_email_detailed(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
     """Send an alert email and return `(success, error_message)`."""
+    if _emailjs_is_configured():
+        return _send_via_emailjs(to, subject, html_body)
     if _brevo_is_configured():
         return _send_via_brevo(to, subject, html_body)
     if _smtp_is_configured():

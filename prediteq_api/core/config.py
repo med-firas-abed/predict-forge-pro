@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     MQTT_USE_SSL: bool = True
 
     GROQ_API_KEY: str = ""
+    EMAILJS_API_BASE: str = "https://api.emailjs.com"
+    EMAILJS_PUBLIC_KEY: str = ""
+    EMAILJS_PRIVATE_KEY: str = ""
+    EMAILJS_SERVICE_ID: str = "default_service"
+    EMAILJS_TEMPLATE_ID: str = ""
     BREVO_API_KEY: str = ""
     BREVO_API_BASE: str = "https://api.brevo.com"
     BREVO_SENDER_EMAIL: str = ""
@@ -51,6 +56,9 @@ class Settings(BaseSettings):
 
     @property
     def EMAIL_SENDER_EMAIL(self) -> str:
+        if self.EMAILJS_PUBLIC_KEY:
+            _name, email = parseaddr(self.SMTP_FROM)
+            return email or self.SMTP_USERNAME or self.BREVO_SENDER_EMAIL or ""
         if self.BREVO_SENDER_EMAIL:
             return self.BREVO_SENDER_EMAIL
         _name, email = parseaddr(self.SMTP_FROM)
@@ -58,6 +66,9 @@ class Settings(BaseSettings):
 
     @property
     def EMAIL_SENDER_NAME(self) -> str:
+        if self.EMAILJS_PUBLIC_KEY:
+            name, _email = parseaddr(self.SMTP_FROM)
+            return name or self.BREVO_SENDER_NAME or "PrediTeq Alerts"
         if self.BREVO_SENDER_NAME:
             return self.BREVO_SENDER_NAME
         name, _email = parseaddr(self.SMTP_FROM)

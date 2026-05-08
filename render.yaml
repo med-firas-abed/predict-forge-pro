@@ -17,6 +17,16 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: EMAILJS_API_BASE
+        value: "https://api.emailjs.com"
+      - key: EMAILJS_PUBLIC_KEY
+        sync: false            # no-phone HTTP email alternative
+      - key: EMAILJS_PRIVATE_KEY
+        sync: false
+      - key: EMAILJS_SERVICE_ID
+        value: "default_service"
+      - key: EMAILJS_TEMPLATE_ID
+        sync: false
       - key: BREVO_API_KEY
         sync: false            # free HTTPS email API (recommended on Render Free)
       - key: BREVO_SENDER_EMAIL

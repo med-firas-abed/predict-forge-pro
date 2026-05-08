@@ -98,7 +98,9 @@ def health_detail(user: CurrentUser = Depends(require_auth)):
         try:
             from core.config import settings
             email_provider = "none"
-            if settings.BREVO_API_KEY and settings.EMAIL_SENDER_EMAIL:
+            if settings.EMAILJS_PUBLIC_KEY and settings.EMAILJS_TEMPLATE_ID:
+                email_provider = "emailjs"
+            elif settings.BREVO_API_KEY and settings.EMAIL_SENDER_EMAIL:
                 email_provider = "brevo"
             elif (
                 settings.SMTP_HOST
