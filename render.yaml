@@ -3,8 +3,8 @@ services:
     name: prediteq-api
     runtime: python
     region: frankfurt          # closest to Tunisia
-    plan: starter              # $7/mo — no cold starts, always on
-    # No rootDir — we need both prediteq_api/ AND prediteq_ml/ (models)
+    plan: free                 # zero-cost demo hosting; Starter is smoother if you later upgrade
+    # No rootDir - we need both prediteq_api/ AND prediteq_ml/ (models)
     buildCommand: pip install -r prediteq_api/requirements.txt
     startCommand: cd prediteq_api && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -17,8 +17,14 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: BREVO_API_KEY
+        sync: false            # free HTTPS email API (recommended on Render Free)
+      - key: BREVO_SENDER_EMAIL
+        sync: false            # verified sender email in Brevo
+      - key: BREVO_SENDER_NAME
+        value: "PrediTeq Alerts"
       - key: SMTP_HOST
-        sync: false
+        sync: false            # optional fallback if you later move off Render Free
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_USERNAME

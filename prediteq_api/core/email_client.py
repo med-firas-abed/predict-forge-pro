@@ -1,8 +1,11 @@
 import html as html_mod
+import json
 import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from core.config import settings
 
@@ -15,6 +18,10 @@ def _smtp_password() -> str:
     return "".join(str(settings.SMTP_PASSWORD or "").split())
 
 
+def _brevo_is_configured() -> bool:
+    return bool(settings.BREVO_API_KEY and settings.EMAIL_SENDER_EMAIL)
+
+
 def _smtp_is_configured() -> bool:
     return bool(
         settings.SMTP_HOST
@@ -23,6 +30,45 @@ def _smtp_is_configured() -> bool:
         and settings.SMTP_USERNAME
         and _smtp_password()
     )
+
+
+def _send_via_brevo(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
+    payload = {
+        "sender": {
+            "email": settings.EMAIL_SENDER_EMAIL,
+            "name": settings.EMAIL_SENDER_NAME,
+        },
+        "to": [{"email": to}],
+        "subject": subject,
+        "htmlContent": html_body,
+    }
+    req = urllib_request.Request(
+        url=f"{settings.BREVO_API_BASE.rstrip('/')}/v3/smtp/email",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "accept": "application/json",
+            "api-key": settings.BREVO_API_KEY,
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=20) as response:
+            status = getattr(response, "status", 200)
+            body = response.read().decode("utf-8", errors="replace")
+            if 200 <= status < 300:
+                logger.info("Brevo email sent to %s: %s", to, subject)
+                return True, None
+            logger.error("Brevo email failed for %s: HTTP %s %s", to, status, body)
+            return False, f"Brevo HTTP {status}: {body[:240]}"
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.error("Brevo email failed for %s: HTTP %s %s", to, exc.code, body)
+        return False, f"Brevo HTTP {exc.code}: {body[:240]}"
+    except Exception as exc:
+        logger.error("Brevo email failed for %s: %s", to, exc)
+        return False, str(exc)
 
 
 def _send_via_smtp(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
@@ -66,16 +112,18 @@ def _send_via_smtp(to: str, subject: str, html_body: str) -> tuple[bool, str | N
 
 
 def send_alert_email_detailed(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
-    """Send an alert email via SMTP and return `(success, error_message)`."""
-    if not _smtp_is_configured():
-        note = "SMTP not configured"
-        logger.warning("%s - email skipped", note)
-        return False, note
-    return _send_via_smtp(to, subject, html_body)
+    """Send an alert email and return `(success, error_message)`."""
+    if _brevo_is_configured():
+        return _send_via_brevo(to, subject, html_body)
+    if _smtp_is_configured():
+        return _send_via_smtp(to, subject, html_body)
+    note = "No email provider configured"
+    logger.warning("%s - email skipped", note)
+    return False, note
 
 
 def send_alert_email(to: str, subject: str, html_body: str) -> bool:
-    """Send an alert email via SMTP only."""
+    """Send an alert email via the configured provider."""
     sent, _ = send_alert_email_detailed(to, subject, html_body)
     return sent
 

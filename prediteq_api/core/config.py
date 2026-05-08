@@ -1,4 +1,5 @@
 import os
+from email.utils import parseaddr
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +23,10 @@ class Settings(BaseSettings):
     MQTT_USE_SSL: bool = True
 
     GROQ_API_KEY: str = ""
+    BREVO_API_KEY: str = ""
+    BREVO_API_BASE: str = "https://api.brevo.com"
+    BREVO_SENDER_EMAIL: str = ""
+    BREVO_SENDER_NAME: str = ""
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
@@ -43,6 +48,20 @@ class Settings(BaseSettings):
     @property
     def MODEL_DIR(self) -> str:
         return os.path.join(self.ML_DIR, "models")
+
+    @property
+    def EMAIL_SENDER_EMAIL(self) -> str:
+        if self.BREVO_SENDER_EMAIL:
+            return self.BREVO_SENDER_EMAIL
+        _name, email = parseaddr(self.SMTP_FROM)
+        return email or self.SMTP_USERNAME or ""
+
+    @property
+    def EMAIL_SENDER_NAME(self) -> str:
+        if self.BREVO_SENDER_NAME:
+            return self.BREVO_SENDER_NAME
+        name, _email = parseaddr(self.SMTP_FROM)
+        return name or "PrediTeq Alerts"
 
 
 settings = Settings()

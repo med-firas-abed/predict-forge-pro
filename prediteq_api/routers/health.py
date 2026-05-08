@@ -94,21 +94,23 @@ def health_detail(user: CurrentUser = Depends(require_auth)):
         except Exception as e:
             deps["groq"] = {"status": "error", "message": str(e)}
 
-        # SMTP (email)
+        # Email provider
         try:
             from core.config import settings
+            email_provider = "none"
+            if settings.BREVO_API_KEY and settings.EMAIL_SENDER_EMAIL:
+                email_provider = "brevo"
+            elif (
+                settings.SMTP_HOST
+                and settings.SMTP_PORT
+                and settings.SMTP_FROM
+                and settings.SMTP_USERNAME
+                and settings.SMTP_PASSWORD
+            ):
+                email_provider = "smtp"
             deps["smtp"] = {
-                "status": (
-                    "ok"
-                    if (
-                        settings.SMTP_HOST
-                        and settings.SMTP_PORT
-                        and settings.SMTP_FROM
-                        and settings.SMTP_USERNAME
-                        and settings.SMTP_PASSWORD
-                    )
-                    else "not_configured"
-                ),
+                "status": "ok" if email_provider != "none" else "not_configured",
+                "provider": email_provider,
             }
         except Exception as e:
             deps["smtp"] = {"status": "error", "message": str(e)}
