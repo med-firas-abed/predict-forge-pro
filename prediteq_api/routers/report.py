@@ -481,20 +481,19 @@ async def list_reports(user: CurrentUser = Depends(require_auth)):
     List saved auto-generated reports (from scheduled jobs).
     """
     sb = get_supabase()
-    machine_filter = get_machine_filter(user)
+    allowed_code = _resolve_scoped_machine_code(None, user)
 
     try:
         q = sb.table('rapports').select('id, machine_code, period, lang, titre, created_at') \
             .order('created_at', desc=True).limit(50)
 
-        if machine_filter:
-            # Get the machine code for this user's scoped machine
-            m_res = sb.table('machines').select('code').eq('id', machine_filter).execute()
-            if m_res.data:
-                q = q.eq('machine_code', m_res.data[0]['code'])
+        if allowed_code:
+            q = q.eq('machine_code', allowed_code)
 
         result = q.execute()
         return result.data or []
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("DB error in report history: %s", e)
         raise HTTPException(502, "Erreur base de données")
@@ -518,15 +517,9 @@ async def get_report(report_id: str, user: CurrentUser = Depends(require_auth)):
     report = result.data[0]
 
     # Enforce machine scoping
-    machine_filter = get_machine_filter(user)
-    if machine_filter:
-        try:
-            m_res = sb.table('machines').select('code').eq('id', machine_filter).execute()
-            user_code = m_res.data[0]['code'] if m_res.data else None
-        except Exception:
-            user_code = None
-        if report.get('machine_code') and report['machine_code'] != user_code:
-            raise HTTPException(403, "Accès interdit à ce rapport")
+    allowed_code = _resolve_scoped_machine_code(None, user)
+    if allowed_code and report.get('machine_code') != allowed_code:
+        raise HTTPException(403, "Accès interdit à ce rapport")
 
     return report
 
@@ -549,15 +542,9 @@ async def download_report_pdf(report_id: str, user: CurrentUser = Depends(requir
     report = result.data[0]
 
     # Enforce machine scoping (same as GET /history/{id})
-    machine_filter = get_machine_filter(user)
-    if machine_filter:
-        try:
-            m_res = sb.table('machines').select('code').eq('id', machine_filter).execute()
-            user_code = m_res.data[0]['code'] if m_res.data else None
-        except Exception:
-            user_code = None
-        if report.get('machine_code') and report['machine_code'] != user_code:
-            raise HTTPException(403, "Accès interdit à ce rapport")
+    allowed_code = _resolve_scoped_machine_code(None, user)
+    if allowed_code and report.get('machine_code') != allowed_code:
+        raise HTTPException(403, "Accès interdit à ce rapport")
 
     contenu = report.get('contenu')
     if not contenu:

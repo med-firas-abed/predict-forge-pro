@@ -47,6 +47,13 @@ def _metadata_value(user: object, *keys: str) -> Optional[str]:
     return None
 
 
+def _metadata_account_status(user: object) -> Optional[str]:
+    status = _metadata_value(user, "status", "account_status")
+    if status in {"pending", "approved", "rejected"}:
+        return status
+    return None
+
+
 async def _get_user_from_token(authorization: str = Header(...)) -> CurrentUser:
     """
     Validate Supabase JWT and load profile.
@@ -90,9 +97,10 @@ async def _get_user_from_token(authorization: str = Header(...)) -> CurrentUser:
 
     if profile is None:
         fallback_role = _metadata_value(user, "role") or "user"
+        fallback_status = _metadata_account_status(user)
         fallback_machine_id = _metadata_value(user, "machine_id")
 
-        if fallback_role in {"admin", "user"}:
+        if fallback_role in {"admin", "user"} and fallback_status in {"pending", "approved", "rejected"}:
             logger.warning(
                 "Falling back to auth metadata for %s after profile fetch failure: %s",
                 user.id,
@@ -102,7 +110,7 @@ async def _get_user_from_token(authorization: str = Header(...)) -> CurrentUser:
                 id=user.id,
                 email=user.email or "",
                 role=fallback_role,
-                status="approved",
+                status=fallback_status,
                 machine_id=fallback_machine_id,
             )
 
@@ -122,6 +130,8 @@ async def require_auth(user: CurrentUser = Depends(_get_user_from_token)) -> Cur
     """Dependency: requires approved account."""
     if not user.is_approved:
         raise HTTPException(403, "Account not approved")
+    if not user.is_admin and not user.machine_id:
+        raise HTTPException(403, "No machine assigned to this account")
     return user
 
 

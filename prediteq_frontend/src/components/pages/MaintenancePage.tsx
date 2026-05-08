@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Brain,
@@ -292,18 +292,21 @@ export function MaintenancePage() {
       .slice(0, 3);
   }, [eventsByDate, selectedDate]);
 
-  const getDefaultDateForMonth = (targetYear: number, targetMonth: number) => {
-    const prefix = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-`;
-    const monthDates = Object.keys(eventsByDate)
-      .filter((date) => date.startsWith(prefix))
-      .sort((left, right) => left.localeCompare(right));
-    const todayKey = toDateKey(new Date());
-    if (monthDates.length > 0) {
-      return monthDates.find((date) => date >= todayKey) ?? monthDates[0];
-    }
-    if (todayKey.startsWith(prefix)) return todayKey;
-    return `${prefix}01`;
-  };
+  const getDefaultDateForMonth = useCallback(
+    (targetYear: number, targetMonth: number) => {
+      const prefix = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-`;
+      const monthDates = Object.keys(eventsByDate)
+        .filter((date) => date.startsWith(prefix))
+        .sort((left, right) => left.localeCompare(right));
+      const todayKey = toDateKey(new Date());
+      if (monthDates.length > 0) {
+        return monthDates.find((date) => date >= todayKey) ?? monthDates[0];
+      }
+      if (todayKey.startsWith(prefix)) return todayKey;
+      return `${prefix}01`;
+    },
+    [eventsByDate],
+  );
 
   useEffect(() => {
     if (didAutoSeedSelection || isLoadingTasks) return;
@@ -313,7 +316,7 @@ export function MaintenancePage() {
       setSelectedDate(nextDefault);
     }
     setDidAutoSeedSelection(true);
-  }, [didAutoSeedSelection, eventsByDate, isLoadingTasks, month, selectedDate, year]);
+  }, [didAutoSeedSelection, getDefaultDateForMonth, isLoadingTasks, month, selectedDate, year]);
 
   const openCreateModal = (prefill?: Partial<TaskDraft>) => {
     setDraft({

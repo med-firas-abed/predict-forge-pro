@@ -18,4 +18,50 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/scheduler/")
+          ) {
+            return "react-core";
+          }
+          if (id.includes("react-router-dom")) return "router";
+          if (id.includes("@supabase/supabase-js")) return "supabase";
+          if (id.includes("@tanstack/react-query")) return "query";
+          if (
+            id.includes("react-hook-form") ||
+            id.includes("@hookform/resolvers") ||
+            id.includes("/zod/")
+          ) {
+            return "forms";
+          }
+          if (id.includes("date-fns") || id.includes("react-day-picker")) {
+            return "date-utils";
+          }
+          if (id.includes("lucide-react")) return "icons";
+          if (id.includes("recharts")) return "charts";
+          if (id.includes("leaflet")) return "maps";
+          if (
+            id.includes("@radix-ui") ||
+            id.includes("cmdk") ||
+            id.includes("embla-carousel-react") ||
+            id.includes("sonner") ||
+            id.includes("vaul")
+          ) {
+            return "ui";
+          }
+
+          return "vendor";
+        },
+      },
+    },
+  },
 }));

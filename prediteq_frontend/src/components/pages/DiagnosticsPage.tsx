@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -255,8 +255,11 @@ export function DiagnosticsPage() {
   const { data: diagnostics, isLoading: isLoadingDiagnostics } = useDiagnostics(selected?.id);
   const { latest: latestSensorPoint } = useMachineSensors(selected?.id ?? undefined);
 
-  const l = (fr: string, en: string, ar: string) =>
-    repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
+  const l = useCallback(
+    (fr: string, en: string, ar: string) =>
+      repairText(lang === "fr" ? fr : lang === "en" ? en : ar),
+    [lang],
+  );
   const numberLocale = lang === "fr" ? "fr-FR" : lang === "en" ? "en-GB" : "ar-TN";
 
   const selectedInsight = selected ? byMachineId[selected.id] : null;

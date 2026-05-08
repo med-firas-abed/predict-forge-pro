@@ -300,12 +300,8 @@ async function fetchMachines(machineId?: string): Promise<Machine[]> {
       }
     }
 
-    if (machines.length > 0) {
-      writeCachedMachines(machines);
-      return filterMachines(machines, machineId);
-    }
-
-    throw new Error("Machine list is empty");
+    writeCachedMachines(machines);
+    return filterMachines(machines, machineId);
   } catch (error) {
     console.warn("[useMachines] live fetch failed, falling back", error);
     const cachedMachines = readCachedMachines(machineId);

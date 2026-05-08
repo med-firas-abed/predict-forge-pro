@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from core.supabase_client import get_supabase
+from core.supabase_client import get_supabase, new_supabase_client
 from core.config import settings
 from core.auth import CurrentUser, require_auth, require_admin, _get_user_from_token
 from core.email_client import send_alert_email
@@ -90,6 +90,38 @@ def _validate_machine_id(machine_id: Optional[str]) -> Optional[str]:
         raise HTTPException(400, "machine_id must be a valid UUID")
 
 
+def _sync_auth_metadata(
+    sb,
+    *,
+    user_id: str,
+    full_name: str,
+    role: str,
+    machine_id: Optional[str],
+    status: str,
+    approved_at: Optional[str] = None,
+) -> None:
+    """Keep auth.user metadata aligned with the profiles table.
+
+    The JWT fallback path depends on this metadata being an honest mirror of
+    the account state, so approval and assignment changes must update both
+    stores together.
+    """
+    update_auth_user = getattr(sb.auth.admin, "update_user_by_id", None)
+    if not callable(update_auth_user):
+        return
+
+    metadata: dict[str, object] = {
+        "full_name": full_name,
+        "role": role,
+        "machine_id": machine_id,
+        "status": status,
+    }
+    if approved_at:
+        metadata["approved_at"] = approved_at
+
+    update_auth_user(user_id, {"user_metadata": metadata})
+
+
 @router.get("/auth/machines", response_model=list[PublicMachine])
 async def list_signup_machines():
     """Public machine list for the signup form."""
@@ -152,6 +184,7 @@ def signup(body: SignupRequest):
                 "full_name": body.full_name,
                 "role": body.role,
                 "machine_id": machine_id,
+                "status": "pending",
             },
         })
         user_id = res.user.id
@@ -173,6 +206,11 @@ def signup(body: SignupRequest):
         }).execute()
     except Exception as e:
         logger.error("Profile upsert error: %s", e)
+        try:
+            sb.auth.admin.delete_user(user_id)
+        except Exception as delete_exc:
+            logger.warning("Rollback of auth user %s failed after profile upsert error: %s", user_id, delete_exc)
+        raise HTTPException(502, "Erreur lors de la création du profil")
 
     # Auto-approve first admin (bootstrap)
     if body.role == "admin":
@@ -184,10 +222,20 @@ def signup(body: SignupRequest):
                 .neq("id", user_id) \
                 .execute()
             if count_res.count == 0:
+                approved_at = datetime.now(timezone.utc).isoformat()
                 sb.table("profiles").update({
                     "status": "approved",
-                    "approved_at": datetime.now(timezone.utc).isoformat(),
+                    "approved_at": approved_at,
                 }).eq("id", user_id).eq("status", "pending").execute()
+                _sync_auth_metadata(
+                    sb,
+                    user_id=user_id,
+                    full_name=body.full_name,
+                    role=body.role,
+                    machine_id=machine_id,
+                    status="approved",
+                    approved_at=approved_at,
+                )
                 logger.info("Auto-approved first admin: %s", body.email)
                 return {"status": "approved", "message": "Premier admin — approuvé automatiquement"}
         except Exception as e:
@@ -202,9 +250,10 @@ def signup(body: SignupRequest):
 def login(body: LoginRequest):
     """Login — verify status=approved before returning session."""
     sb = get_supabase()
+    auth_client = new_supabase_client()
 
     try:
-        res = sb.auth.sign_in_with_password({
+        res = auth_client.auth.sign_in_with_password({
             "email": body.email,
             "password": body.password,
         })
@@ -374,6 +423,18 @@ async def approve_user(user_id: str, admin: CurrentUser = Depends(require_admin)
         "approved_at": now_iso,
         "approved_by": admin.id,
     }).eq("id", user_id).execute()
+    try:
+        _sync_auth_metadata(
+            sb,
+            user_id=user_id,
+            full_name=target.get("full_name", ""),
+            role=target.get("role", "user"),
+            machine_id=target.get("machine_id"),
+            status="approved",
+            approved_at=now_iso,
+        )
+    except Exception as e:
+        logger.warning("Could not sync auth metadata after approval for %s: %s", user_id, e)
 
     # Send confirmation email
     try:
@@ -417,6 +478,18 @@ async def reject_user(user_id: str, admin: CurrentUser = Depends(require_admin))
     sb.table("profiles").update({
         "status": "rejected",
     }).eq("id", user_id).execute()
+    try:
+        _sync_auth_metadata(
+            sb,
+            user_id=user_id,
+            full_name=target.get("full_name", ""),
+            role=target.get("role", "user"),
+            machine_id=target.get("machine_id"),
+            status="rejected",
+            approved_at=target.get("approved_at"),
+        )
+    except Exception as e:
+        logger.warning("Could not sync auth metadata after rejection for %s: %s", user_id, e)
 
     # Send rejection email
     try:
@@ -485,18 +558,15 @@ async def update_user_machine(
         raise HTTPException(502, "Erreur lors de la reaffectation")
 
     try:
-        update_auth_user = getattr(sb.auth.admin, "update_user_by_id", None)
-        if callable(update_auth_user):
-            update_auth_user(
-                user_id,
-                {
-                    "user_metadata": {
-                        "full_name": target.get("full_name", ""),
-                        "role": target.get("role", "user"),
-                        "machine_id": machine_id,
-                    }
-                },
-            )
+        _sync_auth_metadata(
+            sb,
+            user_id=user_id,
+            full_name=target.get("full_name", ""),
+            role=target.get("role", "user"),
+            machine_id=machine_id,
+            status=target.get("status", "pending"),
+            approved_at=target.get("approved_at"),
+        )
     except Exception as e:
         logger.warning("Could not update auth metadata for %s after reassignment: %s", user_id, e)
 

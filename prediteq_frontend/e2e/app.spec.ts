@@ -221,12 +221,19 @@ test.describe("Login page", () => {
   });
 
   test("shows error on wrong credentials", async ({ page }) => {
+    await page.route("**/auth/login", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "text/plain",
+        body: "Email ou mot de passe incorrect.",
+      });
+    });
+
     await page.goto("/login");
     await page.fill('input[type="email"]', "wrong@example.com");
     await page.fill('input[type="password"]', "wrongpassword");
     await page.click('button[type="submit"]');
-    const errorBanner = page.locator(".bg-destructive\\/10");
-    await expect(errorBanner).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/email ou mot de passe incorrect/i)).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -280,7 +287,7 @@ test.describe("Authenticated app flows", () => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
     await page.goto("/simulateur");
-    await expect(page.getByRole("heading", { name: /Contr.*simulateur/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Simulateur/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /D[ée]marrer/i })).toBeVisible();
   });
 
