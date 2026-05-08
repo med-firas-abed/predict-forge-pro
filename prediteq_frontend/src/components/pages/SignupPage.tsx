@@ -477,7 +477,7 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                   ? "..."
                   : isAdminCreateMode
                     ? lang === "fr"
-                      ? "CrÃ©er l'utilisateur"
+                      ? "Créer l'utilisateur"
                       : lang === "en"
                         ? "Create user"
                         : "Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…"

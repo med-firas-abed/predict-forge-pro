@@ -238,10 +238,10 @@ def build_urgence_html(
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><b>Marge restante estimee (RUL)</b></td>
                 <td style="padding: 8px; border: 1px solid #ddd;">{rul_str}{ci_str}</td></tr>
         </table>
-        <h3>Dernieres alertes</h3>
-        <ul>{alerts_html or '<li>Aucune alerte recente</li>'}</ul>
+        <h3>Dernières alertes</h3>
+        <ul>{alerts_html or '<li>Aucune alerte récente</li>'}</ul>
         <p><a href="{settings.DASHBOARD_URL}" style="color: #3498db;">
-            Acceder au tableau de bord ->
+            Accéder au tableau de bord ->
         </a></p>
     </div>
     """
@@ -264,7 +264,7 @@ def build_surveillance_html(
     return f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
         <h2 style="color: #e67e22;">SURVEILLANCE - {machine_nom} ({machine_code})</h2>
-        <p>Une degradation a ete detectee sur cette machine.</p>
+        <p>Une dégradation a été détectée sur cette machine.</p>
         <table style="border-collapse: collapse; width: 100%;">
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><b>Indice de sante (HI)</b></td>
                 <td style="padding: 8px; border: 1px solid #ddd; color: #e67e22;"><b>{hi_pct}</b></td></tr>
@@ -273,7 +273,7 @@ def build_surveillance_html(
         </table>
         <p>Surveillance hebdomadaire recommandee.</p>
         <p><a href="{settings.DASHBOARD_URL}" style="color: #3498db;">
-            Acceder au tableau de bord ->
+            Accéder au tableau de bord ->
         </a></p>
     </div>
     """

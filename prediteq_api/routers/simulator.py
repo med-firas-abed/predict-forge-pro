@@ -1054,7 +1054,7 @@ def _prepare_demo_critical_notifications_non_blocking(manager) -> tuple[dict, li
         except Exception:
             rul_result = manager.predict_rul(code)
 
-        subject = f"[URGENCE - Simulation] {machine_nom} â€” machine critique dÃ©tectÃ©e"
+        subject = f"[URGENCE - Simulation] {machine_nom} — machine critique détectée"
         html = build_urgence_html(machine_nom, code, hi, rul_result, [])
 
         try:
