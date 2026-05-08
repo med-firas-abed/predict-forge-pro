@@ -26,13 +26,6 @@ export default defineConfig(({ mode }) => ({
             return undefined;
           }
 
-          if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("/scheduler/")
-          ) {
-            return "react-core";
-          }
           if (id.includes("react-router-dom")) return "router";
           if (id.includes("@supabase/supabase-js")) return "supabase";
           if (id.includes("@tanstack/react-query")) return "query";
