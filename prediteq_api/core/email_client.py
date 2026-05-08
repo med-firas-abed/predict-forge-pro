@@ -1,6 +1,7 @@
 import html as html_mod
 import json
 import logging
+import re
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -10,6 +11,17 @@ from urllib import request as urllib_request
 from core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _html_to_text(html_body: str) -> str:
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", " ", html_body)
+    text = re.sub(r"(?i)<br\\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p>", "\n\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html_mod.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _smtp_password() -> str:
@@ -37,6 +49,7 @@ def _smtp_is_configured() -> bool:
 
 
 def _send_via_emailjs(to: str, subject: str, html_body: str) -> tuple[bool, str | None]:
+    message_text = _html_to_text(html_body)
     payload = {
         "service_id": settings.EMAILJS_SERVICE_ID or "default_service",
         "template_id": settings.EMAILJS_TEMPLATE_ID,
@@ -49,6 +62,7 @@ def _send_via_emailjs(to: str, subject: str, html_body: str) -> tuple[bool, str 
             "sender_email": settings.EMAIL_SENDER_EMAIL,
             "dashboard_url": settings.DASHBOARD_URL,
             "message_html": html_body,
+            "message_text": message_text,
         },
     }
     req = urllib_request.Request(
