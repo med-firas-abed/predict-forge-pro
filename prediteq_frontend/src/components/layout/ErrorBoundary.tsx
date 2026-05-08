@@ -23,22 +23,25 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
-            <AlertTriangle className="w-8 h-8 text-destructive" />
+        <div className="flex flex-col items-center justify-center gap-4 py-20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
           </div>
           <h2 className="text-lg font-semibold text-foreground">Une erreur est survenue</h2>
-          <p className="text-sm text-muted-foreground max-w-md text-center">
-            Le composant a rencontré un problème inattendu. Rechargez la page pour continuer.
+          <p className="max-w-md text-center text-sm text-muted-foreground">
+            Le composant a rencontre un probleme inattendu. Rechargez la page pour continuer.
           </p>
-          <code className="text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 max-w-md truncate">
+          <code className="max-w-md truncate rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
             {this.state.error?.message}
           </code>
           <button
-            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all"
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90"
           >
-            <RefreshCw className="w-4 h-4" /> Recharger
+            <RefreshCw className="h-4 w-4" /> Recharger
           </button>
         </div>
       );

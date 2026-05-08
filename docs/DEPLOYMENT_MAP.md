@@ -77,7 +77,7 @@ Backend:
 
 ## Email path
 
-Current email transport is SMTP only:
+Current email transport priority is EmailJS, then Brevo, then SMTP:
 
 - config source: `prediteq_api/.env.example`
 - sender logic: `prediteq_api/core/email_client.py`
