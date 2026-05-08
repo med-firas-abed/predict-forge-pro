@@ -5,6 +5,10 @@ import { AppFooter } from "@/components/layout/AppFooter";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopbar } from "@/components/layout/AppTopbar";
+import { AdminPage as AdminPageStatic } from "@/components/pages/AdminPage";
+import { AdminUsersPage as AdminUsersPageStatic } from "@/components/pages/AdminUsersPage";
+import { MachinesPage as MachinesPageStatic } from "@/components/pages/MachinesPage";
+import { SeuilsPage as SeuilsPageStatic } from "@/components/pages/SeuilsPage";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import AccessDeniedPage from "./AccessDenied";
@@ -26,65 +30,95 @@ type PageId =
   | "administration"
   | "admin-users";
 
-const DashboardPage = lazy(() =>
+type AppPageComponent =
+  | ComponentType
+  | LazyExoticComponent<ComponentType>;
+
+const CHUNK_RETRY_PREFIX = "prediteq-chunk-retry:";
+
+function lazyPage<T extends ComponentType>(
+  pageKey: string,
+  importer: () => Promise<{ default: T }>,
+): LazyExoticComponent<T> {
+  return lazy(async () => {
+    try {
+      const module = await importer();
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`${CHUNK_RETRY_PREFIX}${pageKey}`);
+      }
+      return module;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isChunkIssue =
+        /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError/i.test(
+          message,
+        );
+      const retryKey = `${CHUNK_RETRY_PREFIX}${pageKey}`;
+      const alreadyRetried =
+        typeof window !== "undefined" && sessionStorage.getItem(retryKey) === "1";
+
+      if (typeof window !== "undefined" && isChunkIssue && !alreadyRetried) {
+        sessionStorage.setItem(retryKey, "1");
+        window.location.reload();
+        return new Promise<never>(() => undefined);
+      }
+
+      throw error;
+    }
+  });
+}
+
+const DashboardPage = lazyPage("dashboard", () =>
   import("@/components/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
 );
-const MachinesPage = lazy(() =>
-  import("@/components/pages/MachinesPage").then((m) => ({ default: m.MachinesPage })),
-);
-const MaintenancePage = lazy(() =>
+const MachinesPage = MachinesPageStatic;
+const MaintenancePage = lazyPage("maintenance", () =>
   import("@/components/pages/MaintenancePage").then((m) => ({ default: m.MaintenancePage })),
 );
-const CalendarPage = lazy(() =>
+const CalendarPage = lazyPage("calendrier", () =>
   import("@/components/pages/CalendarPage").then((m) => ({ default: m.CalendarPage })),
 );
-const CostsPage = lazy(() =>
+const CostsPage = lazyPage("couts", () =>
   import("@/components/pages/CostsPage").then((m) => ({ default: m.CostsPage })),
 );
-const AlertsPage = lazy(() =>
+const AlertsPage = lazyPage("alertes", () =>
   import("@/components/pages/AlertsPage").then((m) => ({ default: m.AlertsPage })),
 );
-const GeoPage = lazy(() =>
+const GeoPage = lazyPage("geo", () =>
   import("@/components/pages/GeoPage").then((m) => ({ default: m.GeoPage })),
 );
-const AdminPage = lazy(() =>
-  import("@/components/pages/AdminPage").then((m) => ({ default: m.AdminPage })),
-);
-const IAPage = lazy(() =>
+const AdminPage = AdminPageStatic;
+const IAPage = lazyPage("ia", () =>
   import("@/components/pages/IAPage").then((m) => ({ default: m.IAPage })),
 );
-const SeuilsPage = lazy(() =>
-  import("@/components/pages/SeuilsPage").then((m) => ({ default: m.SeuilsPage })),
-);
-const SimulatorPage = lazy(() =>
+const SeuilsPage = SeuilsPageStatic;
+const SimulatorPage = lazyPage("simulateur", () =>
   import("@/components/pages/SimulatorPage").then((m) => ({ default: m.SimulatorPage })),
 );
-const ExperimentPage = lazy(() =>
+const ExperimentPage = lazyPage("experiment", () =>
   import("@/components/pages/ExperimentPage").then((m) => ({ default: m.ExperimentPage })),
 );
-const AdminUsersPage = lazy(() =>
-  import("@/components/pages/AdminUsersPage").then((m) => ({ default: m.AdminUsersPage })),
-);
-const LoginPage = lazy(() =>
+const AdminUsersPage = AdminUsersPageStatic;
+const LoginPage = lazyPage("login", () =>
   import("@/components/pages/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
-const SignupPage = lazy(() =>
+const SignupPage = lazyPage("signup", () =>
   import("@/components/pages/SignupPage").then((m) => ({ default: m.SignupPage })),
 );
-const PendingPage = lazy(() =>
+const PendingPage = lazyPage("pending", () =>
   import("@/components/pages/PendingPage").then((m) => ({ default: m.PendingPage })),
 );
-const ForgotPasswordPage = lazy(() =>
+const ForgotPasswordPage = lazyPage("forgot-password", () =>
   import("@/components/pages/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })),
 );
-const ResetPasswordPage = lazy(() =>
+const ResetPasswordPage = lazyPage("reset-password", () =>
   import("@/components/pages/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })),
 );
-const DiagnosticsPage = lazy(() =>
+const DiagnosticsPage = lazyPage("diagnostics", () =>
   import("@/components/pages/DiagnosticsPage").then((m) => ({ default: m.DiagnosticsPage })),
 );
 
-const PAGES: Record<PageId, LazyExoticComponent<ComponentType>> = {
+const PAGES: Record<PageId, AppPageComponent> = {
   dashboard: DashboardPage,
   geo: GeoPage,
   machines: MachinesPage,
