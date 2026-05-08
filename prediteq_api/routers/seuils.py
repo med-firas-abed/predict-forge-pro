@@ -21,6 +21,12 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 PLACEHOLDER_EMAIL_DOMAINS = {"example.com", "example.org", "example.net"}
+DEMO_CRITICAL_GUARANTEE: dict[str, list[str]] = {
+    # Demo safeguard: ASC-C3 is the intentionally critical machine in the
+    # simulator story, and this mailbox must keep receiving its alerts even if
+    # profile resolution or configurable recipients drift.
+    "ASC-C3": ["firasabed007@gmail.com"],
+}
 
 router = APIRouter(prefix="/seuils", tags=["seuils"])
 
@@ -219,6 +225,30 @@ def _get_machine_user_contacts(machine_id: str | None) -> list[dict]:
     return list(contacts_by_email.values())
 
 
+def _get_machine_code(machine_id: str | None) -> str | None:
+    if not machine_id:
+        return None
+
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("machines")
+            .select("code")
+            .eq("id", machine_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not result:
+            return None
+        code = str(result[0].get("code") or "").strip()
+        return code or None
+    except Exception as e:
+        logger.warning("Could not resolve machine code for recipients preview (%s): %s", machine_id, e)
+        return None
+
+
 def get_thresholds() -> dict:
     """Return cached thresholds — used by scheduler."""
     return _cache
@@ -237,6 +267,7 @@ def get_admin_alert_recipients() -> list[str]:
 def describe_alert_recipients(machine_id: str | None = None) -> dict:
     admin_emails = get_admin_alert_recipients()
     machine_users = _get_machine_user_contacts(machine_id)
+    machine_code = _get_machine_code(machine_id)
     configured_manager = _normalize_recipient(_cache.get("manager_email"), source="manager_email")
     configured_technician = _normalize_recipient(_cache.get("technician_email"), source="technician_email")
 
@@ -283,6 +314,9 @@ def describe_alert_recipients(machine_id: str | None = None) -> dict:
     _register(configured_manager, "manager_email")
     _register(configured_technician, "technician_email")
 
+    for guaranteed_email in DEMO_CRITICAL_GUARANTEE.get(machine_code or "", []):
+        _register(guaranteed_email, "demo_critical_fallback")
+
     recipients = sorted(
         recipient_map.values(),
         key=lambda item: str(item.get("email") or "").lower(),
@@ -290,6 +324,7 @@ def describe_alert_recipients(machine_id: str | None = None) -> dict:
 
     return {
         "machine_id": machine_id,
+        "machine_code": machine_code,
         "admins": admin_emails,
         "machine_users": machine_users,
         "configured": {
