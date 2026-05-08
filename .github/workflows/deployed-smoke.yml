@@ -1,0 +1,49 @@
+name: Deployed Smoke
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployed-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: prediteq_frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: prediteq_frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke deployed frontend and backend
+        env:
+          FRONTEND_URL: https://prediteq-saas.vercel.app
+          BACKEND_URL: https://prediteq-saas.onrender.com
+          SMOKE_RETRIES: "12"
+          SMOKE_DELAY_MS: "30000"
+        run: npm run smoke:deployed
