@@ -24,9 +24,9 @@ services:
       - key: EMAILJS_PRIVATE_KEY
         sync: false
       - key: EMAILJS_SERVICE_ID
-        value: "default_service"
+        value: "service_8pbpf55"
       - key: EMAILJS_TEMPLATE_ID
-        sync: false
+        value: "template_lk1gh6i"
       - key: BREVO_API_KEY
         sync: false            # free HTTPS email API (recommended on Render Free)
       - key: BREVO_SENDER_EMAIL

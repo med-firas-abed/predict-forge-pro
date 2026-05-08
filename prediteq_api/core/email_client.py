@@ -61,6 +61,7 @@ def _send_via_emailjs(to: str, subject: str, html_body: str) -> tuple[bool, str 
             "sender_name": settings.EMAIL_SENDER_NAME,
             "sender_email": settings.EMAIL_SENDER_EMAIL,
             "dashboard_url": settings.DASHBOARD_URL,
+            "dashboard_uri": settings.DASHBOARD_URL,
             "message_html": html_body,
             "message_text": message_text,
         },
@@ -70,7 +71,15 @@ def _send_via_emailjs(to: str, subject: str, html_body: str) -> tuple[bool, str 
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "origin": settings.DASHBOARD_URL,
+            "referer": f"{settings.DASHBOARD_URL.rstrip('/')}/",
             "content-type": "application/json",
+            "accept": "application/json,text/plain,*/*",
+            # EmailJS sits behind edge protections that expect a browser-like client.
+            "user-agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/136.0 Safari/537.36"
+            ),
         },
         method="POST",
     )
