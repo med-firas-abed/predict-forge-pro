@@ -153,7 +153,7 @@ HI_SMOOTH_WINDOW_S   = 120
 # cf. disclaimers.RUL_NATURE.
 # ─────────────────────────────────────────────────────────────────────────────
 RUL_LOOKBACK_MIN     = 60        # 60 pts = 1 h historique HI avant l'instant t
-RUL_HOURS_PER_DAY    = 8         # cycle ascenseur résidentiel (hypothèse technicien)
+RUL_HOURS_PER_DAY    = 8         # cycle journalier de machine (hypothèse technicien)
 RUL_MIN_TO_DAY       = 9         # conversion d'affichage (voir bloc ci-dessus)
 
 # Persistance anti-bruit pour détection de franchissement du seuil critique
@@ -182,7 +182,7 @@ RUL_CV_FOLDS         = 5
 # Random Forest RUL (Prediteq, step5) — Breiman 2001
 #   n_estimators=300 : convergence de l'OOB error atteinte sur ~4k échantillons
 #                      d'entraînement (4 profils × 40 trajectoires × 800 min).
-#   max_depth=12, min_samples_leaf=10 : régularisation contre overfitting
+#   max_depth=16, min_samples_leaf=10 : régularisation contre overfitting
 #                      (Hastie, Tibshirani & Friedman 2009, §15.3).
 # Validation NASA CMAPSS FD001 (step6b) — dataset ~13k échantillons
 #   n_estimators=500 : plus grand dataset justifie plus d'arbres pour saturer

@@ -50,3 +50,35 @@ npm run dev
 Dev server:
 
 - `http://127.0.0.1:8080`
+
+## Final QA
+
+Run these from `prediteq_frontend/` before a demo or delivery:
+
+```bash
+npm run build
+npm run test
+npx playwright test
+```
+
+If you want to smoke the deployed app instead of local dev:
+
+```bash
+npm run smoke:deployed
+```
+
+## Demo-ready flow
+
+Use this order for the cleanest product story:
+
+1. `Simulateur` to reset and start the calibrated replay
+2. `Tableau de bord` to compare `Machine 1`, `Machine 2`, and `Machine 3`
+3. `Diagnostic avancé` to justify the recommended action
+4. `Coûts & Budget` to translate the action into business impact
+5. `Analyse & Rapport IA` to export the professional PDF
+
+Current public naming is intentionally generic:
+
+- `Machine 1` = healthy / stable demo profile
+- `Machine 2` = watch / medium-risk demo profile
+- `Machine 3` = critical demo profile

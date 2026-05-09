@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import {
   formatMachineFloorCountValue,
   formatMachineModelValue,
+  getMachinePublicLabel,
 } from "@/lib/machinePresentation";
 import { useAlertes } from "@/hooks/useAlertes";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LabelList } from "recharts";
@@ -83,7 +84,10 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-foreground">{m.name}</h2>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">{getMachinePublicLabel(m)}</h2>
+              <div className="mt-1 text-sm text-muted-foreground">{[m.city, m.loc].filter(Boolean).join(" · ")}</div>
+            </div>
             <span className={`status-pill ${cfg.pillClass} text-[0.65rem]`}>{cfg.label}</span>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-xl bg-surface-3 border border-border flex items-center justify-center text-secondary-foreground hover:text-foreground transition-all">

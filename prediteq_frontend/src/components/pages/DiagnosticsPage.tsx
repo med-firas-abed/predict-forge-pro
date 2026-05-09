@@ -29,6 +29,7 @@ import { useMachineSensors } from "@/hooks/useMachineSensors";
 import { useMachines } from "@/hooks/useMachines";
 import { inferComponentFocus } from "@/lib/componentInference";
 import { getSurfaceableMachineDemoScenario } from "@/lib/demoScenario";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import {
   describeAudienceUsageRegime,
   formatAudienceAxisLabel,
@@ -593,7 +594,7 @@ export function DiagnosticsPage() {
             >
               {machines.map((machine) => (
                 <option key={machine.id} value={machine.id}>
-                  {machine.id} - {repairText(machine.name)}
+                  {getMachinePublicLabel(machine)}
                 </option>
               ))}
             </select>

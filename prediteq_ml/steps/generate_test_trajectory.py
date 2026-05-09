@@ -1,5 +1,5 @@
 """
-Génération de trajectoire de test pour ASC-A1 (ascenseur Ben Arous).
+Génération de trajectoire de test pour ASC-A1 (stockeur vertical rotatif Ben Arous).
 Utilise le MÊME modèle physique que l'étape 1 mais un seed DIFFÉRENT (seed=2026),
 pour produire des données inédites pour le pipeline ML.
 
@@ -25,7 +25,7 @@ from config import *
 # Seed DIFFÉRENT de l'entraînement (entraînement utilise seed=42)
 np.random.seed(2026)
 
-# Uniquement B_quadratic — la défaillance la plus réaliste pour un ascenseur à réducteur :
+# Uniquement B_quadratic — la défaillance la plus réaliste pour un stockeur à réducteur :
 # l'usure des roulements commence imperceptiblement puis accélère à mesure que le jeu augmente.
 PROFILE   = 'B_quadratic'
 TRAJ_ID   = 101

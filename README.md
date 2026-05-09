@@ -8,6 +8,8 @@ If you want to understand the project quickly, open these files first:
 
 - `docs/JURY_CODE_TOUR.md`
 - `docs/DEPLOYMENT_MAP.md`
+- `docs/HANDOFF_RUNBOOK.md`
+- `docs/FINAL_RELEASE_CHECKLIST.md`
 - `INDEX_RESULTATS.md`
 
 ## Product code only
@@ -92,6 +94,15 @@ Frontend local dev runs on:
 - backend deploy config: `render.yaml`
 
 See `docs/DEPLOYMENT_MAP.md` for the full deploy picture.
+
+## Finish-line docs
+
+For the final delivery and demo package, use:
+
+- `docs/HANDOFF_RUNBOOK.md`
+- `docs/FINAL_RELEASE_CHECKLIST.md`
+- `DEPLOYMENT_FREEZE.md`
+- `final_report/jury_demo_cheat_sheet.md`
 
 ## Source of truth
 

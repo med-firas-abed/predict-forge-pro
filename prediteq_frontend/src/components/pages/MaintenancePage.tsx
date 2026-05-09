@@ -19,6 +19,7 @@ import { useGmaoTaches, type GmaoTache, type TacheStatut, type TacheType } from 
 import { useMachines } from "@/hooks/useMachines";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { apiFetch } from "@/lib/api";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import {
   formatHiPercent,
   formatPredictiveRul,
@@ -652,7 +653,7 @@ export function MaintenancePage() {
                     </div>
 
                     <div className="mb-3 text-xs text-muted-foreground">
-                      {event.machineCode} · {event.technician}
+                      {getMachinePublicLabel(event.machineCode)} · {event.technician}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-[0.7rem]">
@@ -710,7 +711,7 @@ export function MaintenancePage() {
                             <div>
                               <div className="text-sm font-semibold text-foreground">{event.title}</div>
                               <div className="mt-1 text-xs text-muted-foreground">
-                                {event.machineCode} · {formatDate(event.date)}
+                                {getMachinePublicLabel(event.machineCode)} · {formatDate(event.date)}
                               </div>
                             </div>
                             <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${typeMeta.badge}`}>
@@ -812,7 +813,7 @@ export function MaintenancePage() {
               >
                 {machines.map((machine) => (
                   <option key={machine.id} value={machine.uuid || machine.id}>
-                    {machine.id} - {machine.name}
+                    {getMachinePublicLabel(machine)}
                   </option>
                 ))}
               </select>
@@ -907,7 +908,9 @@ export function MaintenancePage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <span className="w-24 text-xs text-muted-foreground">Machine</span>
-                  <span className="text-sm font-semibold text-foreground">{selectedEvent.machineCode}</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {getMachinePublicLabel(selectedEvent.machineCode)}
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-3">

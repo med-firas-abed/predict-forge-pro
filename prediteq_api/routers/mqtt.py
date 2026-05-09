@@ -30,6 +30,10 @@ def _on_connect(client, flags, rc, properties):
 async def _on_message(client, topic, payload, qos, properties):
     try:
         data = json.loads(payload.decode())
+        if isinstance(data, dict) and data.get('timestamp') and not data.get('observed_at'):
+            # The exported MQTT schema still advertises `timestamp`; normalize
+            # it here so the runtime keeps the source event time.
+            data['observed_at'] = data['timestamp']
         # Extract machine code from payload or topic
         parts = topic.split('/')
         machine_code = data.get('machine_id') or (parts[1] if len(parts) >= 2 else None)

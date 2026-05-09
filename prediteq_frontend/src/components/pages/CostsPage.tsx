@@ -28,6 +28,12 @@ import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { useGmaoTaches } from "@/hooks/useGmaoTaches";
 import { useMachines } from "@/hooks/useMachines";
 import {
+  getBudgetReferenceCost,
+  getTaskCostReference,
+  LABOR_RATE_PER_HOUR,
+} from "@/lib/costModel";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import {
   formatHiPercent,
   formatPredictiveRul,
   formatStressValue,
@@ -56,12 +62,6 @@ function getBaselineSourceLabel(source: string) {
       return "Base : type d'action";
   }
 }
-
-const TASK_FALLBACK_COST = {
-  preventive: 260,
-  inspection: 320,
-  corrective: 480,
-} as const;
 
 export function CostsPage() {
   const navigate = useNavigate();
@@ -177,12 +177,9 @@ export function CostsPage() {
       const machineHistory = historyByMachine.get(task.machineCode);
       const machineAverage =
         machineHistory && machineHistory.count > 0 ? machineHistory.total / machineHistory.count : 0;
-      const fallback =
-        machineAverage > 0
-          ? machineAverage
-          : fleetHistoricalAverage > 0
-            ? fleetHistoricalAverage
-            : TASK_FALLBACK_COST[task.type];
+      const historyReference =
+        machineAverage > 0 ? machineAverage : fleetHistoricalAverage > 0 ? fleetHistoricalAverage : 0;
+      const fallback = getBudgetReferenceCost(task.type, historyReference);
       const estimatedCost =
         typeof task.coutEstime === "number" && task.coutEstime > 0 ? task.coutEstime : fallback;
 
@@ -214,7 +211,7 @@ export function CostsPage() {
   const comparisonData = useMemo(
     () =>
       liveCostEntries.map((entry) => ({
-        machine: entry.insight.machine.id,
+        machine: getMachinePublicLabel(entry.insight.machine),
         history: Math.round(entry.historicalAverage),
         projection: entry.projectedCost,
         delayed: entry.delayedCost,
@@ -296,7 +293,7 @@ export function CostsPage() {
       .map((row) => {
         const live = rowMap.get(row.machineCode);
         return [
-          row.machineCode,
+          getMachinePublicLabel(row.machineCode),
           row.mois,
           row.annee,
           row.mainOeuvre,
@@ -327,6 +324,10 @@ export function CostsPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Ici, le budget ne part pas d'un calendrier fixe : il part du HI, du stress et du RUL, puis
             estime ce que la prochaine action peut engager.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Hypothese de reference quand l'historique manque : main-d'oeuvre a {LABOR_RATE_PER_HOUR} DT/h
+            avec un forfait pieces selon le type d'action.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{historyWindowLabel}</p>
         </div>
@@ -401,7 +402,8 @@ export function CostsPage() {
               <div className="mt-3 text-3xl font-bold text-foreground">{formatCurrency(projectedBudget)}</div>
               <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                 Somme des actions les plus probables sur la flotte, calculée à partir des lectures live
-                et de la base historique disponible.
+                et de la base historique disponible. Sans historique exploitable, le calcul revient à{" "}
+                {LABOR_RATE_PER_HOUR} DT/h de main-d'oeuvre plus un forfait pièces par type d'action.
               </p>
             </div>
 
@@ -425,7 +427,7 @@ export function CostsPage() {
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
                 <div className="industrial-label">Plus gros engagement</div>
                 <div className="mt-2 text-base font-bold text-foreground">
-                  {topProjectedMachine?.insight.machine.id ?? "-"}
+                  {topProjectedMachine ? getMachinePublicLabel(topProjectedMachine.insight.machine) : "-"}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {topProjectedMachine
@@ -544,6 +546,7 @@ export function CostsPage() {
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
           {liveCostEntries.slice(0, 3).map((entry) => {
             const tone = getUrgencyTone(entry.insight.urgencyBand);
+            const costReference = getTaskCostReference(entry.insight.taskTemplate.type);
             return (
               <div
                 key={entry.insight.machine.id}
@@ -551,8 +554,12 @@ export function CostsPage() {
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-bold text-foreground">{entry.insight.machine.id}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{entry.insight.machine.name}</div>
+                    <div className="text-sm font-bold text-foreground">
+                      {getMachinePublicLabel(entry.insight.machine)}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {entry.insight.machine.city || entry.insight.machine.loc}
+                    </div>
                   </div>
                   <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${tone.badge}`}>
                     {entry.insight.urgencyLabel}
@@ -593,6 +600,10 @@ export function CostsPage() {
                   </div>
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
                     {getBaselineSourceLabel(entry.baseSource)} x {entry.multiplier.toFixed(2)}
+                  </div>
+                  <div className="mt-1 text-[0.68rem] text-muted-foreground">
+                    Référence métier : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
+                    {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pièces
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     +{formatCurrency(entry.delayPenalty)} si on reporte encore l'action

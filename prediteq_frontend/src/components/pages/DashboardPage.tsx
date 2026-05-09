@@ -59,8 +59,14 @@ import {
 import { fetchMachineSensorHistory, useMachineSensors } from "@/hooks/useMachineSensors";
 import { useMachines } from "@/hooks/useMachines";
 import { useSimulatorController } from "@/hooks/useSimulatorController";
-import { getDemoScenarioFactors } from "@/lib/demoScenario";
+import {
+  describeAudienceScenarioExplanation,
+  describeAudienceScenarioUsageCase,
+  getDemoScenarioFactors,
+  getSurfaceableMachineDemoScenario,
+} from "@/lib/demoScenario";
 import { inferComponentFocus } from "@/lib/componentInference";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import {
   describeAudienceUsageRegime,
   formatAudienceAxisLabel,
@@ -85,7 +91,6 @@ const KPI_PROGRESS_FILL_CLASS = {
   danger: "bg-destructive",
 } as const;
 
-const DEFAULT_DASHBOARD_MACHINE_ID = "ASC-A1";
 const DASHBOARD_DIAGNOSTICS_OPTIONS = {
   includeInterval: false,
   includeDiagnose: false,
@@ -184,12 +189,8 @@ export function DashboardPage() {
   const machineCodes = useMemo(() => machines.map((machine) => machine.id), [machines]);
   const machineCodesKey = useMemo(() => machineCodes.join("|"), [machineCodes]);
   const requestedMachineId = searchParams.get("machine");
-  const preferredMachineId =
-    machines.find((machine) => machine.id === DEFAULT_DASHBOARD_MACHINE_ID)?.id ??
-    machines.find((machine) => machine.city === "Ben Arous")?.id ??
-    "";
   const defaultSelectedId =
-    preferredMachineId || rankedInsights[0]?.machine.id || machines[0]?.id || "";
+    rankedInsights[0]?.machine.id || machines[0]?.id || "";
   const selectedId =
     requestedMachineId && machines.some((machine) => machine.id === requestedMachineId)
       ? requestedMachineId
@@ -639,60 +640,18 @@ export function DashboardPage() {
     "Reading to confirm in the field before any major intervention or machine stop.",
     "Reading to confirm in the field before any major intervention or machine stop.",
   );
-  const selectedScenario = selected.demoScenario ?? null;
-  const localizedScenarioUsageCase =
-    {
-      "ASC-A1": l(
-        "Cycle modere, charges legeres et installation protegee.",
-        "Moderate duty cycle, light payloads, protected installation.",
-        "Moderate duty cycle, light payloads, protected installation.",
-      ),
-      "ASC-B2": l(
-        "Trafic mixte regulier avec demi-charges et pics aux heures de pointe.",
-        "Regular mixed traffic with half-load cycles and rush-hour peaks.",
-        "Regular mixed traffic with half-load cycles and rush-hour peaks.",
-      ),
-      "ASC-C3": l(
-        "Ligne intensive avec charges lourdes et ambiance plus severe.",
-        "Intensive duty line with heavy payloads and harsh ambient conditions.",
-        "Intensive duty line with heavy payloads and harsh ambient conditions.",
-      ),
-    }[selected.id] ??
-    repairText(
-      selectedScenario?.usage_case ??
-        l(
-          "Contexte d'exploitation non detaille pour cette machine.",
-          "Operating context is not detailed for this machine.",
-          "Operating context is not detailed for this machine.",
-        ),
-    );
-  const localizedScenarioExplanation =
-    {
-      "ASC-A1": l(
-        "Meme generation de flotte, mais usage plus calme : service plus court, charges plus legeres, ambiance plus seche et presque aucune surcharge.",
-        "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
-        "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
-      ),
-      "ASC-B2": l(
-        "Meme age que les autres, avec un rythme normal, des charges mixtes et un stress ambiant modere.",
-        "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
-        "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
-      ),
-      "ASC-C3": l(
-        "Meme age de flotte, mais usage plus dur : longues amplitudes, charges proches du maximum, ambiance plus chaude et humide, vibration plus marquee.",
-        "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
-        "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
-      ),
-    }[selected.id] ??
-    repairText(
-      selectedScenario?.explanation ??
+  const selectedScenario = getSurfaceableMachineDemoScenario(selected);
+  const localizedScenarioUsageCase = describeAudienceScenarioUsageCase(selectedScenario, l);
+  const localizedScenarioExplanation = selectedScenario
+    ? describeAudienceScenarioExplanation(selectedScenario, l)
+    : repairText(
         selectedDecision?.technicalStory ??
-        l(
-          "Cette vue decrit le regime d'usage et les contraintes qui alimentent la lecture du dashboard.",
-          "This panel describes the operating regime and constraints feeding the dashboard reading.",
-          "This panel describes the operating regime and constraints feeding the dashboard reading.",
-        ),
-    );
+          l(
+            "Cette vue decrit le regime d'usage et les contraintes qui alimentent la lecture du dashboard.",
+            "This panel describes the operating regime and constraints feeding the dashboard reading.",
+            "This panel describes the operating regime and constraints feeding the dashboard reading.",
+          ),
+      );
   const scenarioProfileLabel =
     {
       A_linear: l("Lineaire progressive", "Progressive linear", "Progressive linear"),
@@ -920,16 +879,22 @@ export function DashboardPage() {
         );
   const rulContextExplanation = hasLivePrediction
     ? l(
-        "L'historique fournit assez de derive observable pour que le systeme publie une marge restante exploitable.",
-        "History provides enough observable drift for the system to publish a usable remaining-life estimate.",
-        "History provides enough observable drift for the system to publish a usable remaining-life estimate.",
+        maintenanceWindow
+          ? `Le simulateur publie actuellement un RUL exploitable de ${selectedRulValue} avec une fenetre ${maintenanceWindow.toLowerCase()}.`
+          : `Le simulateur publie actuellement un RUL exploitable de ${selectedRulValue}.`,
+        maintenanceWindow
+          ? `The simulator currently publishes a usable RUL of ${selectedRulValue} with a ${maintenanceWindow.toLowerCase()} window.`
+          : `The simulator currently publishes a usable RUL of ${selectedRulValue}.`,
+        maintenanceWindow
+          ? `The simulator currently publishes a usable RUL of ${selectedRulValue} with a ${maintenanceWindow.toLowerCase()} window.`
+          : `The simulator currently publishes a usable RUL of ${selectedRulValue}.`,
       )
     : isReferenceMode
       ? selectedScenario?.reference_rul_days
         ? l(
-            `Le scenario garde une reference de ${Math.round(selectedScenario.reference_rul_days)} jours tant que la derive n'autorise pas encore un RUL live.`,
-            `The scenario keeps a ${Math.round(selectedScenario.reference_rul_days)}-day reference while drift is still insufficient for a live RUL.`,
-            `The scenario keeps a ${Math.round(selectedScenario.reference_rul_days)}-day reference while drift is still insufficient for a live RUL.`,
+            `Le simulateur garde une reference de ${Math.round(selectedScenario.reference_rul_days)} jours tant que la derive observable n'autorise pas encore un RUL live.`,
+            `The simulator keeps a ${Math.round(selectedScenario.reference_rul_days)}-day reference while observable drift is still insufficient for a live RUL.`,
+            `The simulator keeps a ${Math.round(selectedScenario.reference_rul_days)}-day reference while observable drift is still insufficient for a live RUL.`,
           )
         : l(
             "Le systeme conserve une reference simple tant qu'aucune derive robuste n'impose un RUL live.",
@@ -937,9 +902,9 @@ export function DashboardPage() {
             "The system keeps a simple reference while no robust drift justifies a live RUL.",
           )
       : l(
-          "Le pipeline consolide encore assez d'historique avant de publier une premiere lecture RUL fiable.",
-          "The pipeline is still consolidating enough history before publishing a first reliable RUL reading.",
-          "The pipeline is still consolidating enough history before publishing a first reliable RUL reading.",
+          "Le pipeline consolide encore assez d'historique simule avant de publier une premiere lecture RUL fiable.",
+          "The pipeline is still consolidating enough simulated history before publishing a first reliable RUL reading.",
+          "The pipeline is still consolidating enough simulated history before publishing a first reliable RUL reading.",
         );
   const zoneContextExplanation = l(
     "La zone a verifier du dashboard ne vient pas du contexte seul : elle combine ce contexte d'usage avec les signaux techniques recents et les regles expertes.",
@@ -982,15 +947,27 @@ export function DashboardPage() {
       ? `${Math.round(selectedScenario.cycles_per_day).toLocaleString(numberLocale)} ${l("cycles/jour", "cycles/day", "cycles/day")} - ${usageRegimeLabel}`
       : usageRegimeLabel;
   const dashboardActionReason =
-    selected.status === "critical"
-      ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} oriente d'abord le controle vers ${componentFocus.familyLabel.toLowerCase()} et la marge restante est courte.`
-      : selected.status === "degraded"
-        ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} reduit progressivement la marge et demande un controle cible.`
-        : `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: les signaux restent compatibles avec une exploitation normale.`;
+    hasLivePrediction
+      ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} oriente d'abord le controle vers ${componentFocus.familyLabel.toLowerCase()}, avec un RUL courant a ${selectedRulValue}${maintenanceWindow ? ` et une fenetre ${maintenanceWindow.toLowerCase()}` : ""}.`
+      : isReferenceMode
+        ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} prepare le prochain controle pendant que le tableau conserve une reference RUL stable.`
+        : `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} est deja surveille, mais le systeme consolide encore l'historique avant de publier un RUL live.`;
   const machineContextIntro = l(
-    "Cette vue expose le regime d'usage, les contraintes du scenario et la part de contexte qui alimente les resultats du dashboard.",
-    "This panel exposes the operating regime, scenario constraints, and the context contribution behind dashboard results.",
-    "This panel exposes the operating regime, scenario constraints, and the context contribution behind dashboard results.",
+    hasLivePrediction
+      ? "Cette vue relie le contexte simule, les signaux temps reel et le RUL live publie pour cette machine."
+      : isReferenceMode
+        ? "Cette vue relie le contexte simule aux signaux temps reel pendant que le dashboard conserve une reference RUL stable."
+        : "Cette vue relie le contexte simule aux signaux temps reel pendant que le pipeline prepare encore la premiere lecture RUL fiable.",
+    hasLivePrediction
+      ? "This panel links the simulated context, real-time signals, and the live RUL published for this machine."
+      : isReferenceMode
+        ? "This panel links the simulated context to real-time signals while the dashboard keeps a stable RUL reference."
+        : "This panel links the simulated context to real-time signals while the pipeline still prepares the first reliable RUL reading.",
+    hasLivePrediction
+      ? "This panel links the simulated context, real-time signals, and the live RUL published for this machine."
+      : isReferenceMode
+        ? "This panel links the simulated context to real-time signals while the dashboard keeps a stable RUL reference."
+        : "This panel links the simulated context to real-time signals while the pipeline still prepares the first reliable RUL reading.",
   );
   const diagnosticButtonClass =
     "group rounded-full border border-primary/20 bg-primary text-primary-foreground shadow-[0_18px_42px_-24px_rgba(15,118,110,0.78)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-primary/92 hover:shadow-[0_24px_52px_-24px_rgba(15,118,110,0.88)]";
@@ -1163,7 +1140,7 @@ export function DashboardPage() {
           >
             {machines.map((machine) => (
               <option key={machine.id} value={machine.id}>
-                {machine.id} - {machine.name}
+                {getMachinePublicLabel(machine)}
               </option>
             ))}
           </select>
@@ -1176,10 +1153,10 @@ export function DashboardPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="text-lg font-bold text-foreground">{selected.id}</div>
+                <div className="text-lg font-bold text-foreground">{getMachinePublicLabel(selected)}</div>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {selected.name} - {selected.city}
+                {selected.city}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -1797,7 +1774,7 @@ export function DashboardPage() {
               )}
             </SheetTitle>
             <SheetDescription>
-              {selected.id} - {repairText(selected.name)} - {repairText(selected.city)}
+              {getMachinePublicLabel(selected)} - {repairText(selected.city)}
             </SheetDescription>
           </SheetHeader>
 

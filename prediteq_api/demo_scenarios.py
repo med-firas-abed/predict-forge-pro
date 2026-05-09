@@ -40,12 +40,12 @@ DEMO_MACHINE_SCENARIOS: dict[str, DemoScenario] = {
     "ASC-A1": {
         "site": "Ben Arous",
         "health_state": "good",
-        "health_label": "Operational",
-        "usage_case": "Moderate duty cycle, light payloads, protected installation",
+        "health_label": "Opérationnel",
+        "usage_case": "Cycle modéré, charges légères et installation protégée",
         "explanation": (
-            "Same fleet generation, but calmer use: shorter daily duty, "
-            "lighter baskets, cooler shaft, dry environment, and almost no "
-            "overload history."
+            "Même génération de machine, mais usage plus calme : service "
+            "journalier plus court, charges plus légères, environnement plus "
+            "sec et presque aucun historique de surcharge."
         ),
         "profile": "A_linear",
         "base_load_kg": 42,
@@ -69,12 +69,12 @@ DEMO_MACHINE_SCENARIOS: dict[str, DemoScenario] = {
     "ASC-B2": {
         "site": "Sfax",
         "health_state": "surveillance",
-        "health_label": "Under surveillance",
-        "usage_case": "Regular mixed traffic with half-load cycles and rush-hour peaks",
+        "health_label": "Sous surveillance",
+        "usage_case": "Trafic mixte régulier avec demi-charges et pics aux heures de pointe",
         "explanation": (
-            "Same age as the others, but average operating conditions: normal "
-            "service rhythm, mixed payloads, a few busy periods, and moderate "
-            "environmental stress."
+            "Même âge que les autres, avec des conditions moyennes : rythme "
+            "de service normal, charges mixtes, quelques périodes plus "
+            "chargées et stress ambiant modéré."
         ),
         "profile": "C_stepwise",
         "base_load_kg": 135,
@@ -98,12 +98,13 @@ DEMO_MACHINE_SCENARIOS: dict[str, DemoScenario] = {
     "ASC-C3": {
         "site": "Sousse",
         "health_state": "critical",
-        "health_label": "Critical",
-        "usage_case": "Intensive duty line with heavy payloads and harsh ambient conditions",
+        "health_label": "Critique",
+        "usage_case": "Ligne intensive avec charges lourdes et ambiance sévère",
         "explanation": (
-            "Same fleet age, but much harsher life: long daily operation, "
-            "near-maximum payloads, hotter and wetter environment, repeated "
-            "overload-like operation, and stronger vibration drift."
+            "Même âge que les autres, mais une vie beaucoup plus sévère : "
+            "longue amplitude journalière, charges proches du maximum, "
+            "environnement plus chaud et humide, épisodes répétés de "
+            "quasi-surcharge et dérive vibratoire plus marquée."
         ),
         "profile": "D_noisy_linear",
         "base_load_kg": 235,

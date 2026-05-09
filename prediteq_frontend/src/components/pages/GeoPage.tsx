@@ -10,6 +10,7 @@ import { KpiCard } from "@/components/industrial/KpiCard";
 import { useApp } from "@/contexts/AppContext";
 import { useMachines } from "@/hooks/useMachines";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { formatPredictiveRul } from "@/lib/predictiveLive";
 import { repairText } from "@/lib/repairText";
 
@@ -127,9 +128,13 @@ export function GeoPage() {
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-primary">
                     {index + 1}
                   </span>
-                  <span className="text-sm font-bold text-foreground">{insight.machine.id}</span>
+                  <span className="text-sm font-bold text-foreground">
+                    {getMachinePublicLabel(insight.machine)}
+                  </span>
                 </div>
-                <div className="mt-1 text-sm text-muted-foreground">{insight.machine.name}</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {insight.machine.city || insight.machine.loc}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold" style={{ color: insight.urgencyHex }}>

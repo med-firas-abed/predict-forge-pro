@@ -4,8 +4,9 @@
 ================================================================================
 
 Written for: PFE jury — covers both the intuitive "why" and the technical "how".
-Machine context: SITI FC100L1-4 industrial elevator (ascenseur de charge),
-                 19 floors, 15 kg max per floor, 285 kg full load,
+Machine context: SITI FC100L1-4 drive motor for a vertical rotary storage carousel
+                 (stockeur vertical rotatif / carrousel de stockage vertical),
+                 19 levels, 15 kg max per level, 285 kg full load,
                  located in Ben Arous, Tunisia.
                  Plaque signalétique: Δ/Y 230/400V, 1410 RPM, cosφ = 0.80, 2.2 kW.
                  Wiring: Star (Y) at 400V, rated current 4.85 A.
@@ -16,7 +17,7 @@ Machine context: SITI FC100L1-4 industrial elevator (ascenseur de charge),
    OVERVIEW: WHAT IS THIS PIPELINE?
 ────────────────────────────────────────────────────────────────────────────────
 
-Goal: predict when an industrial elevator will fail BEFORE it actually breaks.
+Goal: predict when the drive motor of a vertical rotary storage carousel will fail BEFORE it actually breaks.
 
 Simple analogy: Imagine your car dashboard — but instead of just a red light
 that turns on when the engine is already overheating, we have an intelligent
@@ -27,7 +28,7 @@ temperature, and humidity readings.
 Validated pipeline order for the current project: Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> Step 6 -> Step 6B -> Step 6C -> Step 7.
 For soutenance figures and artifact counts, `INDEX_RESULTATS.md` is the source of truth.
 
-The pipeline has 7 scripted sections in this narrative:
+The pipeline has 8 execution stages in practice and 7 main teaching chapters in this narrative:
   Step 1: Simulate realistic sensor data (because we don't have years of real failure data)
   Step 2: Transform raw sensor readings into meaningful features
   Step 3: Detect anomalies using Isolation Forest + a hybrid ensemble
@@ -35,6 +36,7 @@ The pipeline has 7 scripted sections in this narrative:
   Step 5: Predict Remaining Useful Life (RUL) — "how many days until failure?"
   Step 6: Evaluate everything with metrics, plots, and SHAP explainability
   Step 6B: Validate the pipeline on NASA's public CMAPSS benchmark
+  Step 6C: Calibrate interval quality and runtime confidence
   Step 7: Package everything into a production-ready engine for FastAPI
 
 
@@ -76,9 +78,9 @@ MOTOR:
   At empty:              I = 300W / 554.3  = 0.54 A  (minimal wear)
 
 MACHINE GEOMETRY:
-  N_FLOORS          = 19      The elevator serves 19 levels.
-  LOAD_PER_FLOOR_KG = 15      Max 15 kg per étage (from technician).
-  LOAD_MAX_KG       = 285     All 19 floors loaded: 19 × 15 = 285 kg.
+  N_FLOORS          = 19      The carousel serves 19 storage levels.
+  LOAD_PER_FLOOR_KG = 15      Max 15 kg per level (from technician).
+  LOAD_MAX_KG       = 285     All 19 levels loaded: 19 × 15 = 285 kg.
   LOAD_NOMINAL_KG   = 150     Half load (typical operation).
 
   LOAD CASES STUDIED (per technician discussion for ASC-A1):
@@ -119,7 +121,7 @@ CYCLE TIMING:
   T_CYCLE_S   = 44            One full cycle = 12 + 12 + 20 = 44 seconds.
   CYCLES_PER_HOUR = 81.8      3600 / 44 ≈ 82 cycles per hour.
 
-  Why these numbers? They come from timing real elevator cycles at the factory.
+  Why these numbers? They come from timing real carousel rotation cycles at the factory.
   The 44-second cycle is critical — it defines the periodic power pattern
   (ascent = high power, descent = low, pause = zero).
 
@@ -223,7 +225,7 @@ DATASET:
   TRAIN_RATIO       = 0.80    80% train / 20% test split.
 
 CHASSIS RESONANCE:
-  F_CHASSIS_HZ = 3.0          Structural resonance of the elevator frame at 3 Hz.
+  F_CHASSIS_HZ = 3.0          Structural resonance of the carousel frame at 3 Hz.
   A_CHASSIS_MMS = 0.2         Adds ±0.2 mm/s periodic vibration to RMS signal.
                                This simulates a real-world phenomenon: even in a
                                perfect motor, the chassis vibrates at its natural
@@ -255,7 +257,7 @@ Flow diagram:
   │  • 400V (Y), 1410 RPM, 2.2 kW│
   │  • cos φ = 0.80, I = 4.85 A  │
   │  • Reducer ratio 1/60       │
-  │  • 19 floors, 15 kg/floor   │
+  │  • 19 levels, 15 kg/level   │
   │  • 285 kg max, 150 kg nom   │
   │  • 44s cycle (12+12+20)     │
   │  • I = P / 554.3            │
@@ -312,7 +314,7 @@ LEVEL 1 — SIMULATION (Step 1): Motor specs → realistic synthetic data
     - Humidity: 55–80% RH (Mediterranean coastal)
     → A degraded motor runs hotter BECAUSE it draws more power.
 
-  Result: 100 simulated machine lifetimes that behave like the REAL SITI motor
+  Result: 200 simulated machine lifetimes that behave like the REAL SITI motor
   — not like an abstract academic exercise.
 
 ══════════════════════════════
@@ -403,7 +405,7 @@ SUMMARY: ONE NUMBER'S JOURNEY (example: MOTOR_POWER_KW = 2.2)
 ════════════════════════════════════════════════════════════════════════════════
 
 Non-technical:
-  We don't have years of real elevator failure data — no factory lets their
+  We don't have years of real carousel-drive failure data — no factory lets their
   machines break on purpose for data collection. Instead, we simulate 100
   "virtual machines", each going from brand-new (100% health) to broken (0%).
   We use physics-based models so the data behaves like real sensors would.
@@ -694,7 +696,7 @@ Technical:
   - A 2-minute window covers ~2.7 complete cycles (44s each), enough to
     smooth within-cycle noise while minimizing lag
   - Previously 600s (10 min) but this caused excessive smoothing that blurred
-    the degradation signal and reduced HI-to-truth correlation (0.82 → 0.855)
+    the degradation signal and reduced HI-to-truth correlation (0.82 → 0.943)
   - Adaptive at start: uses min_periods=1, so the first sample has a "window"
     of 1, growing to 120 — no waiting period before HI is available
 
@@ -710,7 +712,7 @@ Technical:
   - HI < 0.30 → Critical (red)
 
   VALIDATION:
-  Pearson correlation between HI_smooth and simulated_hi is ~0.855.
+  Pearson correlation between HI_smooth and simulated_hi is ~0.943.
   This means our data-driven HI closely tracks the "true" health — the pipeline
   successfully recovers the ground truth from noisy sensor data alone.
 
@@ -742,8 +744,10 @@ Non-technical:
   - HI is shown first, because it is a current-state indicator.
   - If HI >= 0.80, the machine is still in the very healthy zone:
     we do NOT show a numerical RUL. We show L10 instead.
-  - If HI < 0.80 but we still lack 60 minutes of HI history, we show
-    "warming_up" / calibration rather than a fake precise number.
+  - If HI < 0.80 but we still lack 60 minutes of HI history, the public
+    product stays in canonical "initializing" mode rather than showing a fake
+    precise number. Some legacy payloads still expose "warming_up" as a
+    compatibility alias.
   - Only when HI < 0.80 AND 60 HI points are available do we show
     a numerical RUL with an uncertainty interval.
 
@@ -756,7 +760,7 @@ Technical:
     tree predictions gives us a confidence interval (no extra computation needed).
   - It handles mixed feature types and nonlinear relationships well.
   - It's interpretable with SHAP (Step 6).
-  - We chose 300 trees (n_estimators=300), max_depth=12, and min_samples_leaf=10
+  - We chose 300 trees (n_estimators=300), max_depth=16, and min_samples_leaf=10
     as a balance: enough complexity to capture real patterns, but regularized
     to prevent overfitting on 200 trajectories. Compared to GradientBoosting
     (R²=0.984) — RF won (R²=0.985).
@@ -785,7 +789,7 @@ Technical:
   start / 800 min). It had 17% feature importance but is invalid in production:
   the engine's second_counter resets on server restart and grows unbounded
   past 800 min. The RF never saw values > 1.1 during training, causing
-  extrapolation risk. Removing it dropped R² by only 0.2% (0.985 → 0.983),
+  extrapolation risk. Removing it caused only a small R² drop,
   confirming the sensor + HI features capture the degradation signal properly.
 
   TRAINING LABEL (what we're predicting):
@@ -963,7 +967,7 @@ Technical:
   - RMSE ≈ 14.1 cycles (surpasses literature targets: 18.4 range)
   - MAE  ≈ 9.6 cycles
   - R²   ≈ 0.89
-  These numbers prove the pipeline generalizes beyond the elevator context to
+  These numbers prove the pipeline generalizes beyond the stocker context to
   a completely different domain (turbofan engines) with real failure data.
 
   OUTPUT: outputs/cmapss_metrics.json + outputs/plots/plot6_cmapss.png
@@ -975,7 +979,7 @@ Technical:
 
 Non-technical:
   Everything we've built so far works in "batch mode" — process a whole dataset
-  at once. But in production, the elevator sends 1 sensor reading per second
+  at once. But in production, the machine sends 1 sensor reading per second
   via MQTT, and we need to respond instantly. Step 7 packages all models into
   a single "engine" class that can process real-time data.
 
@@ -992,7 +996,7 @@ Technical:
        from corrupting the model)
     3. Normalizes using stored scaler_params.json
     4. Computes IF anomaly score
-    5. Computes hybrid score (IF + RMS z-score, weighted by alpha=0.6)
+    5. Computes hybrid score (IF + RMS z-score, weighted by alpha=0.2 for IF and 0.8 for RMS)
     6. Updates rolling buffer (deque, max 600 points)
     7. Computes smoothed HI from buffer
     8. Every 60 seconds, appends HI to the RUL buffer
@@ -1013,7 +1017,7 @@ Technical:
   - Outlier rejection → prevents corrupted readings from affecting HI
   - Adaptive warm-up → uses min_periods=1, so HI is available from second 1
     but becomes more accurate over time
-  - Buffer limits → deque(maxlen=600) prevents memory growth
+  - Buffer limits → `deque(maxlen=120)` for smoothing and `deque(maxlen=60)` for the minute HI lookback prevent memory growth
 
   MQTT SCHEMA:
   Step 7 also exports outputs/mqtt_schema.json — the complete API contract:
@@ -1044,7 +1048,7 @@ Technical:
     prediteq_engine.py         The stateful inference class for FastAPI.
 
   data/raw/
-    trajectories.csv           100 simulated machine lifetimes (raw 1 Hz data).
+    trajectories.csv           200 simulated machine lifetimes (raw 1 Hz data).
 
   data/processed/
     features.csv               12 engineered + 12 normalized features per row.
@@ -1062,11 +1066,11 @@ Technical:
     cmapss_metrics.json        NASA CMAPSS benchmark results.
     mqtt_schema.json           Production MQTT payload contract.
     plots/
-      plot1_hi_curves.png      HI degradation curves (4 profiles).
-      plot2_rul_scatter.png    Predicted vs True RUL scatter.
-      plot3_anomaly_timeline   IF score vs RMS vs HI over time.
-      plot4_shap_summary.png   SHAP feature importance.
-      plot6_cmapss.png         NASA CMAPSS validation results.
+      plot1_hi_curves.png      Courbes de dégradation HI (4 profils).
+      plot2_rul_scatter.png    Nuage RUL prédit vs RUL réel.
+      plot3_anomaly_timeline   Score IF vs RMS vs HI dans le temps.
+      plot4_shap_summary.png   Importance des variables SHAP.
+      plot6_cmapss.png         Résultats de validation NASA CMAPSS.
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1074,21 +1078,21 @@ Technical:
 ════════════════════════════════════════════════════════════════════════════════
 
   ANOMALY DETECTION (Step 3):
-    Hybrid ensemble F1:    0.851
-    Hybrid precision:      0.783 (fewer false alarms than IF alone)
-    RMS baseline F1:       0.874
+    Hybrid ensemble F1:    0.938
+    Hybrid precision:      0.947
+    RMS baseline F1:       0.877
     Early detection lead:  15-30 min ahead of simple RMS threshold
 
   HEALTH INDEX (Step 4):
-    Correlation with true HI:  Pearson r ≈ 0.855
+    Correlation with true HI:  Pearson r ≈ 0.943
     Zone classification accurate across all 4 degradation profiles
 
   RUL PREDICTION (Step 5):
-    Prediteq data: R² = 0.983, RMSE = 2.82 days, MAE = 1.43 days
-    Per-profile: A=0.993, B=0.997, C=0.992, D=0.906
+    Prediteq data: R² = 0.947, RMSE = 5.05 days, MAE = 2.36 days
+    Cross-validation mean R² = 0.967
     NASA CMAPSS:   R² ≈ 0.89, RMSE ≈ 14.1 cycles (surpasses literature targets)
 
-  The pipeline is generic: same architecture works for elevators (our case)
+  The pipeline is generic: the same architecture works for vertical storage carousels (our case)
   and turbofan engines (NASA benchmark) with no code changes — only different
   input data and feature engineering.
 
@@ -1098,16 +1102,31 @@ Technical:
 ════════════════════════════════════════════════════════════════════════════════
 
 What the ML pipeline produces:
-The validated pipeline sequence trains 2 models (Isolation Forest + Random Forest) and exports a PrediteqEngine class. In production, the FastAPI backend instantiates one engine per machine. Each engine receives real-time sensor data via MQTT (1 Hz) and outputs: HI (0-100%), zone (Excellent/Good/Degraded/Critical), RUL (days), and confidence intervals. These values get written to the Supabase machines table, and the frontend reads them.
+The validated pipeline sequence trains 2 models (Isolation Forest + Random Forest),
+exports a PrediteqEngine class, and feeds a wider runtime product layer:
+
+- the FastAPI backend instantiates one engine per machine,
+- `/machines` publishes a fleet snapshot enriched with runtime HI and RUL data,
+- `/diagnostics/{machine_code}/all` publishes interval RUL, stress, explanations,
+  and the canonical public modes `reference_only / initializing / prediction`,
+- the frontend reads these runtime endpoints first and only falls back to local
+  demo values if the API is unavailable.
 
 Current state of the 3 machines:
-All 3 machines (ASC-A1, ASC-B2, ASC-C3) exist in the Supabase database and the frontend reads from it via useMachines.ts. The static fallback in machines.ts has hardcoded demo values:
+ASC-A1, ASC-B2, and ASC-C3 are the 3 live demo machines exposed by the current
+deployment. They share one generic trained model family, but each machine keeps
+its own runtime buffers and state in the backend.
 
-ASC-A1: HI=0.87, RUL=142j, status=ok (healthy machine)
-ASC-B2: HI=0.62, RUL=54j, status=degraded (mid-life)
-ASC-C3: HI=0.31, RUL=12j, status=critical (near failure)
-The simulation covers ALL machines equally. The 200 trajectories in Step 1 don't correspond to one specific machine — they train a generic model that works on any SITI FC100L1-4 elevator. The same trained engine is instantiated 3 times (once per machine) by FastAPI. Each receives its own sensor stream and maintains its own buffers.
+Important demo note:
 
-For demo purposes: Yes, without a live MQTT sensor feed, the 3 machines show their Supabase-stored values (which the backend simulator updates). The HI chart (genHI() function) generates a synthetic 90-day trend from the current HI value. So all 3 machines are "live" in the demo — they just reflect the last values the backend wrote, not placeholder text.
+- the simulator does feed telemetry through the runtime engine,
+- but for storytelling and stable demos it can also clamp or override the
+  displayed `hi_smooth`, zone, and RUL-related values,
+- this is why the simulator must be described as a demo-oriented runtime layer,
+  not as a pure raw-sensor replay.
 
-In short: ML trains 1 generic model → deployed 3 times (1 per machine) → each one processes its own sensor stream independently → writes to Supabase → frontend reads it. All 3 machines are functional, not just 1.
+In short:
+
+ML trains 1 generic model family -> backend instantiates it per machine ->
+runtime endpoints enrich machine rows and diagnostics payloads -> simulator can
+drive or shape the demo state -> frontend renders the deployed result.

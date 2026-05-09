@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Literal
 
 from core.decision_snapshot import build_machine_decision_snapshot
+from core.machine_labels import get_machine_public_label
 from core.supabase_client import get_supabase
 from ml.engine_manager import get_manager
 from routers.seuils import get_thresholds
@@ -248,6 +249,15 @@ def _audience_label(audience: Audience, lang: Lang) -> str:
         "dual": {"fr": "Vue double", "en": "Dual view", "ar": "Dual view"},
     }
     return labels[audience][lang]
+
+
+def _publicize_machine_text(text: str | None, machine: dict) -> str:
+    if not text:
+        return ""
+
+    code = str(machine.get("code") or machine.get("id") or "")
+    label = get_machine_public_label(code, machine.get("nom"))
+    return str(text).replace(code, label) if code else str(text)
 
 
 def _effective_status(
@@ -510,12 +520,13 @@ def generate_report(
                 decision = None
 
         statut = _effective_status(m, hi_stats, rul_stats, thresholds, decision=decision)
+        machine_label = get_machine_public_label(code, m.get("nom"))
 
         total_alerts_all += alert_stats['total']
         if statut == 'critical':
-            machines_critical.append(code)
+            machines_critical.append(machine_label)
         elif statut == 'degraded':
-            machines_degraded.append(code)
+            machines_degraded.append(machine_label)
 
         all_machine_data.append({
             "machine": m,
@@ -579,6 +590,7 @@ def generate_report(
             m = md["machine"]
             code = m['code']
             nom = m.get('nom', code)
+            machine_label = get_machine_public_label(code, nom)
             brief = _simple_machine_brief(
                 machine=m,
                 hi_stats=md["hi_stats"],
@@ -588,20 +600,20 @@ def generate_report(
                 lang=lang,
                 decision=md.get("decision"),
             )
-            _a(f"### {code} - {nom}\n")
+            _a(f"### {machine_label}\n")
             if m.get("region"):
                 _a(f"- {_t('location', lang)}: **{m.get('region')}**")
-            _a(f"- {_t('status', lang)}: **{brief['state']}**")
+            _a(f"- {_t('status', lang)}: **{_publicize_machine_text(brief['state'], m)}**")
             if lang == "fr":
-                _a(f"- Impact exploitation: {brief['impact']}")
-                _a(f"- Action recommandée: {brief['action']}")
-                _a(f"- Indices observés: {brief['evidence']}")
-                _a(f"- Lecture de confiance: {brief['trust']}")
+                _a(f"- Impact exploitation: {_publicize_machine_text(brief['impact'], m)}")
+                _a(f"- Action recommandée: {_publicize_machine_text(brief['action'], m)}")
+                _a(f"- Indices observés: {_publicize_machine_text(brief['evidence'], m)}")
+                _a(f"- Lecture de confiance: {_publicize_machine_text(brief['trust'], m)}")
             else:
-                _a(f"- Operational impact: {brief['impact']}")
-                _a(f"- Recommended action: {brief['action']}")
-                _a(f"- Observed evidence: {brief['evidence']}")
-                _a(f"- Confidence note: {brief['trust']}")
+                _a(f"- Operational impact: {_publicize_machine_text(brief['impact'], m)}")
+                _a(f"- Recommended action: {_publicize_machine_text(brief['action'], m)}")
+                _a(f"- Observed evidence: {_publicize_machine_text(brief['evidence'], m)}")
+                _a(f"- Confidence note: {_publicize_machine_text(brief['trust'], m)}")
             _a("")
 
         _a("---\n")
@@ -621,6 +633,7 @@ def generate_report(
         m = md["machine"]
         code = m['code']
         nom = m.get('nom', code)
+        machine_label = get_machine_public_label(code, nom)
         region = m.get('region', '')
         statut = md["status"]
         hi_stats = md["hi_stats"]
@@ -631,7 +644,7 @@ def generate_report(
 
         section_num = section_cursor
         section_cursor += 1
-        _a(f"## {section_num}. {_t('machine', lang)}: {code} — {nom}\n")
+        _a(f"## {section_num}. {_t('machine', lang)}: {machine_label}\n")
         _a(f"**{_t('location', lang)}**: {region} | **{_t('status', lang)}**: `{statut}`\n")
 
         # ── HI Analysis ──────────────────────────────────────────────────
@@ -732,16 +745,17 @@ def generate_report(
     for md in all_machine_data:
         m = md["machine"]
         code = m['code']
+        machine_label = get_machine_public_label(code, m.get("nom", code))
         statut = md["status"]
         decision = md.get("decision") or {}
         hi_stats = md["hi_stats"]
         rul_stats = md["rul_stats"]
         alert_stats = md["alert_stats"]
 
-        _a(f"### {code}\n")
+        _a(f"### {machine_label}\n")
 
         if decision.get("recommended_action"):
-            _a(f"{rec_idx}. {decision.get('recommended_action')}")
+            _a(f"{rec_idx}. {_publicize_machine_text(decision.get('recommended_action'), m)}")
             rec_idx += 1
 
         if statut == 'critical':
@@ -786,139 +800,380 @@ def generate_report(
 
 # ── PDF generation (reuse from report.py pattern) ─────────────────────────────
 
+
 def generate_pdf_bytes(markdown_text: str, title: str = "Rapport PrediTeq", lang: str = "fr") -> bytes:
-    """Convert Markdown report text to PDF bytes using fpdf2 with Unicode font support."""
+    """Convert Markdown report text to a branded PDF with logos and styled sections."""
     from fpdf import FPDF
+
+    class BrandedReportPDF(FPDF):
+        def __init__(
+            self,
+            *,
+            header_title: str,
+            footer_text: str,
+            font_family: str,
+            bold_style: str,
+            header_logo: str | None,
+        ):
+            super().__init__()
+            self.header_title = header_title
+            self.footer_text = footer_text
+            self.font_family = font_family
+            self.bold_style = bold_style
+            self.header_logo = header_logo
+
+        def header(self):
+            if self.page_no() == 1:
+                return
+
+            page_w = self.w - self.l_margin - self.r_margin
+            self.set_fill_color(12, 74, 110)
+            self.rect(self.l_margin, 10, page_w, 10, "F")
+
+            if self.header_logo:
+                self.image(self.header_logo, x=self.l_margin + 1.5, y=11.4, w=22)
+
+            self.set_xy(self.l_margin + 26, 11.5)
+            self.set_font(self.font_family, self.bold_style, 8)
+            self.set_text_color(255, 255, 255)
+            self.cell(page_w - 28, 5, _sanitize_pdf_text(self.header_title), align="R")
+            self.set_text_color(23, 37, 56)
+            self.ln(6)
+
+        def footer(self):
+            self.set_y(-12)
+            self.set_draw_color(214, 223, 233)
+            self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+            self.set_y(-10.5)
+            self.set_font(self.font_family, "", 8)
+            self.set_text_color(100, 116, 139)
+            self.cell(
+                0,
+                5,
+                f"{self.footer_text} | Page {self.page_no()}/{{nb}}",
+                align="C",
+            )
+            self.set_text_color(23, 37, 56)
+
+    generated_on = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+    prediteq_logo = _resolve_brand_asset("logo-dark-removebg-preview.png")
+    aroteq_logo = _resolve_brand_asset("aroteq-logo.png")
+
+    pdf = BrandedReportPDF(
+        header_title=title,
+        footer_text="PrediTeq | Aroteq | Maintenance predictive industrielle",
+        font_family="Helvetica",
+        bold_style="B",
+        header_logo=prediteq_logo,
+    )
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_margins(16, 16, 16)
+    pdf.alias_nb_pages()
+    font_family, bold_style = _register_pdf_fonts(pdf, lang)
+    pdf.font_family = font_family
+    pdf.bold_style = bold_style
+    pdf.set_title(title)
+    pdf.set_author("PrediTeq / Aroteq")
+    pdf.add_page()
+
+    _draw_pdf_cover(
+        pdf,
+        title=title,
+        generated_on=generated_on,
+        lang=lang,
+        prediteq_logo=prediteq_logo,
+        aroteq_logo=aroteq_logo,
+        font_family=font_family,
+        bold_style=bold_style,
+    )
+    _render_markdown_to_pdf(
+        pdf,
+        markdown_text=markdown_text,
+        font_family=font_family,
+        bold_style=bold_style,
+    )
+    return pdf.output()
+
+
+def _resolve_brand_asset(filename: str) -> str | None:
     import os
 
-    FONT_DIR = os.path.join(os.path.dirname(__file__), "fonts")
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    repo_root = os.path.dirname(os.path.dirname(__file__))
+    candidate = os.path.join(repo_root, "prediteq_frontend", "public", filename)
+    return candidate if os.path.exists(candidate) else None
 
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
 
-    # Register Unicode fonts
-    noto_regular = os.path.join(FONT_DIR, "NotoSans-Regular.ttf")
-    noto_bold = os.path.join(FONT_DIR, "NotoSans-Bold.ttf")
-    noto_arabic = os.path.join(FONT_DIR, "NotoSansArabic-Regular.ttf")
+def _register_pdf_fonts(pdf, lang: str) -> tuple[str, str]:
+    import os
 
-    font_family = "Helvetica"  # fallback
+    font_dir = os.path.join(os.path.dirname(__file__), "fonts")
+    noto_regular = os.path.join(font_dir, "NotoSans-Regular.ttf")
+    noto_bold = os.path.join(font_dir, "NotoSans-Bold.ttf")
+    noto_arabic = os.path.join(font_dir, "NotoSansArabic-Regular.ttf")
+
     if lang == "ar" and os.path.exists(noto_arabic):
         pdf.add_font("NotoArabic", "", noto_arabic)
-        font_family = "NotoArabic"
-    elif os.path.exists(noto_regular):
+        return "NotoArabic", ""
+
+    if os.path.exists(noto_regular):
         pdf.add_font("Noto", "", noto_regular)
         if os.path.exists(noto_bold):
             pdf.add_font("Noto", "B", noto_bold)
-        font_family = "Noto"
+            return "Noto", "B"
+        return "Noto", ""
 
-    is_arabic = (lang == "ar" and font_family == "NotoArabic")
-    bold_style = "" if is_arabic else "B"  # Arabic font has no bold variant
+    return "Helvetica", "B"
 
-    pdf.add_page()
 
-    # Header
-    pdf.set_font(font_family, bold_style, 18)
-    pdf.cell(0, 12, title, new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.set_font(font_family, "", 10)
-    pdf.cell(0, 8, f"Généré le {now}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.ln(8)
+def _sanitize_pdf_text(text: str | None) -> str:
+    import re
 
-    # Body
+    if not text:
+        return ""
+
+    clean = str(text)
+    replacements = {
+        "🟢": "[OK]",
+        "🟡": "[A surveiller]",
+        "🔴": "[Critique]",
+        "🔔": "[Alerte]",
+        "📋": "[Tache]",
+        "✅": "[Valide]",
+        "📉": "[Tendance]",
+        "⚠️": "[Attention]",
+        "⚠": "[Attention]",
+        "•": "-",
+    }
+    for source, target in replacements.items():
+        clean = clean.replace(source, target)
+
+    clean = clean.replace("**", "").replace("__", "").replace("`", "")
+    clean = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", clean)
+    return clean.strip()
+
+
+def _draw_pdf_cover(
+    pdf,
+    *,
+    title: str,
+    generated_on: str,
+    lang: str,
+    prediteq_logo: str | None,
+    aroteq_logo: str | None,
+    font_family: str,
+    bold_style: str,
+):
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    pdf.set_fill_color(12, 74, 110)
+    pdf.rect(0, 0, pdf.w, 6, "F")
+    pdf.set_fill_color(15, 118, 110)
+    pdf.rect(pdf.w - 54, 0, 34, 6, "F")
+    pdf.set_fill_color(245, 158, 11)
+    pdf.rect(pdf.w - 20, 0, 20, 6, "F")
+
+    if prediteq_logo:
+        pdf.image(prediteq_logo, x=pdf.l_margin, y=14, w=56)
+    if aroteq_logo:
+        pdf.image(aroteq_logo, x=pdf.w - pdf.r_margin - 42, y=18, w=36)
+
+    pdf.set_y(42)
+    pdf.set_font(font_family, bold_style, 21)
+    pdf.set_text_color(12, 74, 110)
+    pdf.multi_cell(page_w, 10, _sanitize_pdf_text(title))
+
+    subtitle = {
+        "fr": "Rapport IA exporte avec mise en forme professionnelle pour partage client et jury.",
+        "en": "AI report exported with professional client-ready formatting.",
+        "ar": "AI report exported with professional client-ready formatting.",
+    }[lang]
     pdf.set_font(font_family, "", 11)
-    in_table = False
+    pdf.set_text_color(71, 85, 105)
+    pdf.multi_cell(page_w, 6, subtitle)
+
+    box_top = pdf.get_y() + 6
+    pdf.set_fill_color(248, 250, 252)
+    pdf.set_draw_color(214, 223, 233)
+    pdf.rect(pdf.l_margin, box_top, page_w, 24, "DF")
+
+    label_generated = {"fr": "Genere le", "en": "Generated on", "ar": "Generated on"}[lang]
+    label_scope = {"fr": "Perimetre", "en": "Scope", "ar": "Scope"}[lang]
+    label_source = {"fr": "Source", "en": "Source", "ar": "Source"}[lang]
+    scope_value = {"fr": "PrediTeq IA report", "en": "PrediTeq AI report", "ar": "PrediTeq AI report"}[lang]
+
+    pdf.set_xy(pdf.l_margin + 4, box_top + 4)
+    pdf.set_font(font_family, bold_style, 9)
+    pdf.set_text_color(12, 74, 110)
+    pdf.cell(36, 5, label_generated)
+    pdf.cell(28, 5, label_scope)
+    pdf.cell(22, 5, label_source)
+
+    pdf.set_xy(pdf.l_margin + 4, box_top + 10)
+    pdf.set_font(font_family, "", 9.5)
+    pdf.set_text_color(30, 41, 59)
+    pdf.cell(36, 5, generated_on)
+    pdf.cell(28, 5, scope_value)
+    pdf.cell(22, 5, "PrediTeq / Aroteq")
+
+    pdf.set_draw_color(226, 232, 240)
+    pdf.line(pdf.l_margin, box_top + 24 + 4, pdf.w - pdf.r_margin, box_top + 24 + 4)
+    pdf.set_y(box_top + 24 + 8)
+    pdf.set_text_color(23, 37, 56)
+
+
+def _render_markdown_to_pdf(pdf, *, markdown_text: str, font_family: str, bold_style: str):
     table_rows: list[list[str]] = []
+    in_table = False
 
     for line in markdown_text.split("\n"):
         stripped = line.strip()
 
-        # Table detection
         if stripped.startswith("|") and not stripped.startswith("|--"):
-            cols = [c.strip().replace("**", "") for c in stripped.split("|")[1:-1]]
+            cols = [_sanitize_pdf_text(cell) for cell in stripped.split("|")[1:-1]]
             table_rows.append(cols)
             in_table = True
             continue
-        elif stripped.startswith("|--"):
-            continue  # skip separator
-        elif in_table:
-            # Flush table
-            _render_table(pdf, table_rows, font_family)
+
+        if stripped.startswith("|--"):
+            continue
+
+        if in_table and table_rows:
+            _render_table(pdf, table_rows, font_family, bold_style)
             table_rows = []
             in_table = False
 
-        # Reset X to left margin before rendering any line
         pdf.set_x(pdf.l_margin)
 
-        # Headings
         if stripped.startswith("# "):
-            pdf.ln(4)
-            pdf.set_font(font_family, bold_style, 16)
-            pdf.multi_cell(0, 8, stripped[2:].replace("**", ""))
-            pdf.set_font(font_family, "", 11)
+            _render_section_title(pdf, _sanitize_pdf_text(stripped[2:]), font_family, bold_style, level=1)
         elif stripped.startswith("## "):
-            pdf.ln(3)
-            pdf.set_font(font_family, bold_style, 14)
-            pdf.multi_cell(0, 7, stripped[3:].replace("**", ""))
-            pdf.set_font(font_family, "", 11)
+            _render_section_title(pdf, _sanitize_pdf_text(stripped[3:]), font_family, bold_style, level=2)
         elif stripped.startswith("### "):
-            pdf.ln(2)
-            pdf.set_font(font_family, bold_style, 12)
-            pdf.multi_cell(0, 6, stripped[4:].replace("**", ""))
-            pdf.set_font(font_family, "", 11)
+            _render_section_title(pdf, _sanitize_pdf_text(stripped[4:]), font_family, bold_style, level=3)
         elif stripped.startswith("- ") or stripped.startswith("* "):
-            text = stripped[2:].replace("**", "")
-            pdf.multi_cell(0, 6, f"  - {text}")
+            _render_bullet(pdf, _sanitize_pdf_text(stripped[2:]), font_family)
         elif stripped.startswith("> "):
-            pdf.set_font(font_family, "", 11)
-            pdf.multi_cell(0, 6, f"  {stripped[2:].replace('**', '')}")
-            pdf.set_font(font_family, "", 11)
+            _render_quote(pdf, _sanitize_pdf_text(stripped[2:]), font_family)
         elif stripped.startswith("---"):
             pdf.ln(2)
-            page_w = pdf.w - pdf.l_margin - pdf.r_margin
-            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + page_w, pdf.get_y())
-            pdf.ln(2)
-        elif stripped.startswith("*") and stripped.endswith("*") and len(stripped) > 2:
-            pdf.set_font(font_family, "", 10)
-            pdf.multi_cell(0, 5, stripped.strip("*"))
-            pdf.set_font(font_family, "", 11)
-        elif stripped == "":
+            pdf.set_draw_color(214, 223, 233)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
             pdf.ln(3)
+        elif stripped and stripped[0].isdigit() and ". " in stripped[:4]:
+            _render_bullet(pdf, _sanitize_pdf_text(stripped), font_family)
+        elif stripped == "":
+            pdf.ln(2.5)
         else:
-            clean = stripped.replace("**", "")
-            pdf.multi_cell(0, 6, clean)
+            pdf.set_font(font_family, "", 10.5)
+            pdf.set_text_color(30, 41, 59)
+            pdf.multi_cell(0, 6, _sanitize_pdf_text(stripped))
 
-    # Flush any remaining table
     if table_rows:
-        _render_table(pdf, table_rows, font_family)
-
-    return pdf.output()
+        _render_table(pdf, table_rows, font_family, bold_style)
 
 
-def _render_table(pdf, rows: list[list[str]], font_family: str = "Helvetica"):
-    """Render a simple table in the PDF."""
+def _render_section_title(pdf, text: str, font_family: str, bold_style: str, *, level: int):
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
+    pdf.ln(2 if level > 1 else 3)
+
+    if level == 1:
+        pdf.set_font(font_family, bold_style, 16)
+        pdf.set_text_color(12, 74, 110)
+        pdf.multi_cell(0, 8, text)
+        pdf.ln(1)
+        return
+
+    if level == 2:
+        y = pdf.get_y()
+        pdf.set_fill_color(245, 248, 250)
+        pdf.set_draw_color(226, 232, 240)
+        pdf.rect(pdf.l_margin, y, page_w, 9, "DF")
+        pdf.set_fill_color(245, 158, 11)
+        pdf.rect(pdf.l_margin, y, 3.2, 9, "F")
+        pdf.set_xy(pdf.l_margin + 6, y + 1.3)
+        pdf.set_font(font_family, bold_style, 12.5)
+        pdf.set_text_color(12, 74, 110)
+        pdf.cell(page_w - 8, 5.5, text)
+        pdf.ln(8.5)
+        return
+
+    pdf.set_font(font_family, bold_style, 11.2)
+    pdf.set_text_color(15, 118, 110)
+    pdf.multi_cell(0, 6, text)
+
+
+def _render_bullet(pdf, text: str, font_family: str):
+    pdf.set_font(font_family, "", 10.5)
+    pdf.set_text_color(30, 41, 59)
+    start_y = pdf.get_y()
+    pdf.set_xy(pdf.l_margin, start_y)
+    pdf.set_text_color(245, 158, 11)
+    pdf.cell(4, 6, "-")
+    pdf.set_xy(pdf.l_margin + 5, start_y)
+    pdf.set_text_color(30, 41, 59)
+    pdf.multi_cell(0, 6, text)
+
+
+def _render_quote(pdf, text: str, font_family: str):
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
+    box_y = pdf.get_y()
+    pdf.set_fill_color(248, 250, 252)
+    pdf.set_draw_color(226, 232, 240)
+    pdf.rect(pdf.l_margin, box_y, page_w, 10, "DF")
+    pdf.set_fill_color(15, 118, 110)
+    pdf.rect(pdf.l_margin, box_y, 2.4, 10, "F")
+    pdf.set_xy(pdf.l_margin + 5, box_y + 2)
+    pdf.set_font(font_family, "", 10)
+    pdf.set_text_color(71, 85, 105)
+    pdf.multi_cell(page_w - 7, 5, text)
+    pdf.ln(1.5)
+
+
+def _render_table(pdf, rows: list[list[str]], font_family: str, bold_style: str):
+    from textwrap import shorten
+
     if not rows:
         return
-    n_cols = max(len(r) for r in rows)
+
+    n_cols = max(len(row) for row in rows)
     if n_cols == 0:
         return
+
     page_w = pdf.w - pdf.l_margin - pdf.r_margin
-    col_w = page_w / n_cols
+    raw_widths: list[float] = []
+    for col_idx in range(n_cols):
+        max_len = max(len(row[col_idx]) if col_idx < len(row) else 0 for row in rows)
+        raw_widths.append(max(20.0, min(58.0, max_len * 1.5)))
 
-    # Header row
-    if rows:
-        pdf.set_font(font_family, "B", 9)
-        for cell in rows[0]:
-            pdf.cell(col_w, 6, cell[:40], border=1, align="C")
-        pdf.ln()
+    scale = page_w / sum(raw_widths)
+    col_widths = [width * scale for width in raw_widths]
 
-    # Data rows
-    pdf.set_font(font_family, "", 9)
-    for row in rows[1:]:
-        for i in range(n_cols):
-            val = row[i] if i < len(row) else ""
-            pdf.cell(col_w, 6, val[:40], border=1)
+    pdf.ln(1)
+    pdf.set_font(font_family, bold_style, 8.4)
+    pdf.set_fill_color(12, 74, 110)
+    pdf.set_text_color(255, 255, 255)
+    for idx, width in enumerate(col_widths):
+        cell = rows[0][idx] if idx < len(rows[0]) else ""
+        pdf.cell(width, 8, shorten(_sanitize_pdf_text(cell), width=28, placeholder="..."), fill=True)
+    pdf.ln()
+
+    pdf.set_font(font_family, "", 8.4)
+    pdf.set_text_color(30, 41, 59)
+    pdf.set_draw_color(226, 232, 240)
+    for row_index, row in enumerate(rows[1:]):
+        fill = row_index % 2 == 0
+        if fill:
+            pdf.set_fill_color(248, 250, 252)
+        for idx, width in enumerate(col_widths):
+            cell = row[idx] if idx < len(row) else ""
+            pdf.cell(
+                width,
+                7,
+                shorten(_sanitize_pdf_text(cell), width=28, placeholder="..."),
+                border=1,
+                fill=fill,
+            )
         pdf.ln()
 
     pdf.ln(2)
-    pdf.set_x(pdf.l_margin)  # ensure X resets
-    pdf.set_font(font_family, "", 11)
+    pdf.set_x(pdf.l_margin)

@@ -1,30 +1,46 @@
-# Oral Jury — HI / FPT / RUL / L10 (1 minute)
+# Oral Jury - HI / RUL conditionnel / L10 (1 minute)
 
 ## Version orale
 
-"Dans PrediTeq, il faut distinguer quatre notions.
+"Dans PrediTeq, il faut distinguer trois choses.
 
-Premièrement, le **HI**, ou Health Index, décrit l'état de santé **actuel** de la machine sur une échelle de 0 à 1. Plus il est élevé, plus la machine est saine.
+D'abord, le **HI** décrit l'état de santé actuel de la machine sur une échelle
+de 0 à 1. Plus il est élevé, plus la machine est saine.
 
-Deuxièmement, il y a le **FPT**, First Predicting Time. C'est le moment à partir duquel un pronostic chiffré devient scientifiquement légitime. Dans notre projet, ce point est fixé à **HI < 0,80**. Tant que la machine reste au-dessus de 0,80, elle est encore dans une zone très saine, donc on n'affiche pas un RUL numérique pour éviter une fausse précision.
+Ensuite, le **RUL** n'est pas affiché en permanence. Le produit applique une
+logique de publication conditionnelle. Tant que la machine est encore dans une
+zone très saine, l'interface reste en mode **reference_only** et affiche une
+référence statistique du composant, pas un faux compte à rebours.
 
-Troisièmement, le **RUL**, Remaining Useful Life, est le temps restant estimé avant intervention. Ce RUL n'apparaît que si deux conditions sont réunies : la machine a franchi le FPT, donc **HI < 0,80**, et le système a accumulé **60 minutes d'historique HI**, car le modèle a besoin de cette mémoire temporelle pour être crédible.
+Quand la dégradation devient visible, le système passe en **initializing** tant
+qu'il ne dispose pas encore d'assez d'historique HI. Dans notre projet, le
+modèle RUL travaille sur **60 minutes d'historique**, à raison d'un point HI
+par minute.
 
-Quatrièmement, avant ce moment, on affiche le **L10**, qui est une durée de vie statistique de référence du roulement, et non un pronostic personnalisé.
-
-Enfin, le modèle prédit d'abord un RUL en **minutes-simulation**. Ensuite, la couche d'affichage le convertit en **jours calendaires** selon le rythme réel d'utilisation de la machine. Donc les jours affichés sont une traduction opérateur, alors que les cycles restants sont l'unité PHM la plus directe." 
+Enfin, une fois ces conditions réunies, l'application passe en mode
+**prediction** et affiche un RUL chiffré avec intervalle de confiance. Le
+modèle prédit d'abord des minutes-simulation, puis la couche runtime convertit
+ce résultat en jours calendaires à partir du rythme d'usage observé."
 
 ## Phrase de clôture
 
-"En résumé : le HI dit où on en est maintenant, le FPT dit à partir de quand on a le droit de prédire, le RUL dit ce qu'il reste, et le L10 sert de référence tant que le pronostic chiffré n'est pas encore justifié."
+"En résumé : le HI dit où en est la machine maintenant ; le produit ne publie
+un RUL numérique que quand ce pronostic devient crédible ; et avant cela, il
+reste sur une référence composant ou un état d'initialisation."
 
 ## Si le jury relance
 
-- **Pourquoi ne pas toujours afficher le RUL ?**
-  Parce qu'avant apparition d'un précurseur réel, un chiffre serait trompeur.
+- Pourquoi ne pas toujours afficher le RUL ?
+  Parce qu'un chiffre trop tôt donnerait une fausse précision.
 
-- **Pourquoi 60 minutes ?**
-  Parce que le modèle RUL travaille sur 60 points HI, à raison d'un point HI par minute.
+- Pourquoi 60 minutes ?
+  Parce que le modèle RUL utilise 60 points HI, avec un point HI par minute.
 
-- **Pourquoi convertir en jours ?**
-  Pour la GMAO et la planification maintenance. Le système conserve aussi les cycles restants pour la lecture PHM.
+- Pourquoi parler aussi de L10 ?
+  Parce qu'avant la prédiction personnalisée, l'interface garde une référence
+  statistique de durée de vie composant.
+
+- Et le terme FPT ?
+  C'est un ancien vocabulaire méthodologique pour désigner le moment où le
+  pronostic devient légitime. Dans l'application, on parle surtout des états
+  `reference_only`, `initializing` et `prediction`.

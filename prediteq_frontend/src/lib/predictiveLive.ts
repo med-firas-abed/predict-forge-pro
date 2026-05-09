@@ -1,5 +1,6 @@
 import type { PredictiveInsight, PredictiveUrgencyBand } from "@/hooks/useFleetPredictiveInsights";
 import type { TacheType } from "@/hooks/useGmaoTaches";
+import { getBudgetReferenceCost } from "@/lib/costModel";
 
 const URGENCY_TONE = {
   stable: {
@@ -31,12 +32,6 @@ const URGENCY_TONE = {
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
-
-const TASK_BASE_COST: Record<TacheType, number> = {
-  preventive: 260,
-  inspection: 320,
-  corrective: 480,
-};
 
 function formatCompactNumber(value: number, locale = "fr-FR", maximumFractionDigits = 1) {
   return new Intl.NumberFormat(locale, {
@@ -93,11 +88,12 @@ export function getLiveCostProjection(
 ) {
   const hasMachineHistory = historicalAverage > 0;
   const hasFleetHistory = fleetHistoricalAverage > 0;
-  const baseCost = hasMachineHistory
+  const historyReference = hasMachineHistory
     ? historicalAverage
     : hasFleetHistory
       ? fleetHistoricalAverage
-      : TASK_BASE_COST[insight.taskTemplate.type];
+      : 0;
+  const baseCost = getBudgetReferenceCost(insight.taskTemplate.type, historyReference);
   const baseSource = hasMachineHistory
     ? "machine_history"
     : hasFleetHistory

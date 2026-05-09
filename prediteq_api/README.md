@@ -52,3 +52,30 @@ sql/       schema and migration files
 If you need one simple sentence:
 
 This backend takes machine context and sensor signals, computes prognosis, then exposes that prognosis to the UI and the operational features.
+
+## Local run
+
+```bash
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+## Smoke checks
+
+Before a demo or delivery, the fastest useful checks are:
+
+```bash
+python -m py_compile main.py report_engine.py routers\planner.py routers\report.py routers\simulator.py
+```
+
+Then confirm the main runtime imports still load:
+
+```bash
+python -c "import main, routers.simulator, routers.report, routers.planner"
+```
+
+## Delivery notes
+
+- This backend is a runtime layer, not a training workspace.
+- The trained artifacts are consumed from sibling `prediteq_ml/models/`.
+- The simulator is demo-oriented: it replays a calibrated story through the runtime so the UI can show a stable, watch, and critical machine path reliably.

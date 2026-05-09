@@ -3,6 +3,7 @@ import { BellRing, Plus, ChevronRight, Globe, Palette, Trash2, UserCheck, UserX,
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { repairText } from "@/lib/repairText";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -54,8 +55,7 @@ export function AdminPage() {
     allLabel: string,
   ) => {
     if (!user.machineId) return allLabel;
-    const label = [user.machineCode, user.machineName].filter(Boolean).join(" - ");
-    return label || user.machineId;
+    return getMachinePublicLabel({ code: user.machineCode, name: user.machineName });
   };
 
   // Combien d'admins approuvés restent ? Sert à griser le bouton "Supprimer"
@@ -351,7 +351,7 @@ export function AdminPage() {
                                   <option value="">{l("Choisir une machine", "Choose a machine", "اختر آلة")}</option>
                                   {machineOptions.map((machine) => (
                                     <option key={machine.id} value={machine.id}>
-                                      {machine.code} - {machine.nom}
+                                      {getMachinePublicLabel({ code: machine.code, name: machine.nom })}
                                     </option>
                                   ))}
                                 </select>
@@ -422,8 +422,9 @@ export function AdminPage() {
                 <div key={machine.machine_id} className="rounded-2xl border border-border bg-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-bold text-foreground">{machine.machine_code}</div>
-                      <div className="text-xs text-muted-foreground">{machine.machine_name}</div>
+                      <div className="text-sm font-bold text-foreground">
+                        {getMachinePublicLabel({ code: machine.machine_code, name: machine.machine_name })}
+                      </div>
                     </div>
                     <span className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.68rem] font-semibold text-foreground">
                       {machine.recipients.length} {l("destinataire(s)", "recipient(s)", "مستلم/مستلمون")}

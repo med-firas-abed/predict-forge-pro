@@ -7,6 +7,7 @@ import { useAlertes } from "@/hooks/useAlertes";
 import { useAlertEmailHistory } from "@/hooks/useAlertEmailHistory";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { useMachines } from "@/hooks/useMachines";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import {
   formatHiPercent,
   formatPredictiveRul,
@@ -23,6 +24,7 @@ type AlertSeverityFilter = "all" | AlertLevel;
 type MachineActionRow = {
   machineId: string;
   machineName: string;
+  machineSubtitle: string;
   latestTimestamp: string;
   highestSeverity: AlertLevel;
   activeSignals: GroupedAlert[];
@@ -135,13 +137,23 @@ export function AlertsPage() {
   );
 
   const machineRows = useMemo(() => {
-    const machineNameById = new Map(machines.map((machine) => [machine.id, machine.name]));
+    const machineMetaById = new Map(
+      machines.map((machine) => [
+        machine.id,
+        {
+          label: getMachinePublicLabel(machine),
+          subtitle: [machine.city, machine.loc].filter(Boolean).join(" · "),
+        },
+      ]),
+    );
     const rows = new Map<string, MachineActionRow>();
 
     activeSignals.forEach((signal) => {
+      const meta = machineMetaById.get(signal.machineId);
       const current = rows.get(signal.machineId) ?? {
         machineId: signal.machineId,
-        machineName: machineNameById.get(signal.machineId) ?? signal.machineId,
+        machineName: meta?.label ?? getMachinePublicLabel(signal.machineId),
+        machineSubtitle: meta?.subtitle ?? "",
         latestTimestamp: signal.latestTimestamp,
         highestSeverity: signal.severity,
         activeSignals: [],
@@ -183,12 +195,21 @@ export function AlertsPage() {
   }, [activeSignals, byMachineId, machines]);
 
   const historyByMachine = useMemo(() => {
-    const machineNameById = new Map(machines.map((machine) => [machine.id, machine.name]));
+    const machineMetaById = new Map(
+      machines.map((machine) => [
+        machine.id,
+        {
+          label: getMachinePublicLabel(machine),
+          subtitle: [machine.city, machine.loc].filter(Boolean).join(" · "),
+        },
+      ]),
+    );
     const grouped = new Map<
       string,
       {
         machineId: string;
         machineName: string;
+        machineSubtitle: string;
         latestTimestamp: string;
         entries: GroupedAlert[];
         count: number;
@@ -196,9 +217,11 @@ export function AlertsPage() {
     >();
 
     historySignals.forEach((signal) => {
+      const meta = machineMetaById.get(signal.machineId);
       const current = grouped.get(signal.machineId) ?? {
         machineId: signal.machineId,
-        machineName: machineNameById.get(signal.machineId) ?? signal.machineId,
+        machineName: meta?.label ?? getMachinePublicLabel(signal.machineId),
+        machineSubtitle: meta?.subtitle ?? "",
         latestTimestamp: signal.latestTimestamp,
         entries: [],
         count: 0,
@@ -313,7 +336,7 @@ export function AlertsPage() {
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-base font-bold text-foreground">{row.machineId}</span>
+                        <span className="text-base font-bold text-foreground">{row.machineName}</span>
                         <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${severity.badgeClass}`}>
                           {severity.label}
                         </span>
@@ -325,7 +348,9 @@ export function AlertsPage() {
                         </span>
                       </div>
 
-                      <div className="mt-1 text-sm text-muted-foreground">{row.machineName}</div>
+                      {row.machineSubtitle ? (
+                        <div className="mt-1 text-sm text-muted-foreground">{row.machineSubtitle}</div>
+                      ) : null}
 
                       {insight ? (
                         <div className="mt-3 flex flex-wrap gap-2 text-[0.72rem]">
@@ -498,7 +523,7 @@ export function AlertsPage() {
               <option value="all">Toutes</option>
               {rankedInsights.map((insight) => (
                 <option key={insight.machine.id} value={insight.machine.id}>
-                  {insight.machine.id} - {insight.machine.name}
+                  {getMachinePublicLabel(insight.machine)}
                 </option>
               ))}
             </select>
@@ -555,7 +580,7 @@ export function AlertsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-bold text-foreground">
-                          {entry.machineCode || entry.machineId}
+                          {getMachinePublicLabel(entry.machineCode || entry.machineId)}
                         </span>
                         <span className={`rounded-full border px-2.5 py-1 text-[0.64rem] font-semibold ${successClass}`}>
                           {entry.success ? "Envoye" : "Echec"}
@@ -568,7 +593,10 @@ export function AlertsPage() {
                         </span>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        {entry.machineName || entry.machineCode || entry.machineId}
+                        {getMachinePublicLabel({
+                          id: entry.machineCode || entry.machineId,
+                          name: entry.machineName,
+                        })}
                       </div>
                       <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr]">
                         <div className="rounded-lg border border-border bg-surface-3 px-3 py-2.5">
@@ -622,8 +650,10 @@ export function AlertsPage() {
                 <div key={machineHistory.machineId} className="rounded-xl border border-border bg-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-bold text-foreground">{machineHistory.machineId}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{machineHistory.machineName}</div>
+                      <div className="text-sm font-bold text-foreground">{machineHistory.machineName}</div>
+                      {machineHistory.machineSubtitle ? (
+                        <div className="mt-1 text-xs text-muted-foreground">{machineHistory.machineSubtitle}</div>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <div className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">

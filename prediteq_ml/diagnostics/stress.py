@@ -69,7 +69,7 @@ DÉTAIL DES COMPOSANTES
    utilisée par la règle MCSA (Thomson & Fenger 2001). Le plancher
    `0.5·I_rated` évite de sur-pénaliser une machine légère dont le courant
    moyen est faible mais stable en valeur absolue. Capture indirectement
-   l'effet « démarrages/arrêts répétés » d'un ascenseur à fort trafic, qui
+   l'effet « démarrages/arrêts répétés » d'un stockeur vertical à fort trafic, qui
    serait autrement invisible faute de capteur de cycles.
 
 UTILISATION

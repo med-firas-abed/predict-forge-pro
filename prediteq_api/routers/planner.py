@@ -16,11 +16,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from core.auth import CurrentUser, require_admin
+from core.cost_model import get_budget_reference_cost
 from core.decision_snapshot import (
     build_machine_decision_snapshot,
     fetch_alert_counts,
     fetch_open_task_counts,
 )
+from core.machine_labels import get_machine_public_label
 from core.supabase_client import get_supabase
 from ml.engine_manager import get_manager
 
@@ -74,7 +76,7 @@ def _load_avg_costs(machine_ids: list[str]) -> dict[str, float]:
         logger.warning("Planner cost load failed: %s", exc)
 
     return {
-        machine_id: (sum(values) / len(values) if values else 320.0)
+        machine_id: (sum(values) / len(values) if values else 0.0)
         for machine_id, values in averages.items()
     }
 
@@ -91,11 +93,11 @@ def _priority_from_band(band: str) -> str:
     return "basse"
 
 
-def _projected_cost(avg_cost: float, decision: dict) -> tuple[int, int]:
+def _projected_cost(avg_cost: float, decision: dict, task_type: str) -> tuple[int, int]:
     budget = decision.get("budget_model") or {}
     multiplier = float(budget.get("multiplier") or 1.0)
     delay_multiplier = float(budget.get("delay_multiplier") or 1.05)
-    projected = int(round(max(avg_cost, 320.0) * multiplier))
+    projected = int(round(get_budget_reference_cost(task_type, avg_cost) * multiplier))
     delayed = int(round(projected * delay_multiplier))
     return projected, delayed
 
@@ -117,8 +119,9 @@ def _build_planner_rows(machines: list[dict]) -> list[dict]:
         )
 
         task_template = decision.get("task_template") or {}
-        avg_cost = float(avg_costs.get(machine["id"], 320.0))
-        projected_cost, delayed_cost = _projected_cost(avg_cost, decision)
+        task_type = str(task_template.get("type") or "inspection")
+        avg_cost = float(avg_costs.get(machine["id"], 0.0))
+        projected_cost, delayed_cost = _projected_cost(avg_cost, decision, task_type)
 
         rows.append(
             {
@@ -184,13 +187,15 @@ def _render_markdown(rows: list[dict], focus_machine: str | None = None) -> str:
     lines.append("")
     lines.append("## 1. Résumé exécutif")
     if focus_machine:
-        lines.append(f"- Focus demande sur **{focus_machine}**.")
+        lines.append(f"- Focus demande sur **{get_machine_public_label(focus_machine)}**.")
     lines.append(f"- **{len(priority_rows)}** machine(s) à traiter rapidement.")
     lines.append(f"- **{len(watch_rows)}** machine(s) à suivre de près.")
     if uncertain_rows:
         lines.append(
             f"- **{len(uncertain_rows)}** machine(s) s'appuient sur une référence figée ou un flux incomplet : "
-            + ", ".join(row["machine_code"] for row in uncertain_rows)
+            + ", ".join(
+                get_machine_public_label(row["machine_code"], row.get("nom")) for row in uncertain_rows
+            )
             + "."
         )
     lines.append("")
@@ -201,13 +206,13 @@ def _render_markdown(rows: list[dict], focus_machine: str | None = None) -> str:
         hi = f"{round(float(row['hi']) * 100)}%" if row.get("hi") is not None else "-"
         rul = f"{row['rul_days']} j" if row.get("rul_days") is not None else "-"
         lines.append(
-            f"| {row['machine_code']} | {row['urgency_label']} | {hi} | {rul} | {row['recommended_action']} |"
+            f"| {get_machine_public_label(row['machine_code'], row.get('nom'))} | {row['urgency_label']} | {hi} | {rul} | {row['recommended_action']} |"
         )
     lines.append("")
     lines.append("## 3. Plan d'action")
     for row in rows:
         task = row["task_suggestion"]
-        lines.append(f"### {row['machine_code']} - {row['nom']}")
+        lines.append(f"### {get_machine_public_label(row['machine_code'], row.get('nom'))}")
         lines.append(f"- **État**: {row['summary']}")
         lines.append(f"- **Pourquoi**: {row['plain_reason']}")
         lines.append(f"- **Impact**: {row['impact']}")
@@ -227,6 +232,7 @@ def _render_markdown(rows: list[dict], focus_machine: str | None = None) -> str:
     total_penalty = sum(int(row["delay_penalty"]) for row in rows)
     lines.append(f"- Coût total projeté des prochaines interventions : **{total_projected} TND**")
     lines.append(f"- Surcoût potentiel si la fenêtre suivante est manquée : **{total_penalty} TND**")
+    lines.append("- Base d'estimation sans historique : main-d'oeuvre 30 DT/h + forfait pièces par type d'action.")
     if uncertain_rows:
         lines.append("")
         lines.append("## 5. Incertitudes et données")
@@ -237,7 +243,10 @@ def _render_markdown(rows: list[dict], focus_machine: str | None = None) -> str:
         for row in uncertain_rows:
             source = row["data_source"]
             updated = row["updated_at"] or "indisponible"
-            lines.append(f"- {row['machine_code']} : source `{source}`, dernière lecture `{updated}`")
+            lines.append(
+                f"- {get_machine_public_label(row['machine_code'], row.get('nom'))} : "
+                f"source `{source}`, dernière lecture `{updated}`"
+            )
     return "\n".join(lines)
 
 

@@ -6,6 +6,7 @@ import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMachines } from "@/hooks/useMachines";
 import { apiBinary, apiBlob, apiFetch, apiStream } from "@/lib/api";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { repairText } from "@/lib/repairText";
 
 interface SavedReport {
@@ -259,7 +260,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
                   <option value="all">{l("Toutes les machines", "All machines", "كل الالات")}</option>
                   {machines.map((machine) => (
                     <option key={machine.id} value={machine.id}>
-                      {machine.id} - {machine.name}
+                      {getMachinePublicLabel(machine)}
                     </option>
                   ))}
                 </select>
@@ -366,7 +367,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
                       dateStyle: "medium",
                     })}{" "}
                     · {getPeriodLabel(report.period)}
-                    {report.machine_code ? ` · ${report.machine_code}` : ""}
+                    {report.machine_code ? ` · ${getMachinePublicLabel(report.machine_code)}` : ""}
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button

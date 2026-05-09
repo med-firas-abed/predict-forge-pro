@@ -357,9 +357,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE machines;
 
 INSERT INTO machines (code, nom, region, latitude, longitude, statut, hi_courant)
 VALUES
-  ('ASC-A1', 'Ascenseur A1 — Ben Arous', 'Ben Arous', 36.7333, 10.2167, 'operational', 0.98),
-  ('ASC-B2', 'Ascenseur B2 — Sfax',      'Sfax',      34.7400, 10.7600, 'degraded',    0.48),
-  ('ASC-C3', 'Ascenseur C3 — Sousse',     'Sousse',    35.8333, 10.6000, 'critical',    0.18)
+  ('ASC-A1', 'Stockeur vertical rotatif A1 — Ben Arous', 'Ben Arous', 36.7333, 10.2167, 'operational', 0.96),
+  ('ASC-B2', 'Stockeur vertical rotatif B2 — Sfax',      'Sfax',      34.7400, 10.7600, 'degraded',    0.62),
+  ('ASC-C3', 'Stockeur vertical rotatif C3 — Sousse',    'Sousse',    35.8333, 10.6000, 'critical',    0.10)
 ON CONFLICT (code) DO NOTHING;
 
 -- Default thresholds (single row)

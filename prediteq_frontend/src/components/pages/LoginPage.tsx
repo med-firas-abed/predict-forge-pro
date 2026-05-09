@@ -91,9 +91,9 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
           />
           <p className="text-sm text-muted-foreground mt-3 text-center">
             {lang === "fr"
-              ? "SaaS de maintenance prédictive propulsé par l'IA"
+              ? "Plateforme PrediTeq de maintenance prédictive"
               : lang === "en"
-                ? "AI-Powered Predictive Maintenance SaaS"
+                ? "PrediTeq predictive maintenance platform"
                 : "منصة SaaS للصيانة التنبؤية بالذكاء الاصطناعي"}
           </p>
         </div>
@@ -113,9 +113,9 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {lang === "fr"
-                  ? "Accédez au SaaS de maintenance prédictive"
+                  ? "Accédez à votre espace PrediTeq après validation du compte"
                   : lang === "en"
-                    ? "Access the AI-powered predictive maintenance SaaS"
+                    ? "Access your PrediTeq workspace once the account is approved"
                     : "الوصول إلى منصة SaaS للصيانة التنبؤية"}
               </p>
             </div>
@@ -210,9 +210,9 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
         </div>
 
         <div className="flex items-center justify-center gap-6 mt-6">
-          <span className="trust-badge"><Shield className="w-3 h-3" /> SSL</span>
-          <span className="trust-badge"><Lock className="w-3 h-3" /> AES-256</span>
-          <span className="trust-badge"><Award className="w-3 h-3" /> ISO 27001</span>
+          <span className="trust-badge"><Shield className="w-3 h-3" /> {lang === "fr" ? "Compte approuvé" : lang === "en" ? "Approved account" : "حساب معتمد"}</span>
+          <span className="trust-badge"><Lock className="w-3 h-3" /> {lang === "fr" ? "Accès par machine" : lang === "en" ? "Machine-scoped access" : "وصول مرتبط بالآلة"}</span>
+          <span className="trust-badge"><Award className="w-3 h-3" /> {lang === "fr" ? "Rôles admin / user" : lang === "en" ? "Admin / user roles" : "أدوار مسؤول / مستخدم"}</span>
         </div>
       </div>
     </div>

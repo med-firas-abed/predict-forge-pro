@@ -1,7 +1,7 @@
 """
-Step 6 — Evaluation & Visualization
-All metrics and plots for PFE jury.
-Output: outputs/metrics.json + 5 plots in outputs/plots/
+Étape 6 — Évaluation et visualisation
+Toutes les métriques et tous les graphiques pour le jury PFE.
+Sortie : outputs/metrics.json + 5 graphiques dans outputs/plots/
 """
 
 import numpy as np
@@ -59,12 +59,12 @@ ZONE_COLORS = {
 }
 PROFILE_COLORS = {
     'A_linear':       '#3498db',
-    'B_exponential':  '#9b59b6',
+    'B_quadratic':    '#9b59b6',
     'C_stepwise':     '#e67e22',
     'D_noisy_linear': '#e74c3c',
 }
 
-# ─── Plot 1 — HI curves for all profiles ──────────────────────────────────────
+# ─── Plot 1 — Courbes HI pour tous les profils ───────────────────────────────
 
 def plot_hi_curves(hi_df):
     fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharex=False)
@@ -93,24 +93,24 @@ def plot_hi_curves(hi_df):
         ax.axhline(0.6, color='#f1c40f', linewidth=0.8, linestyle='--')
         ax.axhline(0.3, color='#e74c3c', linewidth=0.8, linestyle='--')
 
-        ax.set_title(f'Profile {prof}', fontweight='bold')
-        ax.set_xlabel('Time (hours)')
-        ax.set_ylabel('Health Index')
+        ax.set_title(f'Profil {prof}', fontweight='bold')
+        ax.set_xlabel('Temps (heures)')
+        ax.set_ylabel('Indice de santé')
         ax.set_ylim(0, 1)
 
-    fig.suptitle('Health Index Curves — All Profiles', fontsize=14, fontweight='bold')
+    fig.suptitle('Courbes d’indice de santé — Tous les profils', fontsize=14, fontweight='bold')
     plt.tight_layout()
     path = os.path.join(PLOTS_DIR, 'plot1_hi_curves.png')
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f'  Saved: {path}')
+    print(f'  Sauvegardé : {path}')
 
-# ─── Plot 2 — Predicted vs True RUL ──────────────────────────────────────────
+# ─── Plot 2 — RUL prédit vs RUL réel ─────────────────────────────────────────
 
 def plot_rul_scatter(preds_df):
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-    # Left: all profiles colored
+    # Gauche : tous les profils colorés
     ax = axes[0]
     for prof, color in PROFILE_COLORS.items():
         mask = preds_df['profile'] == prof
@@ -123,13 +123,13 @@ def plot_rul_scatter(preds_df):
         )
 
     lim = max(preds_df['rul_true_days'].max(), preds_df['rul_pred_days'].max()) * 1.05
-    ax.plot([0, lim], [0, lim], 'k--', linewidth=1.5, label='Perfect prediction')
-    ax.set_xlabel('True RUL (days)')
-    ax.set_ylabel('Predicted RUL (days)')
-    ax.set_title('Predicted vs True RUL', fontweight='bold')
+    ax.plot([0, lim], [0, lim], 'k--', linewidth=1.5, label='Prédiction parfaite')
+    ax.set_xlabel('RUL réel (jours)')
+    ax.set_ylabel('RUL prédit (jours)')
+    ax.set_title('RUL prédit vs RUL réel', fontweight='bold')
     ax.legend(markerscale=3, fontsize=9)
 
-    # Right: with CI shading per profile
+    # Droite : avec zone d'intervalle de confiance par profil
     ax2 = axes[1]
     for prof, color in PROFILE_COLORS.items():
         mask = preds_df['profile'] == prof
@@ -149,25 +149,25 @@ def plot_rul_scatter(preds_df):
         )
 
     ax2.plot([0, lim], [0, lim], 'k--', linewidth=1.5)
-    ax2.set_xlabel('True RUL (days)')
-    ax2.set_ylabel('Predicted RUL (days)')
-    ax2.set_title('Predicted vs True RUL with CI', fontweight='bold')
+    ax2.set_xlabel('RUL réel (jours)')
+    ax2.set_ylabel('RUL prédit (jours)')
+    ax2.set_title('RUL prédit vs RUL réel avec IC', fontweight='bold')
     ax2.legend(markerscale=3, fontsize=9)
 
     rmse = np.sqrt(mean_squared_error(preds_df['rul_true_days'], preds_df['rul_pred_days']))
     r2   = r2_score(preds_df['rul_true_days'], preds_df['rul_pred_days'])
-    fig.suptitle(f'RUL Regression  |  RMSE={rmse:.2f} days  R²={r2:.3f}',
+    fig.suptitle(f'Régression RUL  |  RMSE={rmse:.2f} jours  R²={r2:.3f}',
                  fontsize=13, fontweight='bold')
     plt.tight_layout()
     path = os.path.join(PLOTS_DIR, 'plot2_rul_scatter.png')
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f'  Saved: {path}')
+    print(f'  Sauvegardé : {path}')
 
-# ─── Plot 3 — Anomaly timeline ────────────────────────────────────────────────
+# ─── Plot 3 — Chronologie des anomalies ───────────────────────────────────────
 
 def plot_anomaly_timeline(scores_df, hi_df):
-    # Pick one representative trajectory per profile
+    # Une trajectoire représentative par profil
     fig, axes = plt.subplots(4, 1, figsize=(14, 12), sharex=False)
     profiles  = sorted(scores_df['profile'].unique())
 
@@ -181,32 +181,32 @@ def plot_anomaly_timeline(scores_df, hi_df):
 
         ax2 = ax.twinx()
         ax.plot(t_h,  sc['score_anomaly'], color='#e74c3c',
-                alpha=0.6, linewidth=0.8, label='IF anomaly score')
+                alpha=0.6, linewidth=0.8, label='Score d’anomalie IF')
         ax.plot(t_h,  sc['rms_flag'] * sc['score_anomaly'].max(),
                 color='#3498db', alpha=0.5, linewidth=0.8,
-                linestyle='--', label='RMS flag')
+                linestyle='--', label='Seuil RMS')
         ax2.plot(t_hi, hi['hi_smooth'], color='#2ecc71',
-                 linewidth=1.5, label='HI smooth')
+                 linewidth=1.5, label='HI lissé')
 
-        ax.set_ylabel('Anomaly score', color='#e74c3c')
-        ax2.set_ylabel('Health Index', color='#2ecc71')
+        ax.set_ylabel('Score d’anomalie', color='#e74c3c')
+        ax2.set_ylabel('Indice de santé', color='#2ecc71')
         ax2.set_ylim(0, 1)
-        ax.set_title(f'Profile {prof} — Traj {tid}', fontweight='bold')
-        ax.set_xlabel('Time (hours)')
+        ax.set_title(f'Profil {prof} — Trajectoire {tid}', fontweight='bold')
+        ax.set_xlabel('Temps (heures)')
 
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc='upper right')
 
-    fig.suptitle('Anomaly Timeline: IF Score vs RMS Threshold vs HI',
+    fig.suptitle('Chronologie des anomalies : score IF vs seuil RMS vs HI',
                  fontsize=13, fontweight='bold')
     plt.tight_layout()
     path = os.path.join(PLOTS_DIR, 'plot3_anomaly_timeline.png')
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f'  Saved: {path}')
+    print(f'  Sauvegardé : {path}')
 
-# ─── Plot 4 — SHAP summary ────────────────────────────────────────────────────
+# ─── Plot 4 — Résumé SHAP ─────────────────────────────────────────────────────
 
 def plot_shap(rf_model, hi_df, train_ids, feats_df=None):
     print('  Computing SHAP values ...')
@@ -259,7 +259,7 @@ def plot_shap(rf_model, hi_df, train_ids, feats_df=None):
             samples.append(row)
 
     if len(samples) == 0:
-        print('  No SHAP samples available — skipping.')
+        print('  Aucun échantillon SHAP disponible — étape ignorée.')
         return
 
     X_shap = np.array(samples[:100])  # limit to 100 for speed
@@ -274,12 +274,12 @@ def plot_shap(rf_model, hi_df, train_ids, feats_df=None):
         feature_names=feat_names,
         show=False, max_display=17
     )
-    plt.title('SHAP Feature Importance — RUL Prediction', fontweight='bold')
+    plt.title('Importance des variables SHAP — prédiction du RUL', fontweight='bold')
     plt.tight_layout()
     path = os.path.join(PLOTS_DIR, 'plot4_shap_summary.png')
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f'  Saved: {path}')
+    print(f'  Sauvegardé : {path}')
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
@@ -294,18 +294,18 @@ if __name__ == '__main__':
     ]
 
     # ── Stage 1: Load small files + scores (for IF metrics & plots 1-3) ──────
-    print('Loading hi / preds / model ...')
+    print('Chargement de hi / prédictions / modèle ...')
     hi_df     = pd.read_csv(IN_HI)
     preds_df  = pd.read_csv(IN_PREDS)
     rf_model  = joblib.load(IN_RF)
 
     train_ids, test_ids = get_train_test_ids(hi_df['trajectory_id'].unique())
 
-    print('Loading anomaly_scores.csv ...')
+    print('Chargement de anomaly_scores.csv ...')
     scores_df = pd.read_csv(IN_SCORES, low_memory=False)
 
     # ── IF metrics ────────────────────────────────────────────────────────────
-    print('\n-- Anomaly detection metrics --')
+    print('\n-- Métriques de détection d’anomalies --')
     df_test_scores = scores_df[scores_df['trajectory_id'].isin(test_ids)]
     y_true = (df_test_scores['simulated_hi'] < 0.6).astype(int).values
     y_if   = df_test_scores['if_flag'].values
@@ -326,17 +326,17 @@ if __name__ == '__main__':
     and_rec = float(recall_score(y_true,    y_and, zero_division=0))
     and_f1  = float(f1_score(y_true,        y_and, zero_division=0))
 
-    print(f'  IF only   — Precision:{if_prec:.3f} Recall:{if_rec:.3f} F1:{if_f1:.3f}')
-    print(f'  RMS only  — Precision:{rms_prec:.3f} Recall:{rms_rec:.3f} F1:{rms_f1:.3f}')
-    print(f'  Hybrid AND— Precision:{and_prec:.3f} Recall:{and_rec:.3f} F1:{and_f1:.3f}')
-    print(f'  Hybrid wt — Precision:{hyb_prec:.3f} Recall:{hyb_rec:.3f} F1:{hyb_f1:.3f}')
+    print(f'  IF seul   — Précision:{if_prec:.3f} Rappel:{if_rec:.3f} F1:{if_f1:.3f}')
+    print(f'  RMS seul  — Précision:{rms_prec:.3f} Rappel:{rms_rec:.3f} F1:{rms_f1:.3f}')
+    print(f'  Hybride ET— Précision:{and_prec:.3f} Rappel:{and_rec:.3f} F1:{and_f1:.3f}')
+    print(f'  Hybride p. — Précision:{hyb_prec:.3f} Rappel:{hyb_rec:.3f} F1:{hyb_f1:.3f}')
 
     # ── RUL metrics ───────────────────────────────────────────────────────────
-    print('\n-- RUL metrics --')
+    print('\n-- Métriques RUL --')
     rmse = float(np.sqrt(mean_squared_error(preds_df['rul_true_days'], preds_df['rul_pred_days'])))
     mae  = float(mean_absolute_error(preds_df['rul_true_days'], preds_df['rul_pred_days']))
     r2   = float(r2_score(preds_df['rul_true_days'], preds_df['rul_pred_days']))
-    print(f'  RMSE={rmse:.3f} days | MAE={mae:.3f} days | R2={r2:.4f}')
+    print(f'  RMSE={rmse:.3f} jours | MAE={mae:.3f} jours | R2={r2:.4f}')
 
     # ── Charger résumé CV (écrit par step5) ───────────────────────────────────
     cv_path = os.path.join(BASE_DIR, 'outputs', 'rul_cv_scores.json')
@@ -419,14 +419,14 @@ if __name__ == '__main__':
     print(f'\nOK: Metrics saved -> {OUT_METRICS}')
 
     # ── Plots 1-3 (use hi_df, preds_df, scores_df) ───────────────────────────
-    print('\nGenerating plots ...')
-    print('  Plot 1 — HI curves ...')
+    print('\nGénération des graphiques ...')
+    print('  Graphique 1 — Courbes HI ...')
     plot_hi_curves(hi_df)
 
-    print('  Plot 2 — RUL scatter ...')
+    print('  Graphique 2 — Nuage RUL ...')
     plot_rul_scatter(preds_df)
 
-    print('  Plot 3 — Anomaly timeline ...')
+    print('  Graphique 3 — Chronologie des anomalies ...')
     plot_anomaly_timeline(scores_df, hi_df)
 
     # Free scores_df (largest so far) before loading feats_df
@@ -434,13 +434,13 @@ if __name__ == '__main__':
     gc.collect()
 
     # ── Stage 2: Load features for SHAP & sensitivity (plots 4-5) ────────────
-    print('  Loading features.csv for SHAP ...')
+    print('  Chargement de features.csv pour SHAP ...')
     feats_df  = pd.read_csv(IN_FEATS, low_memory=False)
 
-    print('  Plot 4 — SHAP ...')
+    print('  Graphique 4 — SHAP ...')
     plot_shap(rf_model, hi_df, train_ids, feats_df=feats_df)
 
-    print('  Plot 5 — Sensitivity heatmap ...')
+    print('  Graphique 5 — Carte de sensibilité ...')
 
     # Inline sensitivity (no separate module needed)
     from sklearn.ensemble import IsolationForest as IFModel
@@ -469,19 +469,24 @@ if __name__ == '__main__':
 
     res_df = pd.DataFrame(sens_results).set_index('contamination')
     fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    title_map = {
+        'precision': 'Précision',
+        'recall': 'Rappel',
+        'false_positives': 'Faux positifs',
+    }
     for ax, col in zip(axes, ['precision', 'recall', 'false_positives']):
         vals = res_df[[col]].T
         sns.heatmap(vals, annot=True,
                     fmt='.3f' if col != 'false_positives' else '.0f',
                     cmap='RdYlGn' if col != 'false_positives' else 'RdYlGn_r',
                     ax=ax, linewidths=0.5)
-        ax.set_title(col.replace('_', ' ').title(), fontweight='bold')
-        ax.set_xlabel('Contamination')
-    fig.suptitle('IF Sensitivity Analysis', fontsize=13, fontweight='bold')
+        ax.set_title(title_map[col], fontweight='bold')
+        ax.set_xlabel('Taux de contamination')
+    fig.suptitle('Analyse de sensibilité de l’Isolation Forest', fontsize=13, fontweight='bold')
     plt.tight_layout()
     path = os.path.join(PLOTS_DIR, 'plot5_sensitivity_heatmap.png')
     plt.savefig(path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f'  Saved: {path}')
+    print(f'  Sauvegardé : {path}')
 
-    print(f'\nOK: Step 6 done - all plots in {PLOTS_DIR}')
+    print(f'\nOK: Étape 6 terminée - tous les graphiques sont dans {PLOTS_DIR}')

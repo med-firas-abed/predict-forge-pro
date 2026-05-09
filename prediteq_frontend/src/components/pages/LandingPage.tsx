@@ -101,7 +101,7 @@ const T = {
   cases: {
     title: { fr: "Nos études de cas IA", en: "All our AI case studies" },
     items: [
-      { tag: { fr: "FABRICATION", en: "MANUFACTURING" }, title: { fr: "Maintenance Prédictive d'Ascenseurs — Usine Ben Arous", en: "Elevator Predictive Maintenance — Ben Arous Factory" } },
+      { tag: { fr: "FABRICATION", en: "MANUFACTURING" }, title: { fr: "Maintenance Prédictive de Stockeurs Verticaux — Usine Ben Arous", en: "Vertical Storage Carousel Predictive Maintenance — Ben Arous Factory" } },
       { tag: { fr: "PLANIFICATION", en: "PLANNING" }, title: { fr: "Calendrier de Maintenance — Planification Intelligente", en: "Maintenance Calendar — Smart Scheduling" } },
       { tag: { fr: "RAPPORTS IA", en: "AI REPORTS" }, title: { fr: "Rapports de Maintenance par IA — Analyses Automatisées", en: "AI-Powered Maintenance Reports — Automated Insights" } },
     ],

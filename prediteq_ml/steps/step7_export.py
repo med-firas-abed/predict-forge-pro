@@ -126,7 +126,7 @@ def export_mqtt_schema():
     schema = {
         "topic":       "prediteq/{machine_id}/sensors",
         "frequency":   "1 Hz",
-        "description": "Payload capteurs temps réel du système de surveillance ascenseur",
+        "description": "Payload capteurs temps réel du système de surveillance moteur d'un stockeur vertical rotatif",
         "payload": {
             "machine_id":   {"type": "string",  "example": "AscSITI1",
                              "description": "Identifiant unique machine"},

@@ -7,6 +7,13 @@ This file records the current known-good deployment wiring so local, GitHub, Ver
 - Frontend: `https://prediteq-saas.vercel.app`
 - Backend: `https://prediteq-saas.onrender.com`
 
+## Last Verified State
+
+- Local QA manually re-verified on `2026-05-09`
+- Deployed smoke manually re-verified on `2026-05-09`
+- Verification command: `cd prediteq_frontend && npm run smoke:deployed`
+- Result on `2026-05-09`: passed against the Vercel and Render live URLs above
+
 ## Frontend Environment Variables
 
 These are the values or meanings the Vercel deployment should keep:
@@ -54,6 +61,7 @@ What they cover:
 - The Render service currently responds on `https://prediteq-saas.onrender.com` even though `render.yaml` still names the service `prediteq-api`. Do not change the live URL assumption in Vercel unless Render is updated first.
 - The deployed smoke script lives in [prediteq_frontend/scripts/smoke-deployed.mjs](./prediteq_frontend/scripts/smoke-deployed.mjs).
 - If GitHub Actions browser tests run without a local `.env`, the workflow now injects safe placeholder Supabase values so the app can boot in CI.
+- The current manual freeze package is documented in [docs/FINAL_RELEASE_CHECKLIST.md](./docs/FINAL_RELEASE_CHECKLIST.md) and [docs/HANDOFF_RUNBOOK.md](./docs/HANDOFF_RUNBOOK.md).
 
 ## Rollback Plan
 

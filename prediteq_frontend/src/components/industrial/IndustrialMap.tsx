@@ -6,6 +6,7 @@ import { STATUS_CONFIG, type Machine } from "@/data/machines";
 import { useApp } from "@/contexts/AppContext";
 import { useMachines } from "@/hooks/useMachines";
 import type { PredictiveInsight } from "@/hooks/useFleetPredictiveInsights";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 
 type MapMode = "status" | "predictive";
 type TileMode = "roadmap" | "satellite";
@@ -124,8 +125,8 @@ function makePopupHTML(
 
   return `<div style="font-family:Inter,system-ui,sans-serif;overflow:hidden;border-radius:16px;min-width:290px;">
     <div style="background:linear-gradient(135deg, ${accentHex}, ${accentHex}cc);padding:14px 16px 12px;">
-      <div style="font-size:.96rem;font-weight:700;color:#fff;">${escapeHTML(machine.id)}</div>
-      <div style="font-size:.74rem;color:rgba(255,255,255,.85);margin-top:2px;">${escapeHTML(machine.name)} - ${escapeHTML(machine.city)}</div>
+      <div style="font-size:.96rem;font-weight:700;color:#fff;">${escapeHTML(getMachinePublicLabel(machine))}</div>
+      <div style="font-size:.74rem;color:rgba(255,255,255,.85);margin-top:2px;">${escapeHTML(machine.city || machine.loc)}</div>
     </div>
     <div style="padding:14px 16px;background:#fff;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">

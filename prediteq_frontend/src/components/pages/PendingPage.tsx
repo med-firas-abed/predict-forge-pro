@@ -1,5 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { Clock, Sun, Moon, Globe } from "lucide-react";
 
 interface PendingPageProps {
@@ -12,7 +13,7 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
 
   const pendingUser = currentUser || allUsers.filter(u => u.status === "pending").sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   const assignedMachineLabel = pendingUser?.machineId
-    ? [pendingUser.machineCode, pendingUser.machineName].filter(Boolean).join(" - ") || pendingUser.machineId
+    ? getMachinePublicLabel({ code: pendingUser.machineCode, name: pendingUser.machineName })
     : null;
 
   return (

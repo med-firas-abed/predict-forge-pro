@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
 import { apiFetch } from "@/lib/api";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { Sun, Moon, Globe, Shield, Lock, Award, UserPlus, Eye, EyeOff } from "lucide-react";
 
 interface SignupPageProps {
@@ -257,9 +258,9 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
           />
           <p className="text-sm text-muted-foreground mt-3 text-center">
             {lang === "fr"
-              ? "SaaS de maintenance prédictive propulsé par l'IA"
+              ? "Plateforme PrediTeq de maintenance prédictive"
               : lang === "en"
-                ? "AI-Powered Predictive Maintenance SaaS"
+                ? "PrediTeq predictive maintenance platform"
                 : "منصة SaaS للصيانة التنبؤية بالذكاء الاصطناعي"}
           </p>
         </div>
@@ -284,11 +285,17 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                   : t("auth.createAccount")}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {lang === "fr"
-                  ? "Rejoignez le SaaS de maintenance prédictive"
-                  : lang === "en"
-                    ? "Join the AI-powered predictive maintenance SaaS"
-                    : "انضم إلى منصة SaaS للصيانة التنبؤية"}
+                {isAdminCreateMode
+                  ? lang === "fr"
+                    ? "Créer un compte qui reviendra dans le circuit d'administration"
+                    : lang === "en"
+                      ? "Create an account that returns to the admin workflow"
+                      : "إنشاء حساب يعود إلى مسار الإدارة"
+                  : lang === "fr"
+                    ? "Demandez l'accès : le compte restera en attente jusqu'à validation"
+                    : lang === "en"
+                      ? "Request access: the account stays pending until approval"
+                      : "اطلب الوصول: يبقى الحساب معلقًا حتى الموافقة"}
               </p>
             </div>
 
@@ -452,7 +459,7 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                     ) : (
                       machines.map((machine) => (
                         <option key={machine.id} value={machine.id}>
-                          {machine.code} - {machine.nom}
+                          {getMachinePublicLabel({ id: machine.code, name: machine.nom })}
                         </option>
                       ))
                     )}
@@ -504,9 +511,9 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
         </div>
 
         <div className="flex items-center justify-center gap-6 mt-6">
-          <span className="trust-badge"><Shield className="w-3 h-3" /> SSL</span>
-          <span className="trust-badge"><Lock className="w-3 h-3" /> AES-256</span>
-          <span className="trust-badge"><Award className="w-3 h-3" /> ISO 27001</span>
+          <span className="trust-badge"><Shield className="w-3 h-3" /> {lang === "fr" ? "Validation admin" : lang === "en" ? "Admin approval" : "موافقة المسؤول"}</span>
+          <span className="trust-badge"><Lock className="w-3 h-3" /> {lang === "fr" ? "Affectation machine" : lang === "en" ? "Machine assignment" : "تعيين الآلة"}</span>
+          <span className="trust-badge"><Award className="w-3 h-3" /> {lang === "fr" ? "Rôles admin / user" : lang === "en" ? "Admin / user roles" : "أدوار مسؤول / مستخدم"}</span>
         </div>
       </div>
     </div>

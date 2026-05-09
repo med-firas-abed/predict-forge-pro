@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { toast } from "sonner";
 import { Trash2, UserCheck, UserX, Users } from "lucide-react";
 
@@ -11,8 +12,7 @@ export function AdminUsersPage() {
 
   const getMachineName = (user: { machineId?: string; machineCode?: string; machineName?: string }) => {
     if (!user.machineId) return "Toutes les machines";
-    const label = [user.machineCode, user.machineName].filter(Boolean).join(" - ");
-    return label || user.machineId;
+    return getMachinePublicLabel({ code: user.machineCode, name: user.machineName });
   };
 
   // Confirmation + appel deleteUser. Côté backend : refuse self-delete et

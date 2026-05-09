@@ -1,5 +1,6 @@
 import type { DemoScenario, Machine } from "@/data/machines";
 import { resolveDemoFlag } from "@/lib/appMode";
+import { repairText } from "@/lib/repairText";
 
 export type DemoStoryState = "stable" | "watch" | "critical";
 
@@ -15,6 +16,8 @@ export interface DemoScenarioFactor {
   key: DemoScenarioFactorKey;
   value: number;
 }
+
+type Localize = (fr: string, en: string, ar: string) => string;
 
 const SURFACE_DEMO_METADATA = resolveDemoFlag(
   import.meta.env.VITE_SURFACE_PFE_DEMO_METADATA,
@@ -125,4 +128,171 @@ export function getDemoScenarioFactors(
     { key: "load_variability", value: clampUnitValue(scenario.load_variability) },
     { key: "overload_bias", value: clampUnitValue(scenario.overload_bias) },
   ];
+}
+
+function getAverageLoadKg(scenario?: DemoScenario | null) {
+  if (!scenario) return null;
+  if (Array.isArray(scenario.load_band_kg) && scenario.load_band_kg.length === 2) {
+    const [minLoad, maxLoad] = scenario.load_band_kg;
+    if (Number.isFinite(minLoad) && Number.isFinite(maxLoad)) {
+      return (Number(minLoad) + Number(maxLoad)) / 2;
+    }
+  }
+  return typeof scenario.base_load_kg === "number" && Number.isFinite(scenario.base_load_kg)
+    ? scenario.base_load_kg
+    : null;
+}
+
+function getScenarioEnvironmentScore(scenario?: DemoScenario | null) {
+  return Math.max(
+    clampUnitValue(scenario?.thermal_stress),
+    clampUnitValue(scenario?.humidity_stress),
+  );
+}
+
+function ensureTrailingPeriod(text: string) {
+  const trimmed = repairText(text).trim();
+  if (!trimmed) return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+export function describeAudienceScenarioUsageCase(
+  scenario: DemoScenario | null | undefined,
+  localize: Localize,
+) {
+  const explicit = repairText(scenario?.usage_case ?? "");
+  if (explicit) {
+    return ensureTrailingPeriod(explicit);
+  }
+
+  if (!scenario) {
+    return localize(
+      "Contexte d'exploitation non detaille pour cette machine.",
+      "Operating context is not detailed for this machine.",
+      "Operating context is not detailed for this machine.",
+    );
+  }
+
+  const cycles = typeof scenario.cycles_per_day === "number" ? scenario.cycles_per_day : null;
+  const averageLoad = getAverageLoadKg(scenario);
+  const environmentScore = getScenarioEnvironmentScore(scenario);
+
+  const cadenceLabel =
+    cycles != null && cycles >= 700
+      ? localize("Cadence soutenue", "Sustained cadence", "Sustained cadence")
+      : cycles != null && cycles >= 420
+        ? localize("Cadence reguliere", "Regular cadence", "Regular cadence")
+        : localize("Cadence moderee", "Moderate cadence", "Moderate cadence");
+  const loadLabel =
+    averageLoad != null && averageLoad >= 200
+      ? localize("charges lourdes", "heavy loads", "heavy loads")
+      : averageLoad != null && averageLoad >= 100
+        ? localize("charges mixtes", "mixed loads", "mixed loads")
+        : localize("charges legeres", "light loads", "light loads");
+  const environmentLabel =
+    environmentScore >= 0.65
+      ? localize("ambiance exigeante", "demanding environment", "demanding environment")
+      : environmentScore >= 0.35
+        ? localize("ambiance moderee", "moderate environment", "moderate environment")
+        : localize("ambiance maitrisee", "controlled environment", "controlled environment");
+
+  return `${cadenceLabel}, ${loadLabel} et ${environmentLabel}.`;
+}
+
+export function describeAudienceScenarioExplanation(
+  scenario: DemoScenario | null | undefined,
+  localize: Localize,
+) {
+  if (!scenario) {
+    return localize(
+      "Cette vue relie le contexte d'usage simule a l'evolution du HI et de la marge RUL.",
+      "This view links the simulated operating context to HI drift and remaining-life margin.",
+      "This view links the simulated operating context to HI drift and remaining-life margin.",
+    );
+  }
+
+  const explicit = repairText(scenario.explanation ?? "");
+  const wear = clampUnitValue(scenario.wear_level);
+  const overload = clampUnitValue(scenario.overload_bias);
+  const intensity = clampUnitValue(scenario.usage_intensity);
+  const environmentScore = getScenarioEnvironmentScore(scenario);
+
+  const derivedLead =
+    wear >= 0.75
+      ? localize(
+          "Le scenario part d'une usure deja avancee",
+          "The scenario starts from already advanced wear",
+          "The scenario starts from already advanced wear",
+        )
+      : wear >= 0.4
+        ? localize(
+            "Le scenario part d'une usure intermediaire",
+            "The scenario starts from intermediate wear",
+            "The scenario starts from intermediate wear",
+          )
+        : localize(
+            "Le scenario part d'une usure encore contenue",
+            "The scenario starts from still-contained wear",
+            "The scenario starts from still-contained wear",
+          );
+  const overloadLead =
+    overload >= 0.45
+      ? localize(
+          "avec des pointes de charge repetees",
+          "with repeated load spikes",
+          "with repeated load spikes",
+        )
+      : overload >= 0.2
+        ? localize(
+            "avec quelques pointes de charge",
+            "with occasional load spikes",
+            "with occasional load spikes",
+          )
+        : localize(
+            "sans surcharge marquee",
+            "without marked overload",
+            "without marked overload",
+          );
+  const environmentLead =
+    environmentScore >= 0.65
+      ? localize(
+          "dans un environnement plus agressif",
+          "in a harsher environment",
+          "in a harsher environment",
+        )
+      : environmentScore >= 0.35
+        ? localize(
+            "dans un environnement modere",
+            "in a moderate environment",
+            "in a moderate environment",
+          )
+        : localize(
+            "dans un environnement plutot stable",
+            "in a mostly stable environment",
+            "in a mostly stable environment",
+          );
+  const intensityTail =
+    intensity >= 0.75
+      ? localize(
+          "Cette combinaison accelere la derive HI et raccourcit plus vite la marge RUL pendant la simulation.",
+          "This combination accelerates HI drift and shortens the RUL margin faster during simulation.",
+          "This combination accelerates HI drift and shortens the RUL margin faster during simulation.",
+        )
+      : intensity >= 0.45
+        ? localize(
+            "Cette combinaison maintient une surveillance active du HI et de la marge RUL.",
+            "This combination keeps HI and RUL margin under active watch.",
+            "This combination keeps HI and RUL margin under active watch.",
+          )
+        : localize(
+            "Cette combinaison laisse une evolution plus progressive du HI et de la marge RUL.",
+            "This combination keeps HI and RUL margin on a more gradual path.",
+            "This combination keeps HI and RUL margin on a more gradual path.",
+          );
+
+  const baseText =
+    explicit ||
+    `${derivedLead}, ${overloadLead} et ${environmentLead}.`;
+
+  return `${ensureTrailingPeriod(baseText)} ${intensityTail}`;
 }

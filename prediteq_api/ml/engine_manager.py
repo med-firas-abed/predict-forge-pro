@@ -205,7 +205,7 @@ class EngineManager:
         self.last_raw: dict[str, dict] = {}  # raw sensor values per machine
         self.previous_zones: dict[str, str] = {}
 
-        # Rolling sensor averages (1 elevator cycle = 44 seconds)
+        # Moyennes glissantes capteurs (1 cycle machine = 44 secondes)
         self._raw_history: dict[str, deque] = {}
         # Sensor time-series for dashboard charts (last 360 points ≈ 6h at 1/min)
         self.sensor_history: dict[str, deque] = {}
@@ -411,7 +411,7 @@ class EngineManager:
                 result_payload['source'] = raw_payload.get('source', 'runtime_ingest')
                 self.last_results[code] = result_payload
 
-            # Rolling average over 1 elevator cycle (44s) to smooth out
+            # Moyenne glissante sur 1 cycle machine (44 s) pour lisser
             # ascent/descent/pause phases
             if code not in self._raw_history:
                 self._raw_history[code] = deque(maxlen=44)
@@ -454,7 +454,7 @@ class EngineManager:
             if raw_payload.get('status') is not None:
                 self.last_raw[code]['status'] = str(raw_payload['status'])
 
-            # Count elevator cycles (ascent = power_kw > 0.9 kW)
+            # Compter les cycles machine (montée = power_kw > 0.9 kW)
             is_ascent = raw_payload['power_kw'] > 0.9
             was_ascent = self._in_ascent.get(code, False)
             if was_ascent and not is_ascent:  # ascent just ended = 1 cycle
@@ -520,7 +520,7 @@ class EngineManager:
     # respect to the RF model — no impact on predictions.
 
     def get_cycles_per_day(self, code: str) -> float | None:
-        """Returns observed elevator cycles/day for the given machine.
+        """Returns observed machine cycles/day for the given machine.
 
         Priority order:
           1. Simulator override (set via set_cycles_per_day_override) — used

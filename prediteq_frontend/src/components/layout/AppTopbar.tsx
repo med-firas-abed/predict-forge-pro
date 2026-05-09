@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAlertes } from "@/hooks/useAlertes";
 import { useMachines } from "@/hooks/useMachines";
 import { getActiveAlertCaseCount } from "@/lib/alertsSummary";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 
 interface AppTopbarProps {
   title: string;
@@ -36,7 +37,7 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
 
   const searchOptions = useMemo(() => {
     const machineOptions = machines.map((machine) => ({
-      label: `${machine.id} - ${machine.name}`,
+      label: getMachinePublicLabel(machine),
       keywords: [machine.id, machine.name, machine.city, machine.loc]
         .filter(Boolean)
         .map((value) => String(value).toLowerCase()),
@@ -50,7 +51,7 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
       { label: t("nav.maintenance"), keywords: ["maintenance", "gmao", "tache", "intervention"], route: "/maintenance", group: L("g.pages") },
       { label: t("nav.alerts"), keywords: ["alerte", "alertes", "alerts", "notification", "anomalie"], route: "/alertes", group: L("g.pages") },
       { label: t("nav.ia"), keywords: ["rapport", "report", "agent", "planner", "ia", "ai", "pdf", "plan"], route: "/ia", group: L("g.pages") },
-      { label: t("nav.machines"), keywords: ["machine", "machines", "ascenseur", "parc"], route: "/machines", group: L("g.pages") },
+      { label: t("nav.machines"), keywords: ["machine", "machines", "stockeur", "carrousel", "parc"], route: "/machines", group: L("g.pages") },
     ];
 
     return [...machineOptions, ...pageOptions];

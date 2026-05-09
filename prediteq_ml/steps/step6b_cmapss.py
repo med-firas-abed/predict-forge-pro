@@ -375,7 +375,7 @@ if __name__ == '__main__':
         'note': (
             'Pipeline identique à Prediteq — détection d\'anomaly IF, '
             'normalisation HI, régresseur RF avec fenêtres de rétrospection. '
-            'Confirme que le pipeline est générique au-delà du contexte ascenseur.'
+            'Confirme que le pipeline est générique au-delà du contexte du stockeur vertical rotatif.'
         )
     }
     with open(OUT_METRICS, 'w') as f:

@@ -22,6 +22,8 @@ import {
   type PredictiveInsight,
 } from "@/hooks/useFleetPredictiveInsights";
 import { apiFetch } from "@/lib/api";
+import { getBudgetReferenceCost, LABOR_RATE_PER_HOUR } from "@/lib/costModel";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { repairText } from "@/lib/repairText";
 
 interface RiskEntry {
@@ -142,6 +144,10 @@ function formatCurrency(value: number | null) {
   return `${Math.round(value).toLocaleString("fr-FR")} TND`;
 }
 
+function formatMachineLabel(machineCode: string | null | undefined, machineName?: string | null) {
+  return getMachinePublicLabel({ id: machineCode ?? undefined, name: machineName ?? undefined });
+}
+
 function _suggestedDate(daysFromNow: number) {
   const date = new Date();
   date.setDate(date.getDate() + Math.max(0, daysFromNow));
@@ -158,7 +164,7 @@ function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRo
   return [...insights]
     .sort((left, right) => right.urgencyScore - left.urgencyScore)
     .map((insight) => {
-      const avgCost = 320;
+      const avgCost = getBudgetReferenceCost(insight.taskTemplate.type);
       const projectedCost = Math.round(avgCost * insight.budgetMultiplier);
       const delayedCost = Math.round(projectedCost * insight.delayMultiplier);
       const row: PlannerFleetRow = {
@@ -217,7 +223,11 @@ function buildPlanNarrative(
   const lines: string[] = [];
   lines.push(
     focusMachine
-      ? l(`Synthese ciblee: ${focusMachine}`, `Focused summary: ${focusMachine}`, `Focused summary: ${focusMachine}`)
+      ? l(
+          `Synthese ciblee: ${formatMachineLabel(focusMachine)}`,
+          `Focused summary: ${formatMachineLabel(focusMachine)}`,
+          `Focused summary: ${formatMachineLabel(focusMachine)}`,
+        )
       : l("Synthese flotte", "Fleet summary", "Fleet summary"),
   );
   lines.push("");
@@ -232,7 +242,7 @@ function buildPlanNarrative(
   lines.push(l("Priorites retenues :", "Selected priorities:", "Selected priorities:"));
 
   for (const row of rows) {
-    lines.push(`- ${row.machine_code} (${row.risk_label}) : ${row.summary}`);
+    lines.push(`- ${formatMachineLabel(row.machine_code, row.nom)} (${row.risk_label}) : ${row.summary}`);
     lines.push(`  ${row.recommended_action}`);
     if (row.maintenance_window) {
       lines.push(
@@ -257,6 +267,13 @@ function buildPlanNarrative(
       `Surcout potentiel si l'on attend: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
       `Potential delay penalty: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
       `Potential delay penalty: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
+    ),
+  );
+  lines.push(
+    l(
+      `Base de calcul sans historique: main-d'oeuvre ${LABOR_RATE_PER_HOUR} DT/h + forfait pieces par type d'action.`,
+      `Fallback estimate without history: labor ${LABOR_RATE_PER_HOUR} TND/hour + a parts allowance per task type.`,
+      `Fallback estimate without history: labor ${LABOR_RATE_PER_HOUR} TND/hour + a parts allowance per task type.`,
     ),
   );
 
@@ -473,13 +490,17 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
   ];
 
   const planTitle = focusMachine
-    ? l(`Plan d'action pour ${focusMachine}`, `Summary for ${focusMachine}`, `Summary for ${focusMachine}`)
+    ? l(
+        `Plan d'action pour ${formatMachineLabel(focusMachine)}`,
+        `Summary for ${formatMachineLabel(focusMachine)}`,
+        `Summary for ${formatMachineLabel(focusMachine)}`,
+      )
     : fullPlanTitle;
   const planSubtitle = selectedRisk
     ? l(
-        `Lisez le resume pour ${selectedRisk.machine_code}, puis validez seulement les actions utiles ci-dessous.`,
-        `Review the summary for ${selectedRisk.machine_code} before validating the actions below.`,
-        `Review the summary for ${selectedRisk.machine_code} before validating the actions below.`,
+        `Lisez le resume pour ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)}, puis validez seulement les actions utiles ci-dessous.`,
+        `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the actions below.`,
+        `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the actions below.`,
       )
     : l(
         "Lisez le resume, puis validez les actions que vous voulez envoyer au calendrier.",
@@ -494,9 +515,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       title: l("Cliquer une machine", "Click a machine", "Click a machine"),
       detail: focusMachine
         ? l(
-            `Machine choisie : ${focusMachine}. Recliquez sur sa carte ou utilisez "Voir toute la flotte" pour revenir a la vue globale.`,
-            `Focused machine: ${focusMachine}`,
-            `Focused machine: ${focusMachine}`,
+            `Machine choisie : ${formatMachineLabel(focusMachine)}. Recliquez sur sa carte ou utilisez "Voir toute la flotte" pour revenir a la vue globale.`,
+            `Focused machine: ${formatMachineLabel(focusMachine)}`,
+            `Focused machine: ${formatMachineLabel(focusMachine)}`,
           )
         : l(
             "Cliquez une carte dans la liste ci-dessous pour cibler une machine. Sans selection, le plan reste global pour toute la flotte.",
@@ -675,7 +696,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="text-sm font-semibold text-foreground">
-                              {entry.machine_code} - {entry.nom}
+                              {formatMachineLabel(entry.machine_code, entry.nom)}
                             </div>
                             <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-semibold ${config.bg} ${config.color}`}>
                               {entry.risk_label}
@@ -722,7 +743,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
             </div>
             {focusMachine && (
               <span className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.7rem] font-medium text-muted-foreground">
-                {l("Machine ciblee", "Focused machine", "Focused machine")}: {focusMachine}
+                {l("Machine ciblee", "Focused machine", "Focused machine")}: {formatMachineLabel(focusMachine)}
               </span>
             )}
           </div>
@@ -737,7 +758,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                 )}
                 {focusMachine && (
                   <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
-                    {l("Cible", "Focus", "Focus")} {focusMachine}
+                    {l("Cible", "Focus", "Focus")} {formatMachineLabel(focusMachine)}
                   </span>
                 )}
                 {generatedFleet.length > 0 && (
@@ -758,7 +779,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                         <div key={row.machine_code} className={`rounded-2xl border p-4 ${config.panel}`}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="text-sm font-semibold text-foreground">{row.machine_code}</div>
+                              <div className="text-sm font-semibold text-foreground">
+                                {formatMachineLabel(row.machine_code, row.nom)}
+                              </div>
                               <div className="mt-1 text-xs text-muted-foreground">
                                 {row.plain_reason || row.summary}
                               </div>
@@ -984,7 +1007,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-foreground">{task.titre}</span>
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.6rem] font-medium text-primary">
-                          {task.machine_code}
+                          {formatMachineLabel(task.machine_code)}
                         </span>
                         <span className="rounded-full bg-muted px-2 py-0.5 text-[0.6rem] text-muted-foreground">
                           {task.type}

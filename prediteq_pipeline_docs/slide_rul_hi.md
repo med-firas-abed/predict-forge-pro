@@ -1,124 +1,78 @@
-# Slide Jury — HI / FPT / RUL / L10
+# Slide Jury - HI / affichage RUL / L10
 
 ## Titre de slide
 
-**Comment PrediTeq décide d'afficher HI, L10 ou RUL**
+**Comment PrediTeq décide d'afficher HI, référence composant ou RUL**
 
 ## Message principal
 
-Le systeme n'affiche **pas toujours** un RUL chiffré.
-Il suit une logique PHM en 3 etapes :
+Le système n'affiche pas toujours un RUL chiffré.
 
-1. afficher le **HI** en continu ;
-2. attendre le **FPT** pour autoriser le pronostic ;
-3. afficher le **RUL** seulement si l'historique est suffisant.
+Il suit une logique runtime en 3 états :
 
-## Schema simple
+1. `reference_only`
+2. `initializing`
+3. `prediction`
+
+## Schéma simple
 
 ```text
-HI calcule en continu
+HI calculé en continu
         |
         v
-HI >= 0.80 ?
+Machine encore en zone très saine ?
   | Oui
   v
-Pas de RUL chiffre
-Afficher L10 (reference statistique roulement)
+Mode reference_only
+Afficher la référence composant (L10)
 
   | Non
   v
 60 points HI disponibles ?
   | Non
   v
-Mode warming_up
-Afficher calibration / attente + L10
+Mode initializing
+Afficher attente / calibration
 
   | Oui
   v
 Mode prediction
-Afficher RUL + intervalle de confiance + cycles restants
+Afficher RUL + intervalle + cycles restants
 ```
 
-## Les seuils a ne pas confondre
+## Seuils à ne pas confondre
 
-| Seuil | Valeur | Signification |
+| Seuil | Valeur | Rôle |
 |---|---:|---|
-| FPT | `0.80` | debut du droit a afficher un RUL chiffre |
-| Zone Good -> Degraded | `0.60` | frontiere de zone HI |
-| Fin de vie critique | `0.30` | seuil utilise pour definir la cible RUL |
-| Persistance | `3 points` | confirmation anti-bruit du passage sous 0.30 |
+| Gate de pronostic | `0.80` | Autorise ou non l'affichage d'un RUL chiffré |
+| Zone Good -> Degraded | `0.60` | Frontière de zone HI |
+| Fin de vie critique | `0.30` | Seuil utilisé pour construire la cible RUL |
+| Persistance | `3 points` | Confirmation anti-bruit sous `0.30` |
 
 ## Ce que signifie chaque notion
 
 | Notion | Lecture simple |
 |---|---|
-| **HI** | etat de sante actuel |
-| **FPT** | moment a partir duquel le pronostic devient legitime |
-| **RUL** | temps restant estime avant intervention |
-| **L10** | duree de vie statistique de reference du roulement |
+| **HI** | état de santé actuel |
+| **reference_only** | la machine est encore trop saine pour publier un RUL |
+| **initializing** | la machine est surveillée mais l'historique est insuffisant |
+| **prediction** | le RUL peut être affiché avec intervalle |
+| **L10** | référence statistique composant |
 
 ## Conversion minutes -> jours
 
-Le modele RUL predit d'abord un temps restant en **minutes-simulation**.
+Le modèle RUL prédit d'abord un temps restant en **minutes-simulation**.
 
-### Fallback historique
-
-```text
-RUL_days = RUL_minutes / 9
-```
-
-Pourquoi ?
-
-- `800 min-sim` representent `90 jours` dans la calibration historique
-- donc `800 / 90 ≈ 9`
-
-### Correction par rythme observe
-
-Quand on connait le rythme reel d'usage :
+La couche runtime le convertit ensuite en jours :
 
 ```text
-factor = 9 x (cycles_per_day_observed / 654)
-RUL_days = RUL_minutes / factor
+fallback: RUL_days = RUL_minutes / 9
+runtime préféré: facteur corrigé par cycles/jour observés
 ```
 
-Interpretation :
+## Message à dire à l'oral
 
-- plus la machine fait de cycles par jour, plus elle consomme sa vie vite ;
-- donc a `RUL_minutes` egal, le nombre de jours affiches diminue.
-
-## Exemple numerique
-
-Si le modele predit :
-
-```text
-RUL_minutes = 540 min-sim
-```
-
-### Sans rythme observe
-
-```text
-540 / 9 = 60 jours
-```
-
-### Avec 1100 cycles/jour observes
-
-```text
-factor = 9 x (1100 / 654) = 15.14
-RUL_days = 540 / 15.14 = 35.7 jours
-```
-
-Donc :
-
-- **meme RUL brut**
-- **moins de jours affiches**
-- parce que la machine travaille plus intensivement.
-
-## Message a dire a l'oral
-
-"Le HI dit ou on en est maintenant. Le FPT dit a partir de quand on a le droit de predire. Le RUL dit ce qu'il reste si la degradation continue ainsi. Et tant que ce pronostic n'est pas encore justifie, on affiche L10, la reference statistique du composant."
-
-## Notes speaker
-
-- insister sur le fait que **HI** et **RUL** ne repondent pas a la meme question ;
-- rappeler que **jours** = langage GMAO, **cycles** = langage PHM ;
-- si le jury demande pourquoi ne pas toujours afficher un RUL : repondre **honnetete methodologique** et **pas de fausse precision**.
+"Le HI décrit l'état actuel. Le produit ne publie pas toujours un RUL
+numérique. Il passe d'abord par une référence composant, puis par une phase
+d'initialisation, et n'affiche le RUL que quand l'état courant et l'historique
+le rendent crédible."

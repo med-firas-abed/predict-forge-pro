@@ -15,6 +15,7 @@ from core.decision_snapshot import (
     fetch_alert_counts,
     fetch_open_task_counts,
 )
+from core.machine_labels import get_machine_public_label
 from core.supabase_client import get_supabase
 from core.auth import CurrentUser, require_auth, get_machine_filter
 from core.rate_limit import check_user_rate
@@ -167,9 +168,10 @@ def _gather_context(
         "decision_snapshot": decision_snapshot,
     }
 
+    machine_label = get_machine_public_label(code, machine.get("nom"))
     user_prompt = (
-        f"Génère un rapport de maintenance prédictive pour la machine {code} "
-        f"({machine.get('nom', '')}) située à {machine.get('region', '')}.\n\n"
+        f"Génère un rapport de maintenance prédictive pour {machine_label} "
+        f"(code interne {code}) située à {machine.get('region', '')}.\n\n"
         f"Consigne d'audience:\n{_audience_prompt(audience)}\n\n"
         f"Données complètes :\n```json\n{json.dumps(context_data, indent=2, default=str)}\n```\n\n"
         "Le rapport doit inclure :\n"
@@ -282,79 +284,15 @@ async def generate_pdf_report(body: ReportRequest,
         logger.error("Groq API error (PDF): %s", e)
         raise HTTPException(502, "Report generation failed")
 
-    # Convert Markdown → PDF using fpdf2
     try:
-        from fpdf import FPDF
-        import os
+        from report_engine import generate_pdf_bytes
 
-        FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
-
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=20)
-
-        # Register Unicode fonts (NotoSans for Latin/French, NotoSansArabic for Arabic)
-        noto_regular = os.path.join(FONT_DIR, "NotoSans-Regular.ttf")
-        noto_bold = os.path.join(FONT_DIR, "NotoSans-Bold.ttf")
-        if os.path.exists(noto_regular):
-            pdf.add_font("Noto", "", noto_regular)
-        if os.path.exists(noto_bold):
-            pdf.add_font("Noto", "B", noto_bold)
-        font_family = "Noto" if os.path.exists(noto_regular) else "Helvetica"
-
-        pdf.add_page()
-
-        # Header
-        pdf.set_font(font_family, "B", 18)
-        pdf.cell(0, 12, f"Rapport PrediTeq - {code}", new_x="LMARGIN", new_y="NEXT", align="C")
-        pdf.set_font(font_family, "", 10)
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        pdf.cell(0, 8, f"Généré le {now}", new_x="LMARGIN", new_y="NEXT", align="C")
-
-        machine_nom = machine.get('nom', code)
-        region = machine.get('region', '')
-        pdf.cell(0, 8, f"{machine_nom} — {region}", new_x="LMARGIN", new_y="NEXT", align="C")
-        pdf.ln(8)
-
-        # Body — simple Markdown rendering
-        pdf.set_font(font_family, "", 11)
-        for line in report_text.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("# "):
-                pdf.ln(4)
-                pdf.set_font(font_family, "B", 16)
-                pdf.multi_cell(0, 8, stripped[2:])
-                pdf.set_font(font_family, "", 11)
-            elif stripped.startswith("## "):
-                pdf.ln(3)
-                pdf.set_font(font_family, "B", 14)
-                pdf.multi_cell(0, 7, stripped[3:])
-                pdf.set_font(font_family, "", 11)
-            elif stripped.startswith("### "):
-                pdf.ln(2)
-                pdf.set_font(font_family, "B", 12)
-                pdf.multi_cell(0, 6, stripped[4:])
-                pdf.set_font(font_family, "", 11)
-            elif stripped.startswith("- ") or stripped.startswith("* "):
-                pdf.multi_cell(0, 6, f"  • {stripped[2:]}")
-            elif stripped.startswith("---"):
-                pdf.ln(2)
-                pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 170, pdf.get_y())
-                pdf.ln(2)
-            elif stripped == "":
-                pdf.ln(3)
-            else:
-                # Strip bold markers for PDF
-                clean = stripped.replace("**", "").replace("__", "")
-                pdf.multi_cell(0, 6, clean)
-
-        # Footer
-        pdf.ln(8)
-        pdf.set_font(font_family, "", 9)
-        pdf.cell(0, 6, "PrediTeq — Maintenance Prédictive Industrielle | ISAMM / Aroteq",
-                 new_x="LMARGIN", new_y="NEXT", align="C")
-
-        pdf_bytes = pdf.output()
-
+        public_label = get_machine_public_label(code, machine.get("nom"))
+        pdf_bytes = generate_pdf_bytes(
+            report_text,
+            title=f"Rapport PrediTeq — {public_label}",
+            lang="fr",
+        )
     except ImportError:
         raise HTTPException(503, "fpdf2 not installed — run: pip install fpdf2")
     except Exception as e:
@@ -419,7 +357,7 @@ async def auto_generate_report(body: AutoReportRequest,
     try:
         sb = get_supabase()
         now = datetime.now(timezone.utc)
-        machine_part = machine_code or "Toutes"
+        machine_part = get_machine_public_label(machine_code) if machine_code else "Toutes les machines"
         period_label = _period_label(body.period, body.lang)
         if body.audience != "dual":
             period_label = f"{period_label} - {_audience_label(body.audience)}"
@@ -458,7 +396,14 @@ async def auto_generate_pdf(body: AutoReportRequest,
             lang=body.lang,
             audience=body.audience,
         )
-        pdf_bytes = generate_pdf_bytes(md, title=f"Rapport PrediTeq — {_period_label(body.period, body.lang)}", lang=body.lang)
+        public_label = (
+            f" — {get_machine_public_label(machine_code)}" if machine_code else " — Toutes les machines"
+        )
+        pdf_bytes = generate_pdf_bytes(
+            md,
+            title=f"Rapport PrediTeq — {_period_label(body.period, body.lang)}{public_label}",
+            lang=body.lang,
+        )
     except Exception as e:
         logger.error("Auto PDF generation error: %s", e)
         raise HTTPException(500, "PDF generation failed")

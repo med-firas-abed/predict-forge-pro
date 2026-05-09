@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, AlertTriangle, CircleDot, Clock, Cpu, Thermometer, Zap } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useSearchParams } from "react-router-dom";
 
 import { KpiCard } from "@/components/industrial/KpiCard";
 import { SVGGauge } from "@/components/industrial/SVGGauge";
@@ -70,7 +71,6 @@ interface BrowserSerial {
   requestPort(): Promise<BrowserSerialPort>;
 }
 
-const MACHINE_CODE = "ASC-A1";
 const MAX_POINTS = 30;
 const MAX_EVENTS = 40;
 const VIBRATION_UNIT = "m/s2";
@@ -103,10 +103,12 @@ function resolveGaugeMax(
 
 export function ExperimentPage() {
   const { lang } = useApp();
+  const [searchParams] = useSearchParams();
   const l = useCallback(
     (fr: string, en: string, ar: string) => lang === "fr" ? fr : lang === "en" ? en : ar,
     [lang],
   );
+  const requestedMachineCode = searchParams.get("machine");
   const serialApi = typeof navigator !== "undefined"
     ? (navigator as Navigator & { serial?: BrowserSerial }).serial
     : undefined;
@@ -166,7 +168,7 @@ export function ExperimentPage() {
         const machines = await apiFetch<MachineRecord[]>("/machines");
         if (cancelled) return;
 
-        const machine = machines.find((x) => x.code === MACHINE_CODE) || machines[0];
+        const machine = machines.find((x) => x.code === requestedMachineCode) || machines[0];
         if (!machine) {
           setApiConnected(false);
           return;
@@ -193,7 +195,7 @@ export function ExperimentPage() {
       cancelled = true;
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, []);
+  }, [requestedMachineCode]);
 
   useEffect(() => {
     return () => {

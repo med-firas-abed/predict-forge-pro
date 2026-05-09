@@ -1,6 +1,6 @@
 # PrediTeq — Index des résultats, algorithmes et simulations
 
-**Projet** : PrediTeq — Maintenance prédictive moteur d'ascenseur SITI FC100L1-4 (2,2 kW, Aroteq Ben Arous)
+**Projet** : PrediTeq — Maintenance prédictive du moteur d'un stockeur vertical rotatif SITI FC100L1-4 (2,2 kW, Aroteq Ben Arous)
 **Auteur** : Firas Zouari — ISAMM PFE 2026
 **Soutenance** : 23 avril 2026
 **Dernière exécution pipeline** : 2026-04-27 (base commit `95d8943`, artefacts régénérés en working tree local, version `2.0-no-leakage`)
@@ -117,38 +117,43 @@ Exécuter dans l'ordre depuis `prediteq_ml/` : `python steps/stepN_xxx.py`
 | Split | 80/20 stratifié par profil, GroupKFold k=5 |
 | Baselines | DummyRegressor (moyenne) + LinearRegression |
 
-#### Lecture jury — HI, FPT, RUL et L10
+#### Lecture jury — HI, affichage du RUL et L10
 
 Pour éviter toute confusion en soutenance, il faut distinguer **4 couches** :
 
 | Notion | Rôle | Question à laquelle elle répond |
 |---|---|---|
 | `HI` | État de santé courant | "Dans quel état est la machine maintenant ?" |
-| `FPT` | Gate méthodologique du pronostic | "A partir de quand a-t-on le droit scientifique d'afficher un RUL chiffré ?" |
+| Gate de pronostic | Règle méthodologique d'affichage | "À partir de quand le produit peut-il publier un RUL chiffré ?" |
 | `RUL` | Pronostic personnalisé | "Si la dégradation continue ainsi, combien de temps/cycles restent-ils ?" |
 | `L10` | Référence statistique du roulement | "Combien dure typiquement le composant, indépendamment du pronostic ML ?" |
 
 Règles actuelles du projet :
 
 1. **HI est toujours prioritaire** : il est calculé en ligne par le moteur d'inférence et peut être affiché très tôt.
-2. **Le RUL n'est pas toujours affiché** : on applique un gate `FPT` conforme PHM.
-3. **Avant FPT**, on montre `L10`, pas un faux RUL précis.
-4. **Après FPT et après warm-up**, on montre un RUL chiffré avec incertitude.
+2. **Le RUL n'est pas toujours affiché** : il dépend d'une règle d'éligibilité du pronostic.
+3. **Avant publication du RUL**, on reste sur une référence composant ou sur un état d'initialisation.
+4. **Quand les conditions sont réunies**, on affiche un RUL chiffré avec incertitude.
 
 Seuils à ne pas confondre :
 
 | Seuil | Valeur | Usage |
 |---|---:|---|
-| `FPT_HI_THRESHOLD` | `0.80` | Décide si le frontend a le droit d'afficher un RUL chiffré |
+| `FPT_HI_THRESHOLD` | `0.80` | Constante runtime qui décide si le frontend peut afficher un RUL chiffré |
 | `HI_GOOD` | `0.60` | Frontière de zone HI (`Good` -> `Degraded`) |
 | `HI_CRITICAL` | `0.30` | Frontière critique HI + seuil de fin de vie utilisé pour construire la cible RUL |
 | `RUL_CROSSING_PERSISTENCE` | `3` points | Confirmation anti-bruit du franchissement de `HI < 0.30` |
 
 Conséquence produit :
 
-- **Si `HI >= 0.80`** : mode `no_prediction` -> le frontend affiche `L10`, pas de RUL chiffré.
-- **Si `HI < 0.80` mais que l'historique HI est insuffisant** : mode `warming_up` -> calibration / attente, pas de RUL chiffré.
+- **Si `HI >= 0.80`** : mode canonique `reference_only` -> le frontend affiche une référence composant (`L10`), pas de RUL chiffré.
+- **Si `HI < 0.80` mais que l'historique HI est insuffisant** : mode canonique `initializing` -> attente / calibration, pas de RUL chiffré.
 - **Si `HI < 0.80` et 60 points HI sont disponibles** : mode `prediction` -> affichage du RUL.
+
+Note de compatibilité :
+
+- certains payloads exposent encore les alias legacy `no_prediction` et `warming_up` ;
+- la documentation publique doit désormais privilégier `reference_only` et `initializing`.
 
 Pourquoi 60 points ?
 
@@ -183,7 +188,7 @@ Donc en soutenance, la formulation juste est :
 - **jours** = langage GMAO / planning maintenance ;
 - **cycles** = langage PHM / engineering ;
 - **L10** = référence statistique composant ;
-- **RUL** = pronostic personnalisé, affiché seulement après FPT.
+- **RUL** = pronostic personnalisé, affiché seulement lorsque le produit quitte `reference_only` et `initializing`.
 
 ### Étape 6 — Évaluation et métriques
 

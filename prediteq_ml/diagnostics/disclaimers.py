@@ -16,9 +16,8 @@ Base réglementaire :
         - les données d'entraînement et leur représentativité.
 
 Ce module ne contient QUE des constantes de texte. Il n'exécute aucun code.
-Le frontend Next.js peut les importer via un endpoint API qui retourne ces
-strings, ou les copier en dur dans les composants (ce qui évite de toucher
-le backend pour l'instant — conforme à la consigne).
+Le frontend React peut les afficher via un endpoint API ou les consommer depuis
+les payloads runtime exposés par `prediteq_api/routers/diagnostics_rul.py`.
 
 Utilisation recommandée côté frontend :
     import { RUL_NATURE, CALIBRATION_NOTICE } from '@/lib/disclaimers';
@@ -94,15 +93,15 @@ BADGE_LABELS: dict[str, dict[str, str]] = {
 # ──────────────────────────────────────────────────────────────────────────────
 CALIBRATION_NOTICE: str = (
     "Système en phase de calibration. Les estimations RUL s'affinent au fur "
-    "et à mesure de l'acquisition de données réelles. Précision attendue à "
-    "la fin de la phase (jour 90) : MAE ≈ 8–12 jours (cible IEEE 1856-2017)."
+    "et à mesure de l'acquisition de données réelles. Une recalibration "
+    "empirique reste prévue avant tout usage industriel critique."
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Texte pour la section « À propos du modèle » — page Administration
 # ──────────────────────────────────────────────────────────────────────────────
 MODEL_CARD: str = (
-    "Modèle : Random Forest (Breiman 2001), 300 arbres, max_depth=12.\n"
+    "Modèle : Random Forest (Breiman 2001), 300 arbres, max_depth=16.\n"
     "Entraînement : 200 trajectoires synthétiques × 800 min-sim, split 80/20 "
     "par GroupKFold stratifié par profil (Kuhn & Johnson 2013 §4.2).\n"
     "Validation : métriques reportées dans outputs/rul_cv_scores.json.\n"

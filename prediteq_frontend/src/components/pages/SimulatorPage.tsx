@@ -5,7 +5,10 @@ import { useApp, type Lang } from "@/contexts/AppContext";
 import type { DemoScenario, Machine } from "@/data/machines";
 import { useMachines } from "@/hooks/useMachines";
 import { useSimulatorController } from "@/hooks/useSimulatorController";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import {
+  describeAudienceScenarioExplanation,
+  describeAudienceScenarioUsageCase,
   getDemoScenarioFactors,
   getDemoStoryMachines,
   getMachineDemoScenario,
@@ -42,51 +45,6 @@ const PROFILE_LABELS: Record<string, LocalizedText> = {
     fr: "Linéaire bruitée",
     en: "Noisy linear",
     ar: "Noisy linear",
-  },
-};
-
-const SIMULATOR_COPY: Record<
-  string,
-  {
-    usageCase: LocalizedText;
-    explanation: LocalizedText;
-  }
-> = {
-  "ASC-A1": {
-    usageCase: {
-      fr: "Cycle modéré, charges légères et installation protégée.",
-      en: "Moderate duty cycle, light payloads, protected installation.",
-      ar: "Moderate duty cycle, light payloads, protected installation.",
-    },
-    explanation: {
-      fr: "Même génération de flotte, mais usage plus calme : service plus court, charges plus légères, ambiance plus sèche et presque aucune surcharge.",
-      en: "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
-      ar: "Same fleet generation, but calmer use: shorter duty, lighter baskets, drier surroundings, and almost no overload history.",
-    },
-  },
-  "ASC-B2": {
-    usageCase: {
-      fr: "Trafic mixte régulier avec demi-charges et pics aux heures de pointe.",
-      en: "Regular mixed traffic with half-load cycles and rush-hour peaks.",
-      ar: "Regular mixed traffic with half-load cycles and rush-hour peaks.",
-    },
-    explanation: {
-      fr: "Même âge que les autres, avec un rythme normal, des charges mixtes et un stress ambiant modéré.",
-      en: "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
-      ar: "Same age as the others, with a normal service rhythm, mixed payloads, and moderate environmental stress.",
-    },
-  },
-  "ASC-C3": {
-    usageCase: {
-      fr: "Ligne intensive avec charges lourdes et ambiance sévère.",
-      en: "Intensive duty line with heavy payloads and harsh ambient conditions.",
-      ar: "Intensive duty line with heavy payloads and harsh ambient conditions.",
-    },
-    explanation: {
-      fr: "Même âge de flotte, mais usage plus dur : longues amplitudes, charges proches du maximum, ambiance plus chaude et humide, vibration plus marquée.",
-      en: "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
-      ar: "Same fleet age, but a harsher life: longer operating spans, near-max payloads, hotter and more humid surroundings, and stronger vibration drift.",
-    },
   },
 };
 
@@ -162,8 +120,8 @@ export function SimulatorPage() {
   const demoStoryMachines = useMemo(() => getDemoStoryMachines(machines), [machines]);
 
   const getScenarioLabel = useCallback(
-    (scenario: DemoScenario) => {
-      switch (scenario.health_state) {
+    (scenario?: DemoScenario | null) => {
+      switch (scenario?.health_state) {
         case "good":
           return l("Bon état", "Healthy", "Healthy");
         case "surveillance":
@@ -171,7 +129,7 @@ export function SimulatorPage() {
         case "critical":
           return l("Critique", "Critical", "Critical");
         default:
-          return scenario.health_label ?? l("Scenario", "Scenario", "Scenario");
+          return scenario?.health_label ?? l("Scenario", "Scenario", "Scenario");
       }
     },
     [l],
@@ -199,18 +157,6 @@ export function SimulatorPage() {
       return PROFILE_LABELS[profile]?.[lang] ?? profile;
     },
     [lang],
-  );
-
-  const getScenarioCopy = useCallback(
-    (
-      code: string,
-      field: keyof (typeof SIMULATOR_COPY)[string],
-      fallback?: string,
-    ) => {
-      const localized = SIMULATOR_COPY[code]?.[field];
-      return localized ? fromLocale(localized) : (fallback ?? "");
-    },
-    [fromLocale],
   );
 
   const getFactorMeta = useCallback(
@@ -394,7 +340,7 @@ export function SimulatorPage() {
                         : "border-border bg-card text-secondary-foreground hover:border-primary/20 hover:bg-primary/5"
                     }`}
                   >
-                    {getStoryLabel(story.state)} - {story.machine.id}
+                    {getStoryLabel(story.state)} - {getMachinePublicLabel(story.machine)}
                   </button>
                 );
               })}
@@ -591,11 +537,12 @@ export function SimulatorPage() {
           <div className="space-y-3">
             {orderedMachineEntries.map(([code, data]) => {
               const runtimeMachine = machinesByCode.get(code);
-              const scenario = data.scenario ?? getMachineDemoScenario(runtimeMachine) ?? {};
+              const scenario = data.scenario ?? getMachineDemoScenario(runtimeMachine);
               const scenarioFactors = getDemoScenarioFactors(scenario);
-              const profileLabel = getProfileLabel(scenario.profile);
-              const usageCase = getScenarioCopy(code, "usageCase", scenario.usage_case);
-              const explanation = getScenarioCopy(code, "explanation", scenario.explanation);
+              const profileLabel = getProfileLabel(scenario?.profile);
+              const usageCase = describeAudienceScenarioUsageCase(scenario, l);
+              const explanation = describeAudienceScenarioExplanation(scenario, l);
+              const machineLabel = getMachinePublicLabel(runtimeMachine ?? { id: code });
               const hi = typeof data.hi_smooth === "number" ? data.hi_smooth : runtimeMachine?.hi;
               const simHI =
                 typeof data.simulated_hi === "number" ? data.simulated_hi : undefined;
@@ -617,7 +564,7 @@ export function SimulatorPage() {
                 referenceLifetimeYears: runtimeMachine?.referenceLifetimeYears ?? null,
                 referenceDays:
                   runtimeMachine?.rulReferenceDays ??
-                  scenario.reference_rul_days ??
+                  scenario?.reference_rul_days ??
                   null,
                 localize: l,
                 allowDemoReference: true,
@@ -627,16 +574,16 @@ export function SimulatorPage() {
                 <div
                   key={code}
                   id={`demo-story-${code}`}
-                  className={cn(
-                    "rounded-xl border border-border bg-card p-4",
-                    code === focusedMachineId && "border-primary/30 ring-2 ring-primary/20",
+                    className={cn(
+                      "rounded-xl border border-border bg-card p-4",
+                      code === focusedMachineId && "border-primary/30 ring-2 ring-primary/20",
                   )}
                 >
                   <div className="flex flex-col gap-4 xl:flex-row">
                     <div className="xl:w-32">
-                      <div className="text-sm font-bold text-foreground">{code}</div>
+                      <div className="text-sm font-bold text-foreground">{machineLabel}</div>
                       <div className="text-xs text-muted-foreground">
-                        {scenario.site ?? runtimeMachine?.city ?? "-"}
+                        {scenario?.site ?? runtimeMachine?.city ?? "-"}
                       </div>
                     </div>
 
@@ -650,13 +597,13 @@ export function SimulatorPage() {
                             {profileLabel}
                           </span>
                         )}
-                        {scenario.load_band_kg && (
+                        {scenario?.load_band_kg && (
                           <span className="rounded-full bg-surface-3 px-2 py-0.5 text-muted-foreground">
                             {l("Plage de charge", "Load band", "Load band")}:{" "}
                             {scenario.load_band_kg[0]}-{scenario.load_band_kg[1]} kg
                           </span>
                         )}
-                        {scenario.cycles_per_day && (
+                        {scenario?.cycles_per_day && (
                           <span className="rounded-full bg-surface-3 px-2 py-0.5 text-muted-foreground">
                             {l("Cycles/jour", "Cycles/day", "Cycles/day")}:{" "}
                             {Math.round(scenario.cycles_per_day)}

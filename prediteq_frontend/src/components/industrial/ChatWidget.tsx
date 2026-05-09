@@ -120,22 +120,22 @@ export function ChatWidget() {
     audience === "jury"
       ? [
           l("Quelle machine demande de l'attention aujourd'hui ?", "Which machine needs attention today?", "Which machine needs attention today?"),
-          l("Explique ASC-B2 avec des mots simples", "Explain ASC-B2 in simple words", "Explain ASC-B2 in simple words"),
+          l("Explique Machine 2 avec des mots simples", "Explain Machine 2 in simple words", "Explain Machine 2 in simple words"),
             l("Résume la flotte pour un jury", "Summarize the fleet for a jury", "Summarize the fleet for a jury"),
             l("Quel est le prochain geste à faire ?", "What should we do next?", "What should we do next?"),
         ]
       : audience === "technician"
         ? [
-            l("Donne HI, RUL et facteur principal pour ASC-B2", "Give HI, RUL, and top driver for ASC-B2", "Give HI, RUL, and top driver for ASC-B2"),
+            l("Donne HI, RUL et facteur principal pour Machine 2", "Give HI, RUL, and top driver for Machine 2", "Give HI, RUL, and top driver for Machine 2"),
             l("Quelles alertes sont urgentes ?", "Which alerts are urgent?", "Which alerts are urgent?"),
-            l("Quelle fenêtre d'intervention pour ASC-C3 ?", "What is the intervention window for ASC-C3?", "What is the intervention window for ASC-C3?"),
+            l("Quelle fenêtre d'intervention pour Machine 3 ?", "What is the intervention window for Machine 3?", "What is the intervention window for Machine 3?"),
             l("Résume la flotte avec les priorités terrain", "Summarize the fleet with field priorities", "Summarize the fleet with field priorities"),
           ]
         : [
-            l("Explique ASC-B2 simplement puis techniquement", "Explain ASC-B2 simply, then technically", "Explain ASC-B2 simply, then technically"),
+            l("Explique Machine 2 simplement puis techniquement", "Explain Machine 2 simply, then technically", "Explain Machine 2 simply, then technically"),
             l("Quelle machine est prioritaire ?", "Which machine is the priority?", "Which machine is the priority?"),
             l("Résume la flotte pour un jury et un technicien", "Summarize the fleet for a jury and a technician", "Summarize the fleet for a jury and a technician"),
-            l("Pourquoi ASC-C3 est urgente ?", "Why is ASC-C3 urgent?", "Why is ASC-C3 urgent?"),
+            l("Pourquoi Machine 3 est urgente ?", "Why is Machine 3 urgent?", "Why is Machine 3 urgent?"),
           ];
 
   return (

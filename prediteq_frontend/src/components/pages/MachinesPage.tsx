@@ -9,6 +9,7 @@ import { useMachines } from "@/hooks/useMachines";
 import {
   formatMachineFloorLabel,
   formatMachineModelValue,
+  getMachinePublicLabel,
 } from "@/lib/machinePresentation";
 
 const EMPTY_MACHINE: Machine = {
@@ -67,7 +68,9 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
   return (
     <div className="rounded-lg border border-border bg-card p-6 animate-fade-in">
       <div className="mb-5 flex items-center justify-between">
-        <div className="section-title">{isNew ? "Ajouter une machine" : `Modifier ${machine.id}`}</div>
+        <div className="section-title">
+          {isNew ? "Ajouter une machine" : `Modifier ${getMachinePublicLabel(machine)}`}
+        </div>
         <button
           onClick={onCancel}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-3 text-muted-foreground hover:text-foreground"
@@ -106,7 +109,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
           <input className={inputClassName} value={form.model} onChange={(event) => setField("model", event.target.value)} />
         </div>
         <div>
-          <label className={labelClassName}>Etages</label>
+          <label className={labelClassName}>Niveaux</label>
           <input
             className={inputClassName}
             type="number"
@@ -212,10 +215,11 @@ export function MachinesPage() {
         : rendered;
     };
 
-    const header = "Code,Nom,Ville,Statut,HI,Modèle,Emplacement,Dernière MAJ\n";
+    const header = "Machine,Code interne,Nom,Ville,Statut,HI,Modèle,Emplacement,Dernière MAJ\n";
     const csv = filteredMachines
       .map((machine) =>
         [
+          getMachinePublicLabel(machine),
           machine.id,
           machine.name,
           machine.city,
@@ -342,12 +346,12 @@ export function MachinesPage() {
                 <div className="flex flex-1 flex-wrap items-center gap-5 p-5">
                   <div className="min-w-[220px] flex-1">
                     <div className="mb-1 flex items-center gap-3">
-                      <span className="font-mono text-sm font-bold text-foreground">{machine.id}</span>
+                      <span className="text-sm font-bold text-foreground">{getMachinePublicLabel(machine)}</span>
                       <span className={`status-pill ${statusConfig.pillClass} text-[0.6rem]`}>{statusConfig.label}</span>
                     </div>
-                    <div className="text-sm text-secondary-foreground">{machine.name}</div>
+                    <div className="text-sm text-secondary-foreground">{machine.city || "Site industriel"}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {machine.city} · {machine.loc}
+                      {machine.loc || "Emplacement non renseigné"}
                     </div>
                   </div>
 
@@ -368,9 +372,9 @@ export function MachinesPage() {
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {formatMachineFloorLabel(machine.floors, {
-                        singular: "étage",
-                        plural: "étages",
-                        fallback: "Étages non renseignés",
+                        singular: "niveau",
+                        plural: "niveaux",
+                        fallback: "Niveaux non renseignés",
                       })} · Mise à jour {machine.last}
                     </div>
                   </div>

@@ -117,7 +117,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "geo.clickMarker": { fr: "Cliquez sur un marqueur pour les détails", en: "Click a marker for details", ar: "انقر على علامة للتفاصيل" },
 
   // Machines
-  "mach.fleet": { fr: "Parc d'ascenseurs de stockage", en: "Storage Elevator Fleet", ar: "أسطول مصاعد التخزين" },
+  "mach.fleet": { fr: "Parc de stockeurs verticaux rotatifs", en: "Vertical Storage Carousel Fleet", ar: "أسطول أنظمة التخزين العمودية الدوارة" },
   "mach.export": { fr: "Exporter", en: "Export", ar: "تصدير" },
   "mach.addMachine": { fr: "Ajouter machine", en: "Add Machine", ar: "إضافة آلة" },
   "mach.management": { fr: "Gestion des machines (CRUD)", en: "Machine Management (CRUD)", ar: "إدارة الآلات (CRUD)" },
@@ -136,7 +136,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "mach.client": { fr: "Client / Nom", en: "Client / Name", ar: "العميل / الاسم" },
   "mach.city": { fr: "Ville", en: "City", ar: "المدينة" },
   "mach.model": { fr: "Modèle moteur", en: "Motor Model", ar: "موديل المحرك" },
-  "mach.floors": { fr: "Étages", en: "Floors", ar: "الطوابق" },
+  "mach.floors": { fr: "Niveaux", en: "Levels", ar: "المستويات" },
   "mach.status": { fr: "Statut", en: "Status", ar: "الحالة" },
   "mach.latitude": { fr: "Latitude", en: "Latitude", ar: "خط العرض" },
   "mach.longitude": { fr: "Longitude", en: "Longitude", ar: "خط الطول" },
@@ -183,7 +183,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "costs.monthly": { fr: "Coûts mensuels", en: "Monthly Costs", ar: "التكاليف الشهرية" },
   "costs.laborVsParts": { fr: "Main d'œuvre vs Pièces", en: "Labor vs Parts", ar: "العمالة مقابل القطع" },
   "costs.perMachine": { fr: "Répartition par machine", en: "Distribution by Machine", ar: "التوزيع حسب الآلة" },
-  "costs.totalPerElevator": { fr: "Coût total par ascenseur", en: "Total cost per elevator", ar: "التكلفة الإجمالية لكل مصعد" },
+  "costs.totalPerElevator": { fr: "Coût total par stockeur", en: "Total cost per carousel", ar: "التكلفة الإجمالية لكل نظام تخزين" },
 
   // Alerts
   "alerts.center": { fr: "Centre d'alertes", en: "Alert Center", ar: "مركز التنبيهات" },
@@ -258,7 +258,7 @@ const TR: Record<string, Record<Lang, string>> = {
   "meta.dashboard.title": { fr: "Tableau de bord", en: "Dashboard", ar: "لوحة القيادة" },
   "meta.dashboard.sub": { fr: "Vue d'ensemble de la flotte", en: "Fleet overview", ar: "نظرة عامة على الأسطول" },
   "meta.machines.title": { fr: "Gestion des machines", en: "Machine Management", ar: "إدارة الآلات" },
-  "meta.machines.sub": { fr: "Gestion du parc d'ascenseurs de stockage", en: "Storage elevator fleet management", ar: "إدارة أسطول مصاعد التخزين" },
+  "meta.machines.sub": { fr: "Gestion du parc de stockeurs verticaux rotatifs", en: "Vertical storage carousel fleet management", ar: "إدارة أسطول أنظمة التخزين العمودية الدوارة" },
   "meta.maintenance.title": { fr: "Calendrier de maintenance", en: "Maintenance Calendar", ar: "تقويم الصيانة" },
   "meta.maintenance.sub": { fr: "Calendrier et suivi des interventions", en: "Calendar and intervention tracking", ar: "تقويم ومتابعة التدخلات" },
   "meta.calendar.title": { fr: "Calendrier", en: "Calendar", ar: "التقويم" },
@@ -329,7 +329,7 @@ const TR: Record<string, Record<Lang, string>> = {
   // Machine modal
   "modal.machineInfo": { fr: "Informations machine", en: "Machine Information", ar: "معلومات الآلة" },
   "modal.model": { fr: "Modèle", en: "Model", ar: "الموديل" },
-  "modal.floors": { fr: "Étages", en: "Floors", ar: "الطوابق" },
+  "modal.floors": { fr: "Niveaux", en: "Levels", ar: "المستويات" },
   "modal.city": { fr: "Ville", en: "City", ar: "المدينة" },
   "modal.cyclesDay": { fr: "Cycles/jour", en: "Cycles/day", ar: "دورات/يوم" },
   "modal.healthIndex": { fr: "Indice de santé (HI)", en: "Machine health (HI)", ar: "مؤشر الصحة" },
