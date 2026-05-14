@@ -37,3 +37,7 @@ CREATE POLICY "rapports_insert_authenticated"
   ON rapports FOR INSERT
   TO authenticated
   WITH CHECK (true);
+
+GRANT USAGE ON SCHEMA public TO authenticated, service_role;
+GRANT SELECT, INSERT ON TABLE public.rapports TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rapports TO service_role;

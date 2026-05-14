@@ -313,6 +313,36 @@ CREATE POLICY "audit_select_admin" ON audit_logs FOR SELECT
   ));
 
 
+-- Explicit Data API grants — required on newer Supabase projects where
+-- public-schema tables/functions are no longer auto-exposed.
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+GRANT SELECT ON TABLE public.machines TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.profiles TO authenticated;
+GRANT SELECT, UPDATE ON TABLE public.alertes TO authenticated;
+GRANT SELECT ON TABLE public.historique_hi TO authenticated;
+GRANT SELECT ON TABLE public.predictions_rul TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.gmao_taches TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.couts TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.rapports TO authenticated;
+GRANT SELECT ON TABLE public.seuils TO anon, authenticated;
+GRANT SELECT ON TABLE public.audit_logs TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.machines,
+           public.profiles,
+           public.alertes,
+           public.historique_hi,
+           public.predictions_rul,
+           public.gmao_taches,
+           public.couts,
+           public.rapports,
+           public.seuils,
+           public.email_logs,
+           public.audit_logs
+  TO service_role;
+
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- RPC Functions
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -341,6 +371,8 @@ BEGIN
   RETURN (now() - last_sent) > INTERVAL '24 hours';
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.can_send_email(UUID, TEXT) TO service_role;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════

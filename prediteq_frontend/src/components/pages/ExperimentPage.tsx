@@ -440,7 +440,51 @@ export function ExperimentPage() {
         clearInterval(demoIntervalRef.current);
         demoIntervalRef.current = null;
       }
-      void disconnectSerial();
+
+      serialAutoReconnectRef.current = false;
+      serialRecoveringRef.current = false;
+      serialReconnectAttemptRef.current = 0;
+      disconnectingRef.current = true;
+
+      if (serialStaleTimeoutRef.current) {
+        clearTimeout(serialStaleTimeoutRef.current);
+        serialStaleTimeoutRef.current = null;
+      }
+
+      if (serialReconnectTimerRef.current) {
+        clearTimeout(serialReconnectTimerRef.current);
+        serialReconnectTimerRef.current = null;
+      }
+
+      void (async () => {
+        const reader = readerRef.current;
+        readerRef.current = null;
+        if (reader) {
+          try {
+            await reader.cancel();
+          } catch {
+            // Ignore cancellation failures during teardown.
+          }
+          try {
+            reader.releaseLock();
+          } catch {
+            // Ignore lock-release failures during teardown.
+          }
+        }
+
+        const port = portRef.current;
+        portRef.current = null;
+        if (port) {
+          try {
+            await port.close();
+          } catch {
+            // Ignore close failures; the port may already be closed.
+          }
+        }
+
+        selectedPortRef.current = null;
+        disconnectingRef.current = false;
+      })();
     };
   }, []);
 
@@ -860,7 +904,7 @@ export function ExperimentPage() {
   const vibrationGaugeMax = resolveGaugeMax(vibrationRms, baselines.vibration, vibrationThreshold, 2);
   const currentGaugeMax = resolveGaugeMax(currentA, baselines.current, currentThreshold, 0.35, 1.35);
 
-  const explainedStatus = false && serialConnected && serialStreamStale
+  const explainedStatus = serialConnected && serialStreamStale
     ? {
         badge: l("USB en pause", "USB paused", "USB متوقف"),
         label: l("Flux USB coupe", "USB feed stopped", "توقف تدفق USB"),
