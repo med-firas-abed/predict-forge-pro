@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: bash $(basename "$0") /absolute/path/to/labview_output.csv [MACHINE_ID]" >&2
-  exit 2
-fi
-
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-CSV_PATH="$1"
-MACHINE_ID="${2:-ARO-01}"
+MACHINE_ID="${1:-ARO-01}"
+CSV_PATH="${2:-$SCRIPT_DIR/labview_mock_output.csv}"
 BROKER_HOST="${MQTT_HOST:-broker.emqx.io}"
 BROKER_PORT="${MQTT_PORT:-8883}"
 BROKER_USER="${MQTT_USER:-}"
 BROKER_PASSWORD="${MQTT_PASSWORD:-}"
 USE_SSL="${MQTT_USE_SSL:-true}"
-SOURCE_LABEL="${SOURCE_LABEL:-macbook_real_csv}"
+SOURCE_LABEL="${SOURCE_LABEL:-macbook_fake_csv_rehearsal}"
+
+cleanup() {
+  if [[ -n "${WRITER_PID:-}" ]]; then
+    kill "$WRITER_PID" >/dev/null 2>&1 || true
+    wait "$WRITER_PID" 2>/dev/null || true
+  fi
+}
+
+trap cleanup EXIT INT TERM
 
 echo "Using Python: $PYTHON_BIN"
 "$PYTHON_BIN" -m pip install -r "$SCRIPT_DIR/requirements_bridge.txt"
-
-echo "Checking CSV format..."
-"$PYTHON_BIN" "$SCRIPT_DIR/check_prediteq_csv.py" "$CSV_PATH"
 
 cat > "$SCRIPT_DIR/.env.bridge" <<EOF
 MACHINE_ID=$MACHINE_ID
@@ -39,9 +40,15 @@ SOURCE_CSV_PATH=$CSV_PATH
 SOURCE_LABEL=$SOURCE_LABEL
 EOF
 
+echo "Starting fake CSV writer..."
+"$PYTHON_BIN" "$SCRIPT_DIR/fake_csv_writer.py" --output "$CSV_PATH" --machine-id "$MACHINE_ID" --reset &
+WRITER_PID=$!
+
+sleep 1
+
 echo "Starting MQTT sender..."
 echo "Machine: $MACHINE_ID"
 echo "CSV: $CSV_PATH"
 echo "Broker: $BROKER_HOST:$BROKER_PORT"
 
-"$PYTHON_BIN" "$SCRIPT_DIR/mqtt_bridge_sender.py" --mode csv-last-row --machine-id "$MACHINE_ID" --csv-path "$CSV_PATH"
+"$PYTHON_BIN" "$SCRIPT_DIR/mqtt_bridge_sender.py"

@@ -1,0 +1,80 @@
+PrediTeq Bridge Kit
+
+What this folder is:
+- a small clean bundle to copy by USB to a MacBook
+- only the files needed to rehearse or send one CSV file to PrediTeq
+- it does NOT include prediteq_api/.env or backend secrets
+
+What the MacBook does:
+- reads a local CSV file
+- sends machine ARO-01 to MQTT
+- behaves like the final boss-side sender for v1
+
+What your Windows PC does:
+- runs the PrediTeq backend
+- runs the frontend
+- receives the MQTT data and updates Machine reelle
+
+Files you should care about:
+- run_mac_fake_csv_rehearsal.sh
+- run_mac_real_csv.sh
+- PREFERRED_LABVIEW_CSV_TEMPLATE.csv
+- BRIDGE_CONFIG_EXAMPLE.txt
+
+Typical use on the MacBook:
+
+1. Copy this whole folder to the Desktop
+
+2. Open Terminal in this folder
+
+3. Make the two shell scripts executable:
+
+   chmod +x run_mac_fake_csv_rehearsal.sh run_mac_real_csv.sh
+
+4. Rehearsal with fake CSV:
+
+   bash ./run_mac_fake_csv_rehearsal.sh
+
+   This starts:
+   - a fake CSV writer
+   - the MQTT sender
+
+5. Real CSV mode:
+
+   bash ./run_mac_real_csv.sh "/absolute/path/to/real_labview_output.csv" ARO-01
+
+   This first checks the CSV header, then starts the sender.
+
+Using a private broker:
+- by default the shell scripts use broker.emqx.io
+- for the real setup, use your private broker
+
+Example:
+
+   MQTT_HOST=your-private-broker \
+   MQTT_PORT=8883 \
+   MQTT_USER=your-user \
+   MQTT_PASSWORD=your-password \
+   bash ./run_mac_fake_csv_rehearsal.sh
+
+Real CSV example:
+
+   MQTT_HOST=your-private-broker \
+   MQTT_PORT=8883 \
+   MQTT_USER=your-user \
+   MQTT_PASSWORD=your-password \
+   bash ./run_mac_real_csv.sh "/absolute/path/to/real_labview_output.csv" ARO-01
+
+Important:
+- use ARO-01 as the machine code
+- in the app, ARO-01 appears as Machine reelle
+- use fake data only with the public test broker
+- keep the real backend and frontend running on your own PC
+- do NOT copy prediteq_api/.env to the MacBook
+- do NOT copy Supabase or backend secrets to the MacBook
+
+If you want to review the expected CSV format:
+- open PREFERRED_LABVIEW_CSV_TEMPLATE.csv
+
+If you want to understand the bridge config:
+- open BRIDGE_CONFIG_EXAMPLE.txt
