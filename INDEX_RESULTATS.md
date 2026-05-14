@@ -1,9 +1,9 @@
 # PrediTeq — Index des résultats, algorithmes et simulations
 
 **Projet** : PrediTeq — Maintenance prédictive du moteur d'un stockeur vertical rotatif SITI FC100L1-4 (2,2 kW, Aroteq Ben Arous)
-**Auteur** : Firas Zouari — ISAMM PFE 2026
+**Auteur** : Mohamed Firas Abed — ISAMM PFE 2026
 **Soutenance** : 23 avril 2026
-**Dernière exécution pipeline** : 2026-04-27 (base commit `95d8943`, artefacts régénérés en working tree local, version `2.0-no-leakage`)
+**Dernière vérification des artefacts** : 2026-05-08 (`metrics.json`) + 2026-05-05 (`rul_cv_scores.json`), version `2.0-no-leakage`
 
 Ce document liste **dans l'ordre du pipeline** tous les scripts, données, modèles, scores et figures du projet. Chaque chemin est relatif à la racine du workspace (`pfe_MIME_26/`).
 
@@ -236,47 +236,49 @@ Donc en soutenance, la formulation juste est :
 
 ---
 
-## 4. Scores finaux (source : `outputs/metrics.json`, exécution 2026-04-27)
+## 4. Scores finaux (sources : `outputs/metrics.json`, `outputs/rul_cv_scores.json`, vérification 2026-05-08)
+
+En cas d'écart entre ce résumé et les JSON exportés par le pipeline, ce sont les JSON exportés qui font foi.
 
 ### 4.1 Régression RUL — Random Forest
 
-**Holdout (test stratifié 20 %, 40 trajectoires, 25 355 échantillons) :**
+**Holdout (test stratifié 20 %, 40 trajectoires, 21 388 échantillons) :**
 
 | Métrique | Valeur |
 |---|---|
-| **R² test** | **0,947** |
-| R² train | 0,987 |
-| RMSE | 45,46 min-sim / **5,05 jours** |
-| MAE | 21,26 min-sim / **2,36 jours** |
-| n_train samples / groupes | 103 699 / 160 |
-| n_test samples / groupes | 25 355 / 40 |
+| **R² test** | **0,980** |
+| R² train | 0,990 |
+| RMSE | 22,44 min-sim / **2,49 jours** |
+| MAE | 14,82 min-sim / **1,65 jours** |
+| n_train samples / groupes | 85 140 / 160 |
+| n_test samples / groupes | 21 388 / 40 |
 
 **Cross-validation GroupKFold k=5 :**
 
 | Métrique | Valeur |
 |---|---|
-| **R² moyen** | **0,967 ± 0,011** |
-| RMSE moyen | 3,95 ± 0,65 jours |
-| Fold 1 | R² = 0,945 · RMSE = 5,17 j |
-| Fold 2 | R² = 0,977 · RMSE = 3,36 j |
-| Fold 3 | R² = 0,975 · RMSE = 3,46 j |
-| Fold 4 | R² = 0,968 · RMSE = 3,92 j |
-| Fold 5 | R² = 0,969 · RMSE = 3,86 j |
+| **R² moyen** | **0,982 ± 0,001** |
+| RMSE moyen | 2,32 ± 0,04 jours |
+| Fold 1 | R² = 0,982 · RMSE = 2,31 j |
+| Fold 2 | R² = 0,982 · RMSE = 2,32 j |
+| Fold 3 | R² = 0,982 · RMSE = 2,33 j |
+| Fold 4 | R² = 0,983 · RMSE = 2,27 j |
+| Fold 5 | R² = 0,981 · RMSE = 2,38 j |
 
 **Baselines (holdout, preuve de non-trivialité) :**
 
 | Baseline | R² | RMSE (jours) |
 |---|---|---|
-| DummyRegressor (moyenne) | −0,000 | 22,05 |
-| LinearRegression | 0,806 | 9,71 |
-| **Random Forest (nôtre)** | **0,947** | **5,05** |
+| DummyRegressor (moyenne) | −0,000 | 17,43 |
+| LinearRegression | 0,941 | 4,23 |
+| **Random Forest (nôtre)** | **0,980** | **2,49** |
 
 **Équilibre par profil dans le split :**
 
 | Profil | Train (total/gardés) | Test (total/gardés) |
 |---|---|---|
 | A linéaire | 40 / 40 | 10 / 10 |
-| B_exponential (libellé historique du profil B) | 40 / 40 | 10 / 10 |
+| B_quadratic | 40 / 40 | 10 / 10 |
 | C stepwise | 40 / 40 | 10 / 10 |
 | D noisy linear | 40 / 40 | 10 / 10 |
 
@@ -293,10 +295,10 @@ Donc en soutenance, la formulation juste est :
 
 | Méthode | Précision | Rappel | F1 |
 |---|---|---|---|
-| Isolation Forest seul | 0,410 | 1,000 | 0,581 |
-| RMS z-score baseline | 0,782 | 1,000 | 0,877 |
-| Hybrid ensemble (α=0,2) | 0,947 | 0,930 | 0,938 |
-| Hybrid AND (confirmation) | 0,782 | 1,000 | 0,877 |
+| Isolation Forest seul | 0,521 | 1,000 | 0,685 |
+| RMS z-score baseline | 0,852 | 1,000 | 0,920 |
+| Hybrid ensemble (α=0,2) | 0,971 | 0,958 | 0,964 |
+| Hybrid AND (confirmation) | 0,852 | 1,000 | 0,920 |
 
 ### 4.4 Calibration des IC (`calibration_metrics.json`)
 
@@ -391,7 +393,7 @@ Toutes les sorties sont déterministes (`random_state=42`, `SPLIT_SEED=42`).
 
 ## 10. Résumé exécutif (à réciter au jury en 30 s)
 
-> *« PrediTeq traite 200 trajectoires dans toute la chaîne brute et transformée (simulation, features, scores d'anomalie, Health Index). Le fichier `rul_predictions.csv` reste un artefact de holdout limité aux 40 trajectoires de test, conformément au protocole d'évaluation. Après recalibration train-only du score hybride et réalignement du split stratifié entre les étapes, le modèle atteint R² = 0,947 en holdout et 0,967 ± 0,011 en cross-validation GroupKFold, avec une MAE de 2,36 jours. Le benchmark NASA CMAPSS FD001 reste validé à R² = 0,886 et score NASA = 16 263,9. »*
+> *« PrediTeq traite 200 trajectoires dans toute la chaîne brute et transformée (simulation, features, scores d'anomalie, Health Index). Le fichier `rul_predictions.csv` reste un artefact de holdout limité aux 40 trajectoires de test, conformément au protocole d'évaluation. Sur les artefacts exportés actuels, le modèle atteint R² = 0,980 en holdout et 0,982 ± 0,001 en cross-validation GroupKFold, avec une MAE de 1,65 jour. Le benchmark NASA CMAPSS FD001 reste validé à R² = 0,886 et score NASA = 16 263,9. »*
 
 ---
 

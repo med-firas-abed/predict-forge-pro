@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import { MACHINES, STATUS_CONFIG, genHI } from "@/data/machines";
 
 describe("MACHINES data", () => {
-  it("contains exactly 3 machines", () => {
-    expect(MACHINES).toHaveLength(3);
+  it("contains the 3 baseline demo machines", () => {
+    expect(MACHINES.length).toBeGreaterThanOrEqual(3);
+    expect(MACHINES.map((machine) => machine.id)).toEqual(
+      expect.arrayContaining(["ASC-A1", "ASC-B2", "ASC-C3"]),
+    );
   });
 
   it("each machine has required fields", () => {

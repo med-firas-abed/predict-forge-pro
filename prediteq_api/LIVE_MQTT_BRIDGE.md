@@ -10,7 +10,7 @@ computes live HI, diagnosis, stress, and RUL.
 
 Target flow:
 
-`boss PC -> MQTT broker -> PrediTeq backend -> frontend`
+`boss PC -> MQTT broker or HTTPS -> PrediTeq backend -> frontend`
 
 ## Files added for this
 
@@ -45,6 +45,7 @@ MQTT_PORT=8883
 MQTT_USER=your-user
 MQTT_PASSWORD=your-password
 MQTT_USE_SSL=true
+LIVE_INGEST_TOKEN=choose-a-long-random-token
 ```
 
 Important:
@@ -52,7 +53,7 @@ Important:
 - use a private broker
 - do not leave `MQTT_BROKER=broker.emqx.io`
 - restart the backend after changing `.env`
-- restart the backend after creating a new machine code
+- a new machine code can now be picked up automatically on the first live MQTT payload
 
 ### 3. Start the backend
 
@@ -85,12 +86,25 @@ Copy `scripts/.env.bridge.example` to `scripts/.env.bridge` and fill:
 
 ```env
 MACHINE_ID=ARO-01
+PUBLISH_TRANSPORT=mqtt
 MQTT_HOST=your-private-broker
 MQTT_PORT=8883
 MQTT_USER=your-user
 MQTT_PASSWORD=your-password
 MQTT_USE_SSL=true
 MQTT_TOPIC=prediteq/{machine_id}/sensors
+PUBLISH_INTERVAL_S=1.0
+SOURCE_MODE=mock
+SOURCE_LABEL=boss_pc_bridge
+```
+
+If the boss laptop should post directly to the backend instead of MQTT:
+
+```env
+MACHINE_ID=ARO-01
+PUBLISH_TRANSPORT=http
+HTTP_INGEST_URL=https://your-backend/ingest/live
+HTTP_INGEST_TOKEN=choose-a-long-random-token
 PUBLISH_INTERVAL_S=1.0
 SOURCE_MODE=mock
 SOURCE_LABEL=boss_pc_bridge
@@ -107,6 +121,13 @@ python scripts/mqtt_bridge_sender.py --mode mock --machine-id ARO-01
 
 This sends one message every second with test values so you can verify the full
 PrediTeq live path first.
+
+HTTP version:
+
+```powershell
+cd prediteq_api
+python scripts/mqtt_bridge_sender.py --transport http --http-url https://your-backend/ingest/live --http-token choose-a-long-random-token --mode mock --machine-id ARO-01
+```
 
 ### 4. Replace mock with the real source
 
@@ -146,7 +167,7 @@ Optional but useful:
 
 1. You create `ARO-01`
 2. You configure backend MQTT
-3. You restart the backend
+3. You restart the backend only if the MQTT config changed
 4. Your boss runs the sender in `mock` mode
 5. You check `/health/detail`
 6. You check `/machines/ARO-01`

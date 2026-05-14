@@ -142,6 +142,11 @@ def health_detail(user: CurrentUser = Depends(require_auth)):
         # MQTT
         deps["mqtt"] = {"status": "connected" if mqtt_is_connected() else "disconnected"}
 
+        # HTTP live ingest
+        deps["live_ingest"] = {
+            "status": "ok" if settings.LIVE_INGEST_TOKEN else "not_configured",
+        }
+
         # Overall status
         any_error = any(d.get("status") == "error" for d in deps.values())
         overall = "degraded" if any_error else "ok"

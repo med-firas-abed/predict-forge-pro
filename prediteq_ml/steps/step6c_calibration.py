@@ -63,7 +63,7 @@ Ne touche à AUCUN fichier du pipeline existant. Lecture seule sur
 `data/processed/rul_predictions.csv`. À lancer une fois pour générer la
 figure du mémoire.
 
-Auteur : Firas Zouari — ISAMM PFE 2026
+Auteur : Mohamed Firas Abed — ISAMM PFE 2026
 """
 from __future__ import annotations
 

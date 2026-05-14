@@ -99,7 +99,7 @@ Tests inline en bas du fichier (lancer
    python -m prediteq_ml.diagnostics.rul_calibration
 pour les exécuter).
 
-Auteur : Firas Zouari — ISAMM PFE 2026
+Auteur : Mohamed Firas Abed — ISAMM PFE 2026
 """
 from __future__ import annotations
 from typing import Optional, TypedDict, Literal

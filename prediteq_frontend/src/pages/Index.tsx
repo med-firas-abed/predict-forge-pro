@@ -293,6 +293,10 @@ const Index = () => {
     );
   }
 
+  if (route === "/pending" && currentUser?.status === "approved") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   if (currentUser && isAuthRoute && !allowAdminCreateSignup) {
     if (currentUser.status === "approved") {
       return <Navigate to="/dashboard" replace />;

@@ -212,4 +212,22 @@ describe("Index routing", () => {
     expect(await screen.findByText("Dashboard page")).toBeInTheDocument();
     expect(screen.queryByText("Oops ! Page introuvable")).not.toBeInTheDocument();
   });
+
+  it("redirects approved users away from /pending to the dashboard", async () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      isAuthenticated: true,
+      currentUser: {
+        role: "admin",
+        status: "approved",
+        fullName: "Admin User",
+        email: "admin@example.com",
+      },
+    });
+
+    renderIndex("/pending");
+
+    expect(await screen.findByText("Dashboard page")).toBeInTheDocument();
+    expect(screen.queryByText("Pending page")).not.toBeInTheDocument();
+  });
 });

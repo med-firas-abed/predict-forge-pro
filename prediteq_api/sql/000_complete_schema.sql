@@ -357,10 +357,19 @@ ALTER PUBLICATION supabase_realtime ADD TABLE machines;
 
 INSERT INTO machines (code, nom, region, latitude, longitude, statut, hi_courant)
 VALUES
-  ('ASC-A1', 'Stockeur vertical rotatif A1 — Ben Arous', 'Ben Arous', 36.7333, 10.2167, 'operational', 0.96),
+  ('ASC-A1', 'Stockeur vertical rotatif A1 — Bizerte', 'Bizerte', 37.2744, 9.8739, 'operational', 0.96),
   ('ASC-B2', 'Stockeur vertical rotatif B2 — Sfax',      'Sfax',      34.7400, 10.7600, 'degraded',    0.62),
   ('ASC-C3', 'Stockeur vertical rotatif C3 — Sousse',    'Sousse',    35.8333, 10.6000, 'critical',    0.10)
 ON CONFLICT (code) DO NOTHING;
+
+UPDATE machines
+SET nom = CASE code
+  WHEN 'ASC-A1' THEN 'Machine 1'
+  WHEN 'ASC-B2' THEN 'Machine 2'
+  WHEN 'ASC-C3' THEN 'Machine 3'
+  ELSE nom
+END
+WHERE code IN ('ASC-A1', 'ASC-B2', 'ASC-C3');
 
 -- Default thresholds (single row)
 INSERT INTO seuils (hi_critical, hi_surveillance, rul_critical_days, rul_surveillance_days)

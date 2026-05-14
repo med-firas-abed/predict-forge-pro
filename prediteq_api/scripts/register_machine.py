@@ -131,7 +131,8 @@ def main() -> int:
     print(f"  status: {row.get('statut')}")
     print("")
     print("Next step:")
-    print("  Restart the backend after this so the live MQTT listener caches the new machine code.")
+    print("  Start the live sender with this same machine code.")
+    print("  If the backend is already running, the first MQTT payload will refresh the machine cache automatically.")
     return 0
 
 

@@ -258,6 +258,11 @@ function supabaseRowToMachine(row: Record<string, unknown>): Machine {
     model: machineModel,
     floors: floorCount,
     last: formatLastUpdate(updatedAt),
+    dataSource:
+      decision?.dataSource ??
+      (sensors ? "live_runtime" : typeof row.hi_courant === "number" ? "persisted_reference" : "no_data"),
+    freshnessState: decision?.freshnessState ?? null,
+    telemetrySource: typeof sensors?.source === "string" ? repairText(sensors.source) : null,
     decision,
     demoScenario: (row.demo_scenario as Machine["demoScenario"]) ?? null,
   };
@@ -338,8 +343,9 @@ export function useMachines(machineId?: string) {
 
   const addMachine = useMutation({
     mutationFn: (machine: Partial<Machine>) => createMachineRecord(machine),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["machines"] });
+      toast.success(`Machine ${variables.id ?? ""} ajoutee`);
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -349,8 +355,9 @@ export function useMachines(machineId?: string) {
   const updateMachine = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Machine> }) =>
       updateMachineRecord(id, updates),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["machines"] });
+      toast.success(`Machine ${variables.id} mise a jour`);
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -359,8 +366,9 @@ export function useMachines(machineId?: string) {
 
   const deleteMachine = useMutation({
     mutationFn: (id: string) => deleteMachineRecord(id),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["machines"] });
+      toast.success(`Machine ${variables} supprimee`);
     },
     onError: (error: Error) => {
       toast.error(error.message);

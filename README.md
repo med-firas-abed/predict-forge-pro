@@ -39,7 +39,7 @@ prediteq_ml/        Offline pipeline, diagnostics, exported models and outputs
 prediteq_api/       Runtime backend, scheduler, simulator, alerts and auth
 prediteq_frontend/  React UI, pages, hooks and presentation logic
 render.yaml         Render deployment config for the backend
-INDEX_RESULTATS.md  Exact pipeline order, generated artifacts and verified metrics
+INDEX_RESULTATS.md  Exact pipeline order, generated artifacts and the human-readable metric summary
 ```
 
 ## Best first files to open
@@ -108,7 +108,8 @@ For the final delivery and demo package, use:
 
 Use these files when you need the current truth:
 
-- `INDEX_RESULTATS.md` for pipeline order, outputs and verified metrics
+- `INDEX_RESULTATS.md` for pipeline order, outputs, timings and the human-readable metric summary
+- `prediteq_ml/outputs/*.json` for the exported metric values used by the report and jury package
 - `prediteq_ml/config.py` for ML/runtime defaults
 - `prediteq_api/` for live behavior
 

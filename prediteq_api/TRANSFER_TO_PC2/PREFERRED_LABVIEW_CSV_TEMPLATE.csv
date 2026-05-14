@@ -1,0 +1,2 @@
+machine_id,observed_at,rms_mms,power_kw,temp_c,humidity_rh,current_a,load_kg,status
+ARO-01,2026-05-13T12:00:00Z,1.020,0.820,23.4,54.0,1.476,0.0,running

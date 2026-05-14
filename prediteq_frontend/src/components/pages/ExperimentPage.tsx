@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, AlertTriangle, CircleDot, Clock, Cpu, Thermometer, Zap } from "lucide-react";
+import { Activity, AlertTriangle, CircleDot, Clock, Cpu, Zap } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useSearchParams } from "react-router-dom";
 
@@ -69,12 +69,227 @@ interface BrowserSerialPort {
 
 interface BrowserSerial {
   requestPort(): Promise<BrowserSerialPort>;
+  getPorts?(): Promise<BrowserSerialPort[]>;
 }
 
 const MAX_POINTS = 30;
 const MAX_EVENTS = 40;
 const VIBRATION_UNIT = "m/s2";
 const CURRENT_UNIT = "A";
+const SERIAL_STALE_MS = 3000;
+const SERIAL_RECOVER_MS = 1200;
+type FeedSource = "serial" | "demo";
+type DemoBenchPhase = "rest_start" | "running" | "rest_middle" | "loaded" | "rest_end";
+
+const SERIAL_MAX_RECOVER_ATTEMPTS = 6;
+const DEMO_SAMPLE_MS = 350;
+const DEMO_PHASE_MS = 7000;
+const DEMO_STARTUP_CALIBRATION_MS = 2800;
+const DEMO_CALIBRATION_SAMPLES = 15;
+const DEMO_BASELINE_VIBRATION = 0.03;
+const DEMO_BASELINE_CURRENT = 0.0;
+const DEMO_VIBRATION_THRESHOLD = 0.34;
+const DEMO_CURRENT_THRESHOLD = 0.16;
+const DEMO_REST_VIBRATION_RAW = 0.05;
+const DEMO_RUNNING_CURRENT = 0.092;
+const DEMO_BLOCKED_CURRENT = 0.225;
+const DEMO_RUNNING_VIBRATION_RMS = 0.19;
+const DEMO_BLOCKED_VIBRATION_RMS = 0.39;
+const DEMO_RUNNING_VIBRATION_RAW = 0.29;
+const DEMO_BLOCKED_VIBRATION_RAW = 0.64;
+const DEMO_REST_TEMP_C = 25.1;
+const DEMO_RUNNING_TEMP_C = 25.7;
+const DEMO_BLOCKED_TEMP_C = 26.4;
+
+function clampNumber(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function roundMetric(value: number, digits: number) {
+  return Number(value.toFixed(digits));
+}
+
+function lerpNumber(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
+}
+
+function demoWave(seconds: number, amplitude: number, phase: number) {
+  return (
+    Math.sin(seconds * 1.8 + phase) * amplitude +
+    Math.cos(seconds * 0.67 + phase * 0.6) * amplitude * 0.35
+  );
+}
+
+function demoRamp(progress: number, span = 0.22) {
+  return clampNumber(progress / span, 0, 1);
+}
+
+function demoKick(progress: number, center = 0.12, width = 0.065) {
+  const normalized = (progress - center) / width;
+  return Math.exp(-(normalized * normalized));
+}
+
+function buildBenchDemoFrame(elapsedMs: number) {
+  const boundedElapsedMs = Math.max(0, elapsedMs);
+  const seconds = boundedElapsedMs / 1000;
+  const startupCalibrationProgress = clampNumber(boundedElapsedMs / DEMO_STARTUP_CALIBRATION_MS, 0, 1);
+  const startupCalibCount = Math.max(1, Math.ceil(startupCalibrationProgress * DEMO_CALIBRATION_SAMPLES));
+
+  let phase: DemoBenchPhase = "rest_end";
+  let phaseStartMs = DEMO_PHASE_MS * 4;
+  if (boundedElapsedMs < DEMO_PHASE_MS) {
+    phase = "rest_start";
+    phaseStartMs = 0;
+  } else if (boundedElapsedMs < DEMO_PHASE_MS * 2) {
+    phase = "running";
+    phaseStartMs = DEMO_PHASE_MS;
+  } else if (boundedElapsedMs < DEMO_PHASE_MS * 3) {
+    phase = "rest_middle";
+    phaseStartMs = DEMO_PHASE_MS * 2;
+  } else if (boundedElapsedMs < DEMO_PHASE_MS * 4) {
+    phase = "loaded";
+    phaseStartMs = DEMO_PHASE_MS * 3;
+  }
+
+  const phaseProgress = clampNumber((boundedElapsedMs - phaseStartMs) / DEMO_PHASE_MS, 0, 1);
+  const rampUp = demoRamp(phaseProgress, 0.2);
+  const rampDown = 1 - demoRamp(phaseProgress, 0.18);
+  const startupCalibrating = phase === "rest_start" && boundedElapsedMs < DEMO_STARTUP_CALIBRATION_MS;
+
+  let currentA = 0;
+  let vibrationRms = DEMO_BASELINE_VIBRATION;
+  let vibrationRaw = DEMO_REST_VIBRATION_RAW;
+  let tempC = DEMO_REST_TEMP_C;
+  let status = "REST";
+  let calibCount: number | undefined;
+  let calibTotal: number | undefined;
+
+  if (phase === "rest_start") {
+    currentA = 0;
+    vibrationRms = clampNumber(DEMO_BASELINE_VIBRATION + demoWave(seconds, 0.004, 0.1), 0.02, 0.045);
+    vibrationRaw = clampNumber(DEMO_REST_VIBRATION_RAW + demoWave(seconds, 0.01, 0.4), 0.04, 0.09);
+    tempC = clampNumber(DEMO_REST_TEMP_C + demoWave(seconds, 0.08, 0.7), 24.9, 25.3);
+    status = startupCalibrating ? "CALIBRATING_REST" : "REST";
+    if (startupCalibrating) {
+      calibCount = startupCalibCount;
+      calibTotal = DEMO_CALIBRATION_SAMPLES;
+    }
+  } else if (phase === "running") {
+    const startupKick = demoKick(phaseProgress);
+    currentA = clampNumber(
+      lerpNumber(0, DEMO_RUNNING_CURRENT, rampUp) + startupKick * 0.022 + demoWave(seconds, 0.004, 0.2),
+      0,
+      0.125,
+    );
+    vibrationRms = clampNumber(
+      lerpNumber(DEMO_BASELINE_VIBRATION, DEMO_RUNNING_VIBRATION_RMS, rampUp) + startupKick * 0.038 + demoWave(seconds, 0.012, 0.6),
+      0.03,
+      0.27,
+    );
+    vibrationRaw = clampNumber(
+      lerpNumber(DEMO_REST_VIBRATION_RAW, DEMO_RUNNING_VIBRATION_RAW, rampUp) + startupKick * 0.058 + demoWave(seconds, 0.02, 0.9),
+      0.05,
+      0.4,
+    );
+    tempC = clampNumber(
+      lerpNumber(DEMO_REST_TEMP_C, DEMO_RUNNING_TEMP_C, rampUp) + demoWave(seconds, 0.08, 1.1),
+      25.0,
+      26.0,
+    );
+    status = "RUNNING";
+  } else if (phase === "rest_middle") {
+    currentA = clampNumber(
+      lerpNumber(0, DEMO_RUNNING_CURRENT, rampDown) + demoWave(seconds, 0.0025, 0.25),
+      0,
+      0.07,
+    );
+    if (currentA < 0.004) {
+      currentA = 0;
+    }
+    vibrationRms = clampNumber(
+      lerpNumber(DEMO_BASELINE_VIBRATION, DEMO_RUNNING_VIBRATION_RMS, rampDown) + demoWave(seconds, 0.009, 0.55),
+      0.03,
+      0.24,
+    );
+    vibrationRaw = clampNumber(
+      lerpNumber(DEMO_REST_VIBRATION_RAW, DEMO_RUNNING_VIBRATION_RAW, rampDown) + demoWave(seconds, 0.016, 0.85),
+      0.05,
+      0.36,
+    );
+    tempC = clampNumber(
+      lerpNumber(DEMO_REST_TEMP_C + 0.05, DEMO_RUNNING_TEMP_C, rampDown) + demoWave(seconds, 0.06, 1.05),
+      25.0,
+      25.9,
+    );
+    status = "REST";
+  } else if (phase === "loaded") {
+    const startupKick = demoKick(phaseProgress);
+    currentA = clampNumber(
+      lerpNumber(0, DEMO_BLOCKED_CURRENT, rampUp) + startupKick * 0.032 + demoWave(seconds, 0.006, 0.5),
+      0,
+      0.275,
+    );
+    vibrationRms = clampNumber(
+      lerpNumber(DEMO_BASELINE_VIBRATION, DEMO_BLOCKED_VIBRATION_RMS, rampUp) + startupKick * 0.055 + demoWave(seconds, 0.016, 0.8),
+      0.03,
+      0.47,
+    );
+    vibrationRaw = clampNumber(
+      lerpNumber(DEMO_REST_VIBRATION_RAW, DEMO_BLOCKED_VIBRATION_RAW, rampUp) + startupKick * 0.085 + demoWave(seconds, 0.026, 1.3),
+      0.05,
+      0.78,
+    );
+    tempC = clampNumber(
+      lerpNumber(DEMO_REST_TEMP_C, DEMO_BLOCKED_TEMP_C, rampUp) + demoWave(seconds, 0.1, 1.6),
+      25.1,
+      26.8,
+    );
+    status = "BLOCKED";
+  } else {
+    currentA = clampNumber(
+      lerpNumber(0, DEMO_BLOCKED_CURRENT, rampDown) + demoWave(seconds, 0.003, 0.3),
+      0,
+      0.2,
+    );
+    if (currentA < 0.004) {
+      currentA = 0;
+    }
+    vibrationRms = clampNumber(
+      lerpNumber(DEMO_BASELINE_VIBRATION, DEMO_BLOCKED_VIBRATION_RMS, rampDown) + demoWave(seconds, 0.014, 0.75),
+      0.03,
+      0.45,
+    );
+    vibrationRaw = clampNumber(
+      lerpNumber(DEMO_REST_VIBRATION_RAW, DEMO_BLOCKED_VIBRATION_RAW, rampDown) + demoWave(seconds, 0.024, 1.05),
+      0.05,
+      0.82,
+    );
+    tempC = clampNumber(
+      lerpNumber(DEMO_REST_TEMP_C + 0.1, DEMO_BLOCKED_TEMP_C, rampDown) + demoWave(seconds, 0.08, 1.45),
+      25.1,
+      26.6,
+    );
+    status = "REST";
+  }
+
+  return {
+    phase,
+    frame: {
+      timestamp_ms: boundedElapsedMs,
+      current_a: roundMetric(currentA, 3),
+      vibration_raw: roundMetric(vibrationRaw, 3),
+      vibration_rms: roundMetric(vibrationRms, 3),
+      temp_c: roundMetric(tempC, 2),
+      status,
+      calib_count: calibCount,
+      calib_total: calibTotal,
+      baseline_vib: DEMO_BASELINE_VIBRATION,
+      baseline_current: DEMO_BASELINE_CURRENT,
+      thresh_vib: DEMO_VIBRATION_THRESHOLD,
+      thresh_current: DEMO_CURRENT_THRESHOLD,
+    } satisfies BenchSensors,
+  };
+}
 
 function pushPoint(prev: SensorPoint[], value: number, digits: number, time: string) {
   return [...prev, { time, value: Number(value.toFixed(digits)) }].slice(-MAX_POINTS);
@@ -109,6 +324,7 @@ export function ExperimentPage() {
     [lang],
   );
   const requestedMachineCode = searchParams.get("machine");
+  const showManualSerialOption = searchParams.get("serial") === "1";
   const serialApi = typeof navigator !== "undefined"
     ? (navigator as Navigator & { serial?: BrowserSerial }).serial
     : undefined;
@@ -118,36 +334,49 @@ export function ExperimentPage() {
   const [apiSensors, setApiSensors] = useState<BenchSensors | null>(null);
 
   const [serialConnected, setSerialConnected] = useState(false);
+  const [demoConnected, setDemoConnected] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
   const [serialNote, setSerialNote] = useState<string | null>(null);
   const [serialSensors, setSerialSensors] = useState<BenchSensors | null>(null);
   const [sampleCount, setSampleCount] = useState(0);
   const [lastPacketTime, setLastPacketTime] = useState<string | null>(null);
   const [lastSerialTimestamp, setLastSerialTimestamp] = useState<number | null>(null);
+  const [serialStreamStale, setSerialStreamStale] = useState(false);
 
   const [vibrationHistory, setVibrationHistory] = useState<SensorPoint[]>([]);
   const [currentHistory, setCurrentHistory] = useState<SensorPoint[]>([]);
-  const [temperatureHistory, setTemperatureHistory] = useState<SensorPoint[]>([]);
   const [baselines, setBaselines] = useState<{ vibration: number | null; current: number | null }>({
     vibration: null,
     current: null,
   });
   const [eventLog, setEventLog] = useState<EventEntry[]>([]);
+  const [lastFrameSource, setLastFrameSource] = useState<FeedSource | null>(null);
 
   const portRef = useRef<BrowserSerialPort | null>(null);
+  const selectedPortRef = useRef<BrowserSerialPort | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const bufferRef = useRef("");
   const disconnectingRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const demoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const demoStartedAtRef = useRef<number | null>(null);
+  const demoPhaseRef = useRef<DemoBenchPhase | null>(null);
+  const serialStaleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serialReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serialReconnectAttemptRef = useRef(0);
+  const serialRecoveringRef = useRef(false);
+  const serialAutoReconnectRef = useRef(false);
   const calibrationRef = useRef<{ vibration: number[]; current: number[] }>({ vibration: [], current: [] });
   const eventIdRef = useRef(0);
   const statusSnapshotRef = useRef<StatusSnapshot | null>(null);
+  const lastSerialTimestampRef = useRef<number | null>(null);
 
   const activeSensors = serialSensors ?? apiSensors;
+  const liveConnected = demoConnected || serialConnected;
+  const activeFeedSource: FeedSource | null = demoConnected ? "demo" : serialConnected ? "serial" : null;
   const vibrationRms = activeSensors?.vibration_rms ?? activeSensors?.rms_mms ?? null;
   const vibrationRaw = activeSensors?.vibration_raw ?? null;
   const currentA = activeSensors?.current_a ?? null;
-  const temperatureC = activeSensors?.temp_c ?? null;
   const firmwareStatus = activeSensors?.status ?? null;
   const isCalibrating = firmwareStatus?.includes("CALIBRATING") ?? false;
   const vibrationThreshold = activeSensors?.thresh_vib ?? null;
@@ -159,6 +388,14 @@ export function ExperimentPage() {
     : null;
   const vibrationAboveThreshold = vibrationRms !== null && vibrationThreshold !== null && vibrationRms > vibrationThreshold;
   const currentAboveThreshold = currentA !== null && currentThreshold !== null && currentA > currentThreshold;
+  const recentCurrentHistory = currentHistory.slice(-8);
+  const recentVibrationHistory = vibrationHistory.slice(-8);
+  const currentFlatlineHint =
+    serialConnected &&
+    !serialStreamStale &&
+    recentCurrentHistory.length >= 6 &&
+    recentCurrentHistory.every((point) => Math.abs(point.value) < 0.0005) &&
+    recentVibrationHistory.some((point) => Math.abs(point.value) >= 0.05);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,7 +436,24 @@ export function ExperimentPage() {
 
   useEffect(() => {
     return () => {
+      if (demoIntervalRef.current) {
+        clearInterval(demoIntervalRef.current);
+        demoIntervalRef.current = null;
+      }
       void disconnectSerial();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (serialStaleTimeoutRef.current) {
+        clearTimeout(serialStaleTimeoutRef.current);
+        serialStaleTimeoutRef.current = null;
+      }
+      if (serialReconnectTimerRef.current) {
+        clearTimeout(serialReconnectTimerRef.current);
+        serialReconnectTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -249,6 +503,299 @@ export function ExperimentPage() {
     };
 
     setEventLog((prev) => [...prev, entry].slice(-MAX_EVENTS));
+  }
+
+  function clearSerialStaleTimeout() {
+    if (serialStaleTimeoutRef.current) {
+      clearTimeout(serialStaleTimeoutRef.current);
+      serialStaleTimeoutRef.current = null;
+    }
+  }
+
+  function clearSerialReconnectTimer() {
+    if (serialReconnectTimerRef.current) {
+      clearTimeout(serialReconnectTimerRef.current);
+      serialReconnectTimerRef.current = null;
+    }
+  }
+
+  function clearBenchDemoInterval() {
+    if (demoIntervalRef.current) {
+      clearInterval(demoIntervalRef.current);
+      demoIntervalRef.current = null;
+    }
+  }
+
+  function describeBenchDemoPhase(phase: DemoBenchPhase) {
+    switch (phase) {
+      case "rest_start":
+        return {
+          note: l(
+            "# BOOT_OK | # MPU_OK | status=CALIBRATING_REST",
+            "# BOOT_OK | # MPU_OK | status=CALIBRATING_REST",
+            "# BOOT_OK | # MPU_OK | status=CALIBRATING_REST"
+          ),
+          title: l("Initialisation ESP32", "ESP32 startup", "تهيئة ESP32"),
+          detail: l(
+            "Le flux USB s'ouvre et l'ESP32 stabilise les baselines ACS712 5A et MPU6050 avant le lancement live.",
+            "The USB feed opens and the ESP32 stabilizes the ACS712 5A and MPU6050 baselines before going live.",
+            "يفتح تدفق USB وتثبّت وحدة ESP32 خطوط الأساس الخاصة بـ ACS712 5A وMPU6050 قبل الإطلاق الحي."
+          ),
+          tone: "info" as const,
+        };
+      case "running":
+        return {
+          note: l(
+            "# LIVE_STREAM_READY | status=RUNNING | current_a->0.055",
+            "# LIVE_STREAM_READY | status=RUNNING | current_a->0.055",
+            "# LIVE_STREAM_READY | status=RUNNING | current_a->0.055"
+          ),
+          title: l("Flux live actif", "Live feed active", "التدفق الحي نشط"),
+          detail: l(
+            "Le moteur demarre et les mesures courant/vibration se stabilisent comme sur un banc reel.",
+            "The motor starts and the current/vibration measurements stabilize like a real bench setup.",
+            "يبدأ المحرك وتستقر قياسات التيار والاهتزاز كما في منصة اختبار حقيقية."
+          ),
+          tone: "success" as const,
+        };
+      case "rest_middle":
+        return {
+          note: l(
+            "status=REST | motor_off | current_a->0.000",
+            "status=REST | motor_off | current_a->0.000",
+            "status=REST | motor_off | current_a->0.000"
+          ),
+          title: l("Moteur coupe", "Motor OFF", "المحرك متوقف"),
+          detail: l(
+            "Le moteur est coupe pendant quelques secondes et les deux capteurs reviennent vers leur niveau de repos.",
+            "The motor is switched OFF for a few seconds and both sensors fall back toward their resting level.",
+            "يتم إيقاف المحرك لعدة ثوان وتعود قراءات الحساسين نحو مستوى السكون."
+          ),
+          tone: "success" as const,
+        };
+      case "loaded":
+        return {
+          note: l(
+            "status=BLOCKED | wheel load attached | current_a->0.185",
+            "status=BLOCKED | wheel load attached | current_a->0.185",
+            "status=BLOCKED | wheel load attached | current_a->0.185"
+          ),
+          title: l("Rotation avec charge", "Rotation under load", "دوران تحت حمولة"),
+          detail: l(
+            "Le moteur redemarre avec une charge plus elevee, comme lorsqu'on ajoute une roue sur l'arbre du moteur.",
+            "The motor starts again under a higher load, like attaching a wheel to the motor shaft.",
+            "يعاود المحرك الدوران تحت حمولة أعلى، كما لو تم تثبيت عجلة على عمود المحرك."
+          ),
+          tone: "warning" as const,
+        };
+      default:
+        return {
+          note: l(
+            "status=REST | motor_off | current_a->0.000",
+            "status=REST | motor_off | current_a->0.000",
+            "status=REST | motor_off | current_a->0.000"
+          ),
+          title: l("Retour au repos", "Return to rest", "العودة إلى السكون"),
+          detail: l(
+            "Le moteur est coupe et les courbes reviennent vers leur niveau de repos sans rupture brutale.",
+            "The motor is OFF and the curves return to their rest level without an abrupt jump.",
+            "يكون المحرك متوقفاً وتعود المنحنيات إلى مستوى السكون بدون قفزة حادة."
+          ),
+          tone: "success" as const,
+        };
+    }
+  }
+
+  function stopBenchDemo(options?: { clearNote?: boolean }) {
+    clearBenchDemoInterval();
+    demoStartedAtRef.current = null;
+    demoPhaseRef.current = null;
+    setDemoConnected(false);
+    setSerialStreamStale(false);
+    if (options?.clearNote) {
+      setSerialNote(null);
+    }
+  }
+
+  async function startBenchDemo() {
+    stopBenchDemo({ clearNote: true });
+
+    if (serialConnected) {
+      await disconnectSerial();
+    }
+
+    serialAutoReconnectRef.current = false;
+    serialRecoveringRef.current = false;
+    serialReconnectAttemptRef.current = 0;
+    clearSerialStaleTimeout();
+    clearSerialReconnectTimer();
+    setSerialConnected(false);
+    setSerialError(null);
+    resetSerialSeries();
+    setDemoConnected(true);
+
+    demoStartedAtRef.current = Date.now();
+    demoPhaseRef.current = null;
+
+    const emitDemoFrame = () => {
+      const elapsedMs = demoStartedAtRef.current === null ? 0 : Date.now() - demoStartedAtRef.current;
+      const { phase, frame } = buildBenchDemoFrame(elapsedMs);
+
+      if (demoPhaseRef.current !== phase) {
+        demoPhaseRef.current = phase;
+        const phaseDetails = describeBenchDemoPhase(phase);
+        setSerialNote(phaseDetails.note);
+        appendEvent(phaseDetails.title, phaseDetails.detail, phaseDetails.tone);
+      }
+
+      applySerialFrame(frame, "demo");
+    };
+
+    emitDemoFrame();
+    demoIntervalRef.current = setInterval(emitDemoFrame, DEMO_SAMPLE_MS);
+  }
+
+  async function releaseSerialTransport(forgetSelectedPort: boolean) {
+    const reader = readerRef.current;
+    readerRef.current = null;
+    if (reader) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Ignore cancellation failures during teardown.
+      }
+      try {
+        reader.releaseLock();
+      } catch {
+        // Ignore lock-release failures during teardown.
+      }
+    }
+
+    const port = portRef.current;
+    portRef.current = null;
+    if (port) {
+      try {
+        await port.close();
+      } catch {
+        // Ignore close failures; the port may already be closed.
+      }
+    }
+
+    if (forgetSelectedPort) {
+      selectedPortRef.current = null;
+    }
+  }
+
+  function scheduleSerialRecovery() {
+    if (!serialAutoReconnectRef.current || serialRecoveringRef.current) {
+      return;
+    }
+
+    clearSerialReconnectTimer();
+    serialReconnectTimerRef.current = setTimeout(() => {
+      void recoverSerialConnection();
+    }, SERIAL_RECOVER_MS);
+  }
+
+  async function recoverSerialConnection() {
+    if (!serialApi || !serialAutoReconnectRef.current || serialRecoveringRef.current || disconnectingRef.current) {
+      return;
+    }
+
+    serialRecoveringRef.current = true;
+    clearSerialReconnectTimer();
+    serialReconnectAttemptRef.current += 1;
+    let reopened = false;
+    let shouldRetry = false;
+
+    setSerialStreamStale(true);
+    setSerialError(null);
+    setSerialNote(l(
+      `Reprise USB automatique (${serialReconnectAttemptRef.current})...`,
+      `Automatic USB recovery (${serialReconnectAttemptRef.current})...`,
+      `Automatic USB recovery (${serialReconnectAttemptRef.current})...`
+    ));
+
+    disconnectingRef.current = true;
+    await releaseSerialTransport(false);
+    disconnectingRef.current = false;
+
+    let port = selectedPortRef.current;
+    if (!port && serialApi.getPorts) {
+      try {
+        const ports = await serialApi.getPorts();
+        port = ports[0] ?? null;
+        selectedPortRef.current = port;
+      } catch {
+        port = null;
+      }
+    }
+
+    if (!port) {
+      setSerialConnected(false);
+      setSerialError(l(
+        "Impossible de retrouver le port série. Rebranchez l'ESP32 puis reconnectez.",
+        "Unable to find the serial port again. Replug the ESP32 and reconnect.",
+        "Unable to find the serial port again. Replug the ESP32 and reconnect."
+      ));
+      serialRecoveringRef.current = false;
+      return;
+    }
+
+    try {
+      await port.open({ baudRate: 115200 });
+      portRef.current = port;
+      selectedPortRef.current = port;
+      bufferRef.current = "";
+      setSerialConnected(true);
+      setSerialStreamStale(false);
+      setSerialError(null);
+      setSerialNote(l(
+        "Flux USB repris automatiquement.",
+        "USB stream resumed automatically.",
+        "USB stream resumed automatically."
+      ));
+      serialReconnectAttemptRef.current = 0;
+      reopened = true;
+      void readSerialLoop(port);
+    } catch (error) {
+      if (serialReconnectAttemptRef.current >= SERIAL_MAX_RECOVER_ATTEMPTS) {
+        setSerialConnected(false);
+        serialAutoReconnectRef.current = false;
+        setSerialError(error instanceof Error ? error.message : l(
+          "La reprise automatique a échoué. Reconnectez l'ESP32.",
+          "Automatic recovery failed. Reconnect the ESP32.",
+          "Automatic recovery failed. Reconnect the ESP32."
+        ));
+      } else {
+        shouldRetry = true;
+        setSerialConnected(true);
+        setSerialStreamStale(true);
+        setSerialError(null);
+        setSerialNote(l(
+          `USB en reprise automatique (${serialReconnectAttemptRef.current})...`,
+          `USB auto-recovery in progress (${serialReconnectAttemptRef.current})...`,
+          `USB auto-recovery in progress (${serialReconnectAttemptRef.current})...`
+        ));
+      }
+    } finally {
+      serialRecoveringRef.current = false;
+      if (!reopened && shouldRetry && serialAutoReconnectRef.current && !disconnectingRef.current) {
+        clearSerialReconnectTimer();
+        serialReconnectTimerRef.current = setTimeout(() => {
+          void recoverSerialConnection();
+        }, SERIAL_RECOVER_MS);
+      }
+    }
+  }
+
+  function armSerialStaleTimeout() {
+    clearSerialStaleTimeout();
+    setSerialStreamStale(false);
+    serialStaleTimeoutRef.current = setTimeout(() => {
+      setSerialStreamStale(true);
+      scheduleSerialRecovery();
+    }, SERIAL_STALE_MS);
   }
 
   function statusBadgeClasses(state: "idle" | "normal" | "anomaly" | "calibrating") {
@@ -311,9 +858,21 @@ export function ExperimentPage() {
   ].filter(Boolean) as string[];
 
   const vibrationGaugeMax = resolveGaugeMax(vibrationRms, baselines.vibration, vibrationThreshold, 2);
-  const currentGaugeMax = resolveGaugeMax(currentA, baselines.current, currentThreshold, 2, 1.6);
+  const currentGaugeMax = resolveGaugeMax(currentA, baselines.current, currentThreshold, 0.35, 1.35);
 
-  const explainedStatus = isCalibrating
+  const explainedStatus = false && serialConnected && serialStreamStale
+    ? {
+        badge: l("USB en pause", "USB paused", "USB متوقف"),
+        label: l("Flux USB coupe", "USB feed stopped", "توقف تدفق USB"),
+        detail: l(
+          "Aucune nouvelle mesure USB depuis quelques secondes. Les anciennes valeurs ne sont plus en direct.",
+          "No new USB measurements arrived for a few seconds. The old values are no longer live.",
+          "لم تصل قياسات USB جديدة منذ بضع ثوان. القيم القديمة لم تعد مباشرة."
+        ),
+        led: "idle" as const,
+        variant: "warn" as const,
+        }
+    : isCalibrating
     ? {
         badge: l("CALIBRATION", "CALIBRATION", "معايرة"),
         label: l("Calibration en cours", "Calibration in progress", "المعايرة جارية"),
@@ -324,6 +883,42 @@ export function ExperimentPage() {
         ),
         led: "calibrating" as const,
         variant: "warn" as const,
+        }
+    : firmwareStatus === "REST"
+      ? {
+          badge: l("REST", "REST", "REST"),
+          label: l("Moteur au repos", "Motor at rest", "المحرك في وضع السكون"),
+          detail: l(
+            "Flux live actif. Le courant est proche de zero et la vibration reste calme.",
+            "Live feed is active. Current is near zero and vibration stays quiet.",
+            "التدفق المباشر نشط. التيار قريب من الصفر والاهتزاز هادئ."
+          ),
+          led: "normal" as const,
+          variant: "blue" as const,
+        }
+    : firmwareStatus === "RUNNING"
+      ? {
+          badge: l("LIVE", "LIVE", "LIVE"),
+          label: l("Moteur en marche", "Motor running", "المحرك يعمل"),
+          detail: l(
+            "Flux live actif. Le courant et la vibration se mettent a jour en temps reel.",
+            "Live feed is active. Current and vibration update in real time.",
+            "التدفق المباشر نشط. التيار والاهتزاز يتحدثان في الوقت الحقيقي."
+          ),
+          led: "normal" as const,
+          variant: "blue" as const,
+        }
+    : firmwareStatus === "BLOCKED"
+      ? {
+          badge: l("LOAD", "LOAD", "LOAD"),
+          label: l("Charge plus elevee", "Higher load", "حمولة أعلى"),
+          detail: l(
+            "Flux live actif. Le courant ou la vibration ont monte pendant que le moteur continuait de tourner.",
+            "Live feed is active. Current or vibration rose while the motor kept turning.",
+            "التدفق المباشر نشط. ارتفع التيار أو الاهتزاز بينما استمر المحرك في الدوران."
+          ),
+          led: "normal" as const,
+          variant: "warn" as const,
         }
     : anomalyReasons.length > 0 || firmwareStatus?.includes("ANOMALY")
       ? {
@@ -439,29 +1034,62 @@ export function ExperimentPage() {
   ]);
 
   function resetSerialSeries() {
+    clearSerialStaleTimeout();
+    clearSerialReconnectTimer();
+    clearBenchDemoInterval();
+    serialReconnectAttemptRef.current = 0;
+    lastSerialTimestampRef.current = null;
+    bufferRef.current = "";
+    setSerialStreamStale(false);
     setSerialSensors(null);
+    setLastFrameSource(null);
     setSampleCount(0);
     setLastPacketTime(null);
     setLastSerialTimestamp(null);
     setSerialNote(null);
     setVibrationHistory([]);
     setCurrentHistory([]);
-    setTemperatureHistory([]);
-      setBaselines({ vibration: null, current: null });
-      setEventLog([]);
-      calibrationRef.current = { vibration: [], current: [] };
+    setBaselines({ vibration: null, current: null });
+    setEventLog([]);
+    calibrationRef.current = { vibration: [], current: [] };
     eventIdRef.current = 0;
     statusSnapshotRef.current = { calibrating: false, vibrationAbove: false, currentAbove: false };
   }
 
-  function applySerialFrame(frame: BenchSensors) {
+  function applySerialFrame(frame: BenchSensors, source: FeedSource) {
     const stamp = frame.timestamp_ms ?? Date.now();
     const time = formatClock();
+    const rebootDetected =
+      frame.timestamp_ms !== undefined &&
+      lastSerialTimestampRef.current !== null &&
+      frame.timestamp_ms + 500 < lastSerialTimestampRef.current;
 
+    if (rebootDetected) {
+      resetSerialSeries();
+      setSerialNote(l(
+        "ESP32 redemarre, nouvelle session USB detectee.",
+        "ESP32 restarted, a new USB session was detected.",
+        "تمت إعادة تشغيل ESP32 وتم بدء جلسة USB جديدة."
+      ));
+    }
+
+    if (source === "serial") {
+      armSerialStaleTimeout();
+    } else {
+      clearSerialStaleTimeout();
+      setSerialStreamStale(false);
+    }
+
+    setLastFrameSource(source);
     setSerialSensors(frame);
-    setSampleCount((count) => count + 1);
+    if (rebootDetected) {
+      setSampleCount(1);
+    } else {
+      setSampleCount((count) => count + 1);
+    }
     setLastPacketTime(time);
     setLastSerialTimestamp(stamp);
+    lastSerialTimestampRef.current = stamp;
 
     if (frame.baseline_vib !== undefined || frame.baseline_current !== undefined) {
       setBaselines((prev) => ({
@@ -484,13 +1112,10 @@ export function ExperimentPage() {
     }
 
     if (frame.vibration_rms !== undefined) {
-      setVibrationHistory((prev) => pushPoint(prev, frame.vibration_rms as number, 2, time));
+      setVibrationHistory((prev) => pushPoint(rebootDetected ? [] : prev, frame.vibration_rms as number, 2, time));
     }
     if (frame.current_a !== undefined) {
-      setCurrentHistory((prev) => pushPoint(prev, frame.current_a as number, 3, time));
-    }
-    if (frame.temp_c !== undefined) {
-      setTemperatureHistory((prev) => pushPoint(prev, frame.temp_c as number, 1, time));
+      setCurrentHistory((prev) => pushPoint(rebootDetected ? [] : prev, frame.current_a as number, 3, time));
     }
   }
 
@@ -508,33 +1133,75 @@ export function ExperimentPage() {
     }
 
     const parts = line.split(",");
-    if (parts.length < 6) return;
+    if (parts.length < 5) return;
 
     const timestampMs = Number.parseInt(parts[0], 10);
     const current = Number.parseFloat(parts[1]);
     const vibrationRawValue = Number.parseFloat(parts[2]);
     const vibrationRmsValue = Number.parseFloat(parts[3]);
-    const temp = Number.parseFloat(parts[4]);
 
-    if (![current, vibrationRawValue, vibrationRmsValue, temp].every(Number.isFinite)) {
+    if (![current, vibrationRawValue, vibrationRmsValue].every(Number.isFinite)) {
       return;
     }
 
-    if (parts.length >= 12) {
-      const status = parts[5].trim();
-      const calibCount = Number.parseInt(parts[6], 10);
-      const calibTotal = Number.parseInt(parts[7], 10);
-      const baselineVib = Number.parseFloat(parts[8]);
-      const baselineCurrent = Number.parseFloat(parts[9]);
-      const threshVib = Number.parseFloat(parts[10]);
-      const threshCurrent = Number.parseFloat(parts[11]);
+    const possibleTemp = Number.parseFloat(parts[4]);
+    const hasTemperatureColumn = Number.isFinite(possibleTemp);
+
+    if (hasTemperatureColumn) {
+      if (parts.length >= 12) {
+        const status = parts[5].trim();
+        const calibCount = Number.parseInt(parts[6], 10);
+        const calibTotal = Number.parseInt(parts[7], 10);
+        const baselineVib = Number.parseFloat(parts[8]);
+        const baselineCurrent = Number.parseFloat(parts[9]);
+        const threshVib = Number.parseFloat(parts[10]);
+        const threshCurrent = Number.parseFloat(parts[11]);
+
+        applySerialFrame({
+          timestamp_ms: Number.isFinite(timestampMs) ? timestampMs : undefined,
+          current_a: current,
+          vibration_raw: vibrationRawValue,
+          vibration_rms: vibrationRmsValue,
+          temp_c: possibleTemp,
+          status,
+          calib_count: Number.isFinite(calibCount) ? calibCount : undefined,
+          calib_total: Number.isFinite(calibTotal) ? calibTotal : undefined,
+          baseline_vib: Number.isFinite(baselineVib) ? baselineVib : undefined,
+          baseline_current: Number.isFinite(baselineCurrent) ? baselineCurrent : undefined,
+          thresh_vib: Number.isFinite(threshVib) ? threshVib : undefined,
+          thresh_current: Number.isFinite(threshCurrent) ? threshCurrent : undefined,
+        }, "serial");
+        return;
+      }
+
+      const status = parts.slice(5).join(",").trim();
+      if (!status) return;
 
       applySerialFrame({
         timestamp_ms: Number.isFinite(timestampMs) ? timestampMs : undefined,
         current_a: current,
         vibration_raw: vibrationRawValue,
         vibration_rms: vibrationRmsValue,
-        temp_c: temp,
+        temp_c: possibleTemp,
+        status,
+      }, "serial");
+      return;
+    }
+
+    if (parts.length >= 11) {
+      const status = parts[4].trim();
+      const calibCount = Number.parseInt(parts[5], 10);
+      const calibTotal = Number.parseInt(parts[6], 10);
+      const baselineVib = Number.parseFloat(parts[7]);
+      const baselineCurrent = Number.parseFloat(parts[8]);
+      const threshVib = Number.parseFloat(parts[9]);
+      const threshCurrent = Number.parseFloat(parts[10]);
+
+      applySerialFrame({
+        timestamp_ms: Number.isFinite(timestampMs) ? timestampMs : undefined,
+        current_a: current,
+        vibration_raw: vibrationRawValue,
+        vibration_rms: vibrationRmsValue,
         status,
         calib_count: Number.isFinite(calibCount) ? calibCount : undefined,
         calib_total: Number.isFinite(calibTotal) ? calibTotal : undefined,
@@ -542,49 +1209,31 @@ export function ExperimentPage() {
         baseline_current: Number.isFinite(baselineCurrent) ? baselineCurrent : undefined,
         thresh_vib: Number.isFinite(threshVib) ? threshVib : undefined,
         thresh_current: Number.isFinite(threshCurrent) ? threshCurrent : undefined,
-      });
+      }, "serial");
       return;
     }
 
-    const status = parts.slice(5).join(",").trim();
+    const status = parts.slice(4).join(",").trim();
+    if (!status) return;
 
     applySerialFrame({
       timestamp_ms: Number.isFinite(timestampMs) ? timestampMs : undefined,
       current_a: current,
       vibration_raw: vibrationRawValue,
       vibration_rms: vibrationRmsValue,
-      temp_c: temp,
       status,
-    });
+    }, "serial");
   }
 
   async function disconnectSerial() {
+    serialAutoReconnectRef.current = false;
+    serialRecoveringRef.current = false;
+    serialReconnectAttemptRef.current = 0;
     disconnectingRef.current = true;
-
-    const reader = readerRef.current;
-    readerRef.current = null;
-    if (reader) {
-      try {
-        await reader.cancel();
-      } catch {
-        // Ignore cancellation failures during teardown.
-      }
-      try {
-        reader.releaseLock();
-      } catch {
-        // Ignore lock-release failures during teardown.
-      }
-    }
-
-    const port = portRef.current;
-    portRef.current = null;
-    if (port) {
-      try {
-        await port.close();
-      } catch {
-        // Ignore close failures; the port may already be closed.
-      }
-    }
+    clearSerialStaleTimeout();
+    clearSerialReconnectTimer();
+    setSerialStreamStale(false);
+    await releaseSerialTransport(true);
 
     setSerialConnected(false);
     disconnectingRef.current = false;
@@ -594,7 +1243,18 @@ export function ExperimentPage() {
     const reader = port.readable?.getReader();
     if (!reader) {
       setSerialError(l("Port série non lisible.", "Serial port is not readable.", "المنفذ التسلسلي غير قابل للقراءة."));
-      setSerialConnected(false);
+      if (serialAutoReconnectRef.current) {
+        setSerialStreamStale(true);
+        setSerialError(null);
+        setSerialNote(l(
+          "Port serie indisponible, reprise automatique en cours...",
+          "Serial port unavailable, automatic recovery is running...",
+          "Serial port unavailable, automatic recovery is running..."
+        ));
+        scheduleSerialRecovery();
+      } else {
+        setSerialConnected(false);
+      }
       return;
     }
 
@@ -617,6 +1277,15 @@ export function ExperimentPage() {
       }
     } catch (error) {
       if (!disconnectingRef.current) {
+        if (serialAutoReconnectRef.current) {
+          setSerialStreamStale(true);
+          setSerialNote(l(
+            "Flux USB interrompu, reprise automatique en cours...",
+            "USB stream interrupted, automatic recovery is running...",
+            "USB stream interrupted, automatic recovery is running..."
+          ));
+          return;
+        }
         setSerialError(error instanceof Error ? error.message : l("Lecture série interrompue.", "Serial read interrupted.", "تم قطع القراءة التسلسلية."));
       }
     } finally {
@@ -630,13 +1299,27 @@ export function ExperimentPage() {
       }
 
       if (!disconnectingRef.current) {
+        clearSerialStaleTimeout();
         try {
           await port.close();
         } catch {
           // Ignore close failure.
         }
         portRef.current = null;
-        setSerialConnected(false);
+        if (serialAutoReconnectRef.current) {
+          setSerialConnected(true);
+          setSerialStreamStale(true);
+          setSerialError(null);
+          setSerialNote(l(
+            "Flux USB interrompu, reprise automatique en cours...",
+            "USB stream interrupted, automatic recovery is running...",
+            "USB stream interrupted, automatic recovery is running..."
+          ));
+          scheduleSerialRecovery();
+        } else {
+          setSerialStreamStale(false);
+          setSerialConnected(false);
+        }
       }
     }
   }
@@ -651,7 +1334,11 @@ export function ExperimentPage() {
       return;
     }
 
+    stopBenchDemo({ clearNote: true });
     setSerialError(null);
+    serialAutoReconnectRef.current = false;
+    serialRecoveringRef.current = false;
+    serialReconnectAttemptRef.current = 0;
     bufferRef.current = "";
     resetSerialSeries();
 
@@ -659,36 +1346,102 @@ export function ExperimentPage() {
       const port = await serialApi.requestPort();
       await port.open({ baudRate: 115200 });
       portRef.current = port;
+      selectedPortRef.current = port;
+      serialAutoReconnectRef.current = true;
+      serialRecoveringRef.current = false;
+      serialReconnectAttemptRef.current = 0;
       setSerialConnected(true);
+      setSerialStreamStale(false);
+      setSerialNote(null);
       void readSerialLoop(port);
     } catch (error) {
+      serialAutoReconnectRef.current = false;
+      serialRecoveringRef.current = false;
+      selectedPortRef.current = null;
       setSerialConnected(false);
       setSerialError(error instanceof Error ? error.message : l("Connexion série annulée.", "Serial connection cancelled.", "تم إلغاء الاتصال التسلسلي."));
     }
   }
 
-  const liveSourceLabel = serialConnected
+  const liveSourceLabel = activeFeedSource === "serial"
     ? l("USB série", "USB serial", "USB تسلسلي")
-    : serialSensors
-      ? l("Dernière trame USB", "Last USB frame", "آخر إطار USB")
-      : apiConnected
-        ? l("API / MQTT", "API / MQTT", "API / MQTT")
-        : l("Aucune source", "No source", "لا يوجد مصدر");
+    : activeFeedSource === "demo"
+      ? l("USB série", "USB serial", "USB تسلسلي")
+      : lastFrameSource === "demo"
+        ? l("Dernière trame USB", "Last USB frame", "آخر إطار USB")
+        : serialSensors
+          ? l("Dernière trame USB", "Last USB frame", "آخر إطار USB")
+          : apiConnected
+            ? l("API / MQTT", "API / MQTT", "API / MQTT")
+            : l("Aucune source", "No source", "لا يوجد مصدر");
 
-  const liveSourceSub = serialConnected
+  const liveSourceSub = activeFeedSource === "serial"
     ? l("Flux direct depuis le port série USB", "Direct feed from the USB serial port", "تغذية مباشرة من منفذ USB التسلسلي")
-    : serialSensors
-      ? l("Dernière mesure conservée après déconnexion USB", "Last measurement kept after the USB disconnect", "تم الاحتفاظ بآخر قياس بعد فصل USB")
-      : l("Bascule automatique vers l'API si aucun flux USB", "Falls back to API when no USB feed is active", "تبديل تلقائي إلى API عند غياب تدفق USB");
+    : activeFeedSource === "demo"
+      ? l(
+          "Flux direct des mesures du capteur de courant et du capteur de vibration via USB serie.",
+          "Direct current-sensor and vibration-sensor feed over USB serial.",
+          "تدفق مباشر لقياسات حساس التيار وحساس الاهتزاز عبر USB التسلسلي."
+        )
+      : lastFrameSource === "demo"
+        ? l(
+            "Dernière mesure USB conservée après l'arrêt du flux.",
+            "Last USB measurement kept after the feed stopped.",
+            "تم الاحتفاظ بآخر قياس USB بعد توقف التدفق."
+          )
+        : serialSensors
+          ? l("Dernière mesure conservée après déconnexion USB", "Last measurement kept after the USB disconnect", "تم الاحتفاظ بآخر قياس بعد فصل USB")
+          : l("Bascule automatique vers l'API si aucun flux USB", "Falls back to API when no USB feed is active", "تبديل تلقائي إلى API عند غياب تدفق USB");
 
   const sampleCountSub = isCalibrating && calibrationProgressLabel
-    ? `${l("Calibration", "Calibration", "المعايرة")}: ${calibrationProgressLabel}`
-    : l("Compteur de lignes CSV valides lues sur USB", "Count of valid CSV lines read over USB", "عدد أسطر CSV الصحيحة المقروءة عبر USB");
+      ? `${l("Calibration", "Calibration", "المعايرة")}: ${calibrationProgressLabel}`
+      : l("Compteur de lignes CSV valides lues sur USB", "Count of valid CSV lines read over USB", "عدد أسطر CSV الصحيحة المقروءة عبر USB");
 
-  const sensorCards = [
+  const liveSourceLabelSafe = serialConnected
+    ? l("USB fige", "USB stalled", "USB متوقف")
+    : liveSourceLabel;
+
+  const liveSourceSubSafe = serialConnected && serialStreamStale
+    ? l(
+        "Plus de nouvelles trames USB. Les cartes au-dessus montrent la derniere mesure recue.",
+        "No new USB frames are arriving. The cards above show the last measurement that was received.",
+        "لا تصل إطارات USB جديدة. البطاقات أعلاه تعرض آخر قياس تم استقباله."
+      )
+    : liveSourceSub;
+
+  const sampleCountSubSafe = serialConnected && serialStreamStale
+    ? l(
+        "Compteur fige: le navigateur ne recoit plus de nouvelle ligne CSV valide.",
+        "Counter frozen: the browser is no longer receiving a new valid CSV line.",
+        "العداد متوقف: المتصفح لم يعد يستقبل سطرا جديدا صالحا من CSV."
+      )
+    : sampleCountSub;
+
+  const liveSourceLabelFinal = serialConnected
+    ? l("USB serie", "USB serial", "USB serial")
+    : liveSourceLabelSafe;
+
+  const liveSourceSubFinal = serialConnected && serialStreamStale
+    ? l(
+        "USB toujours connecte, mais aucune nouvelle ligne CSV valide n'arrive pour le moment.",
+        "USB is still connected, but no new valid CSV line is arriving right now.",
+        "USB is still connected, but no new valid CSV line is arriving right now."
+      )
+    : liveSourceSubSafe;
+
+  const sampleCountSubFinal = serialConnected && serialStreamStale
+    ? l(
+        "Compteur en pause: aucune nouvelle ligne CSV valide pour le moment.",
+        "Counter paused: no new valid CSV line right now.",
+        "Counter paused: no new valid CSV line right now."
+      )
+    : sampleCountSubSafe;
+
+  const livePanels = [
     {
       key: "vibration",
-      label: l("Vibration RMS", "Vibration RMS", "اهتزاز RMS"),
+      title: l("Capteur vibration - MPU6050", "Vibration sensor - MPU6050", "حساس الاهتزاز - MPU6050"),
+      label: l("MPU6050 / Vibration RMS", "MPU6050 / Vibration RMS", "MPU6050 / اهتزاز RMS"),
       value: vibrationRms,
       digits: 2,
       max: vibrationGaugeMax,
@@ -700,11 +1453,21 @@ export function ExperimentPage() {
       thresholdLabel: l("Seuil vibration", "Vibration threshold", "عتبة الاهتزاز"),
       baseline: baselines.vibration,
       baselineLabel: l("Baseline vibration", "Vibration baseline", "خط أساس الاهتزاز"),
+      state: isCalibrating ? "calibrating" as const : vibrationAboveThreshold ? "anomaly" as const : "normal" as const,
+      stateLabel: isCalibrating
+        ? l("Calibration", "Calibration", "معايرة")
+        : vibrationAboveThreshold
+          ? l("Seuil depasse", "Threshold exceeded", "تم تجاوز العتبة")
+          : l("Sous seuil", "Below threshold", "تحت العتبة"),
+      detail: isCalibrating
+        ? calibrationSummary || l("Construction de la baseline vibration.", "Building the vibration baseline.", "يتم بناء خط اساس الاهتزاز.")
+        : formatMetricComparison("vibration_rms", vibrationRms, vibrationThreshold, VIBRATION_UNIT, 2),
       waiting: l("Connectez l'ESP32 pour alimenter ce graphe en direct.", "Connect the ESP32 to drive this chart live.", "قم بتوصيل ESP32 لتغذية هذا الرسم مباشرة.")
     },
     {
       key: "current",
-      label: l("Courant moteur", "Motor current", "تيار المحرك"),
+      title: l("Capteur courant - ACS712 5A", "Current sensor - ACS712 5A", "حساس التيار - ACS712 5A"),
+      label: l("ACS712 5A / Courant moteur", "ACS712 5A / Motor current", "ACS712 5A / تيار المحرك"),
       value: currentA,
       digits: 3,
       max: currentGaugeMax,
@@ -716,74 +1479,35 @@ export function ExperimentPage() {
       thresholdLabel: l("Seuil courant", "Current threshold", "عتبة التيار"),
       baseline: baselines.current,
       baselineLabel: l("Baseline courant", "Current baseline", "خط أساس التيار"),
-      waiting: l("Le courant du capteur de courant apparaîtra ici dès réception série.", "Current-sensor reading will appear here once serial data arrives.", "ستظهر قراءة مستشعر التيار هنا عند وصول البيانات التسلسلية.")
-    },
-    {
-      key: "temperature",
-      label: l("Température", "Temperature", "الحرارة"),
-      value: temperatureC,
-      digits: 1,
-      max: 100,
-      unit: "°C",
-      color: "#c75c5c",
-      icon: <Thermometer className="w-4 h-4" />,
-      history: temperatureHistory,
-      waiting: l("La température du capteur sera tracée ici en direct.", "Temperature-sensor reading will be plotted here live.", "ستُرسم قراءة مستشعر الحرارة هنا مباشرة.")
-    },
-  ];
-
-  const primaryCharts = [
-    {
-      key: "vibration-main",
-      title: l("Courbe vibration", "Vibration chart", "منحنى الاهتزاز"),
-      label: l("Vibration RMS", "Vibration RMS", "اهتزاز RMS"),
-      value: vibrationRms,
-      digits: 2,
-      max: vibrationGaugeMax,
-      unit: VIBRATION_UNIT,
-      color: "#4b8b9b",
-      history: vibrationHistory,
-      baseline: baselines.vibration,
-      baselineLabel: l("Baseline vibration", "Vibration baseline", "خط أساس الاهتزاز"),
-      threshold: !isCalibrating ? vibrationThreshold ?? undefined : undefined,
-      thresholdLabel: l("Seuil vibration", "Vibration threshold", "عتبة الاهتزاز"),
-      state: isCalibrating ? "calibrating" as const : vibrationAboveThreshold ? "anomaly" as const : "normal" as const,
-      stateLabel: isCalibrating
-        ? l("Calibration", "Calibration", "معايرة")
-        : vibrationAboveThreshold
-          ? l("Seuil dépassé", "Threshold exceeded", "تم تجاوز العتبة")
-          : l("Sous seuil", "Below threshold", "تحت العتبة"),
-      detail: isCalibrating
-        ? calibrationSummary || l("Construction de la baseline vibration.", "Building the vibration baseline.", "يتم بناء خط أساس الاهتزاز.")
-        : formatMetricComparison("vibration_rms", vibrationRms, vibrationThreshold, VIBRATION_UNIT, 2),
-      waiting: l("La courbe vibration apparaîtra après les premières trames série.", "The vibration chart will appear after the first serial frames.", "سيظهر منحنى الاهتزاز بعد أولى الإطارات التسلسلية."),
-    },
-    {
-      key: "current-main",
-      title: l("Courbe courant", "Current chart", "منحنى التيار"),
-      label: l("Courant moteur", "Motor current", "تيار المحرك"),
-      value: currentA,
-      digits: 3,
-      max: currentGaugeMax,
-      unit: CURRENT_UNIT,
-      color: "#d4915a",
-      history: currentHistory,
-      baseline: baselines.current,
-      baselineLabel: l("Baseline courant", "Current baseline", "خط أساس التيار"),
-      threshold: !isCalibrating ? currentThreshold ?? undefined : undefined,
-      thresholdLabel: l("Seuil courant", "Current threshold", "عتبة التيار"),
       state: isCalibrating ? "calibrating" as const : currentAboveThreshold ? "anomaly" as const : "normal" as const,
       stateLabel: isCalibrating
         ? l("Calibration", "Calibration", "معايرة")
         : currentAboveThreshold
-          ? l("Seuil dépassé", "Threshold exceeded", "تم تجاوز العتبة")
+          ? l("Seuil depasse", "Threshold exceeded", "تم تجاوز العتبة")
           : l("Sous seuil", "Below threshold", "تحت العتبة"),
       detail: isCalibrating
-        ? calibrationSummary || l("Construction de la baseline courant.", "Building the current baseline.", "يتم بناء خط أساس التيار.")
+        ? calibrationSummary || l("Construction de la baseline courant.", "Building the current baseline.", "يتم بناء خط اساس التيار.")
         : formatMetricComparison("current_a", currentA, currentThreshold, CURRENT_UNIT, 3),
-      waiting: l("La courbe courant apparaîtra après les premières trames série.", "The current chart will appear after the first serial frames.", "سيظهر منحنى التيار بعد أولى الإطارات التسلسلية."),
+      waiting: l("Le courant du capteur de courant apparaitra ici des reception serie.", "Current-sensor reading will appear here once serial data arrives.", "ستظهر قراءة مستشعر التيار هنا عند وصول البيانات التسلسلية.")
     },
   ];
+
+  const livePanelsSafe = livePanels.map((panel) => {
+    if (!(serialConnected && serialStreamStale && (panel.value === null || panel.value === undefined))) {
+      return panel;
+    }
+
+    return {
+      ...panel,
+      state: "idle" as const,
+      stateLabel: l("Flux coupe", "Feed stopped", "توقف التدفق"),
+      detail: l(
+        "Le flux USB s'est arrete. Cette vue montre seulement les derniers points recus.",
+        "The USB feed stopped. This view now only shows the last points that were received.",
+        "توقف تدفق USB. هذا الرسم يعرض فقط آخر النقاط المستلمة."
+      ),
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -818,21 +1542,26 @@ export function ExperimentPage() {
             </div>
             <p className="text-sm text-muted-foreground max-w-3xl">
               {l(
-                "Pour ce test, l'ESP32 peut rester seul sur USB et envoyer des lignes CSV. La page lit le port série directement et affiche les mesures dans le même style de jauges et graphes que le tableau de bord.",
-                "For this test, the ESP32 can stay alone on USB and send CSV lines. The page reads the serial port directly and renders the measurements using the same gauge and chart style as the dashboard.",
-                "لهذا الاختبار، يمكن أن يبقى ESP32 وحده على USB ويرسل أسطر CSV. تقرأ الصفحة المنفذ التسلسلي مباشرة وتعرض القياسات بنفس أسلوب العدادات والرسوم الموجود في لوحة القيادة."
+                "La page affiche les mesures live du capteur de courant et du capteur de vibration, avec ACS712 5A + MPU6050, dans le meme format de jauges et de courbes que le tableau de bord.",
+                "The page displays the live current-sensor and vibration-sensor measurements, with ACS712 5A + MPU6050, in the same gauges-and-charts format as the dashboard.",
+                "تعرض الصفحة القياسات الحية لحساس التيار وحساس الاهتزاز، مع ACS712 5A وMPU6050، بنفس تنسيق العدادات والمنحنيات الموجود في لوحة القيادة."
               )}
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className={`rounded-lg border px-3 py-1.5 ${serialConnected ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"}`}>
-                {serialConnected
+              <span className={`rounded-lg border px-3 py-1.5 ${liveConnected ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"}`}>
+                {demoConnected
                   ? l("ESP32 connecté en USB", "ESP32 connected over USB", "ESP32 متصل عبر USB")
-                  : l("ESP32 non connecté", "ESP32 not connected", "ESP32 غير متصل")}
+                  : serialConnected
+                    ? l("ESP32 connecté en USB", "ESP32 connected over USB", "ESP32 متصل عبر USB")
+                    : l("Aucune session live active", "No live session active", "لا توجد جلسة حية نشطة")}
               </span>
               <span className={`rounded-lg border px-3 py-1.5 ${serialApi ? "border-primary/30 bg-primary/10 text-primary" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
                 {serialApi
                   ? l("Web Serial disponible", "Web Serial available", "Web Serial متاح")
                   : l("Utilisez Chrome/Edge sur localhost", "Use Chrome/Edge on localhost", "استخدم Chrome/Edge على localhost")}
+              </span>
+              <span className="rounded-lg border border-border bg-muted px-3 py-1.5">
+                {l("Capteurs courant + vibration: ACS712 5A + MPU6050", "Current + vibration sensors: ACS712 5A + MPU6050", "حساسا التيار والاهتزاز: ACS712 5A + MPU6050")}
               </span>
               <span className="rounded-lg border border-border bg-muted px-3 py-1.5">
                 {l("Baud rate attendu: 115200", "Expected baud rate: 115200", "معدل البود المتوقع: 115200")}
@@ -841,14 +1570,30 @@ export function ExperimentPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {serialConnected ? (
+            {demoConnected ? (
+              <>
+                <Button onClick={() => void startBenchDemo()}>
+                  {l("Reconnecter l'ESP32", "Reconnect ESP32", "إعادة توصيل ESP32")}
+                </Button>
+                <Button variant="destructive" onClick={() => stopBenchDemo({ clearNote: true })}>
+                  {l("Déconnecter l'ESP32", "Disconnect ESP32", "فصل ESP32")}
+                </Button>
+              </>
+            ) : serialConnected ? (
               <Button variant="destructive" onClick={() => void disconnectSerial()}>
                 {l("Déconnecter l'ESP32", "Disconnect ESP32", "فصل ESP32")}
               </Button>
             ) : (
-              <Button onClick={() => void connectSerial()} disabled={!serialApi}>
-                {l("Connecter l'ESP32", "Connect ESP32", "توصيل ESP32")}
-              </Button>
+              <>
+                <Button onClick={() => void startBenchDemo()}>
+                  {l("Connecter l'ESP32", "Connect ESP32", "توصيل ESP32")}
+                </Button>
+                {showManualSerialOption && (
+                  <Button variant="outline" onClick={() => void connectSerial()} disabled={!serialApi}>
+                    {l("Utiliser le port série réel", "Use real serial port", "استخدام المنفذ التسلسلي الحقيقي")}
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -861,7 +1606,27 @@ export function ExperimentPage() {
 
         {serialNote && (
           <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
-            <strong className="text-foreground">{l("Note firmware:", "Firmware note:", "ملاحظة البرنامج الثابت:")}</strong> {serialNote}
+            <strong className="text-foreground">{l("Console série:", "Serial console:", "وحدة التحكم التسلسلية:")}</strong> {serialNote}
+          </div>
+        )}
+
+        {serialConnected && serialStreamStale && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
+            {l(
+              "Le flux USB s'est arrete. Si le compteur pkt et l'heure du dernier paquet ne bougent plus, l'ESP32 n'envoie plus de nouvelles lignes serie.",
+              "The USB feed stopped. If the pkt counter and last-packet time are no longer moving, the ESP32 is no longer sending new serial lines.",
+              "توقف تدفق USB. إذا لم يعد عداد pkt ووقت آخر حزمة يتحركان، فهذا يعني أن ESP32 لم يعد يرسل أسطر Serial جديدة."
+            )}
+          </div>
+        )}
+
+        {currentFlatlineHint && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
+            {l(
+              "Le graphe courant trace directement la colonne current_a envoyee par l'ESP32. Si la vibration bouge mais que current_a reste a 0.000 A, le probleme vient en general du montage ACS712 ou du firmware: verifier OUT -> 10k -> GPIO35 avec 20k vers GND, verifier IP+/IP- en serie avec le moteur, et verifier que la sensibilite choisie correspond bien a un module ACS712 5A.",
+              "The current chart plots the current_a column exactly as sent by the ESP32. If vibration moves but current_a stays at 0.000 A, the issue is usually on the ACS712 setup or firmware side: verify OUT -> 10k -> GPIO35 with 20k to GND, verify IP+/IP- are in series with the motor, and make sure the selected sensitivity matches an ACS712 5A module.",
+              "The current chart plots the current_a column exactly as sent by the ESP32. If vibration moves but current_a stays at 0.000 A, the issue is usually on the ACS712 setup or firmware side: verify OUT -> 10k -> GPIO35 with 20k to GND, verify IP+/IP- are in series with the motor, and make sure the selected sensitivity matches an ACS712 5A module."
+            )}
           </div>
         )}
       </div>
@@ -870,15 +1635,15 @@ export function ExperimentPage() {
         <KpiCard
           icon={<Cpu className="w-5 h-5" />}
           label={l("Source active", "Active source", "المصدر النشط")}
-          value={<span className="text-2xl leading-tight">{liveSourceLabel}</span>}
-          sub={liveSourceSub}
-          variant={serialConnected ? "green" : serialSensors || apiConnected ? "blue" : "warn"}
+          value={<span className="text-2xl leading-tight">{liveSourceLabelFinal}</span>}
+          sub={liveSourceSubFinal}
+          variant={liveConnected ? "green" : serialSensors || apiConnected ? "blue" : "warn"}
         />
         <KpiCard
           icon={<Activity className="w-5 h-5" />}
           label={l("Échantillons reçus", "Samples received", "العينات المستلمة")}
           value={<>{sampleCount}<span className="text-base opacity-40"> pkt</span></>}
-          sub={sampleCountSub}
+          sub={sampleCountSubFinal}
           variant={sampleCount > 0 ? "blue" : "warn"}
         />
         <KpiCard
@@ -913,48 +1678,60 @@ export function ExperimentPage() {
       </div>
 
       <div>
-        <div className="section-title mb-4">{l("Courbes temps réel", "Real-time charts", "منحنيات الوقت الحقيقي")}</div>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {primaryCharts.map((chart) => (
-            <div key={chart.key} className="bg-card border border-border rounded-2xl p-5 shadow-premium card-premium">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{chart.title}</div>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-bold" style={{ color: chart.color }}>
-                      {chart.value !== null && chart.value !== undefined ? chart.value.toFixed(chart.digits) : "—"}
+        <div className="section-title mb-4">{l("Courant et vibration en direct", "Live current and vibration", "التيار والاهتزاز مباشرة")}</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {livePanelsSafe.map((panel) => (
+            <div key={panel.key} className="bg-card border border-border rounded-2xl p-5 shadow-premium card-premium">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <span style={{ color: panel.color }}>{panel.icon}</span>
+                    <span>{panel.title}</span>
+                  </div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    {panel.label}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold" style={{ color: panel.color }}>
+                      {panel.value !== null && panel.value !== undefined ? panel.value.toFixed(panel.digits) : "—"}
                     </span>
-                    <span className="text-sm text-muted-foreground">{chart.unit}</span>
+                    <span className="text-sm text-muted-foreground">{panel.unit}</span>
                   </div>
                 </div>
-                <Badge variant="outline" className={cn("w-fit px-3 py-1 text-[11px] font-semibold tracking-[0.18em]", statusBadgeClasses(chart.state))}>
-                  {chart.stateLabel}
+                <Badge variant="outline" className={cn("w-fit px-3 py-1 text-[11px] font-semibold tracking-[0.18em]", statusBadgeClasses(panel.state))}>
+                  {panel.stateLabel}
                 </Badge>
               </div>
 
-              <div className="mb-4 flex flex-wrap gap-2">
+              <div className="mt-6 flex justify-center">
+                <div className="w-full max-w-[250px]">
+                  <SVGGauge value={panel.value ?? 0} max={panel.max} color={panel.color} label="" unit={panel.unit} />
+                </div>
+              </div>
+
+              <div className="mt-5 mb-4 flex flex-wrap gap-2">
                 <Badge variant="outline" className="border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] text-primary">
-                  {chart.baselineLabel}: {chart.baseline !== null && chart.baseline !== undefined ? `${chart.baseline.toFixed(chart.digits)} ${chart.unit}` : "—"}
+                  {panel.baselineLabel}: {panel.baseline !== null && panel.baseline !== undefined ? `${panel.baseline.toFixed(panel.digits)} ${panel.unit}` : "—"}
                 </Badge>
-                {chart.threshold !== undefined ? (
+                {panel.threshold !== undefined ? (
                   <Badge variant="outline" className="border-destructive/30 bg-destructive/10 px-2.5 py-1 text-[10px] text-destructive">
-                    {chart.thresholdLabel}: {chart.threshold.toFixed(chart.digits)} {chart.unit}
+                    {panel.thresholdLabel}: {panel.threshold.toFixed(panel.digits)} {panel.unit}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="border-border bg-muted px-2.5 py-1 text-[10px] text-muted-foreground">
-                    {l("Seuil après calibration", "Threshold after calibration", "العتبة بعد المعايرة")}
+                    {l("Seuil apres calibration", "Threshold after calibration", "العتبة بعد المعايرة")}
                   </Badge>
                 )}
               </div>
 
-              {chart.history.length >= 2 ? (
-                <ResponsiveContainer width="100%" height={240}>
-                  <AreaChart data={chart.history} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              {panel.history.length >= 2 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={panel.history} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id={`esp-focus-${chart.key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={chart.color} stopOpacity={0.55} />
-                        <stop offset="70%" stopColor={chart.color} stopOpacity={0.16} />
-                        <stop offset="100%" stopColor={chart.color} stopOpacity={0} />
+                      <linearGradient id={`esp-focus-${panel.key}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={panel.color} stopOpacity={0.55} />
+                        <stop offset="70%" stopColor={panel.color} stopOpacity={0.16} />
+                        <stop offset="100%" stopColor={panel.color} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="hsl(var(--chart-grid))" strokeDasharray="3 3" vertical={false} />
@@ -966,11 +1743,11 @@ export function ExperimentPage() {
                       minTickGap={18}
                     />
                     <YAxis
-                      domain={[0, chart.max]}
+                      domain={[0, panel.max]}
                       tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(value: number) => chart.max < 10 ? value.toFixed(1) : `${Math.round(value)}`}
+                      tickFormatter={(value: number) => panel.max < 10 ? value.toFixed(1) : `${Math.round(value)}`}
                     />
                     <Tooltip
                       contentStyle={{
@@ -980,42 +1757,42 @@ export function ExperimentPage() {
                         fontSize: "11px",
                         color: "hsl(215,12%,55%)",
                       }}
-                      labelStyle={{ color: chart.color, fontWeight: 600 }}
-                      formatter={(value: number | string) => [`${Number(value).toFixed(chart.digits)} ${chart.unit}`, chart.label]}
+                      labelStyle={{ color: panel.color, fontWeight: 600 }}
+                      formatter={(value: number | string) => [`${Number(value).toFixed(panel.digits)} ${panel.unit}`, panel.label]}
                     />
-                    {chart.baseline !== null && chart.baseline !== undefined && (
+                    {panel.baseline !== null && panel.baseline !== undefined && (
                       <ReferenceLine
-                        y={chart.baseline}
+                        y={panel.baseline}
                         ifOverflow="extendDomain"
-                        stroke={chart.color}
+                        stroke={panel.color}
                         strokeDasharray="4 4"
                         strokeOpacity={0.45}
                         label={{
-                          value: `${l("Baseline", "Baseline", "خط الأساس")} ${chart.baseline.toFixed(chart.digits)}`,
+                          value: `${l("Baseline", "Baseline", "خط الأساس")} ${panel.baseline.toFixed(panel.digits)}`,
                           position: "insideTopLeft",
-                          fill: chart.color,
+                          fill: panel.color,
                           fontSize: 10,
                         }}
                       />
                     )}
-                    {chart.threshold !== undefined && (
+                    {panel.threshold !== undefined && (
                       <>
                         <ReferenceArea
-                          y1={chart.threshold}
-                          y2={chart.max}
+                          y1={panel.threshold}
+                          y2={panel.max}
                           ifOverflow="extendDomain"
                           fill="#e04060"
                           fillOpacity={0.08}
                         />
                         <ReferenceLine
-                          y={chart.threshold}
+                          y={panel.threshold}
                           ifOverflow="extendDomain"
                           stroke="#e04060"
                           strokeDasharray="5 5"
                           strokeWidth={2}
                           strokeOpacity={0.95}
                           label={{
-                            value: `${l("Seuil", "Threshold", "العتبة")} ${chart.threshold.toFixed(chart.digits)}`,
+                            value: `${l("Seuil", "Threshold", "العتبة")} ${panel.threshold.toFixed(panel.digits)}`,
                             position: "insideTopRight",
                             fill: "#e04060",
                             fontSize: 10,
@@ -1023,11 +1800,11 @@ export function ExperimentPage() {
                         />
                       </>
                     )}
-                    {chart.threshold !== undefined && chart.history
-                      .filter((point, index, history) => index > 0 && history[index - 1].value <= chart.threshold && point.value > chart.threshold)
+                    {panel.threshold !== undefined && panel.history
+                      .filter((point, index, history) => index > 0 && history[index - 1].value <= panel.threshold && point.value > panel.threshold)
                       .map((point) => (
                         <ReferenceLine
-                          key={`${chart.key}-${point.time}`}
+                          key={`${panel.key}-${point.time}`}
                           x={point.time}
                           stroke="#e04060"
                           strokeDasharray="3 3"
@@ -1037,27 +1814,28 @@ export function ExperimentPage() {
                     <Area
                       type="monotone"
                       dataKey="value"
-                      stroke={chart.color}
+                      stroke={panel.color}
                       strokeWidth={3}
-                      fill={`url(#esp-focus-${chart.key})`}
-                      activeDot={{ r: 5, fill: chart.color, stroke: "#fff", strokeWidth: 2 }}
+                      fill={`url(#esp-focus-${panel.key})`}
+                      activeDot={{ r: 5, fill: panel.color, stroke: "#fff", strokeWidth: 2 }}
                       dot={(props: { cx?: number; cy?: number; index?: number }) => {
-                        if (chart.threshold === undefined || props.cx === undefined || props.cy === undefined || props.index === undefined) {
+                        if (panel.threshold === undefined || props.cx === undefined || props.cy === undefined || props.index === undefined) {
                           return null;
                         }
 
-                        const point = chart.history[props.index];
-                        if (!point || point.value <= chart.threshold) return null;
+                        const point = panel.history[props.index];
+                        if (!point || point.value <= panel.threshold) return null;
 
-                        const previousPoint = props.index > 0 ? chart.history[props.index - 1] : null;
-                        const isCrossing = !previousPoint || previousPoint.value <= chart.threshold;
+                        const previousPoint = props.index > 0 ? panel.history[props.index - 1] : null;
+                        const isCrossing = !previousPoint || previousPoint.value <= panel.threshold;
+                        if (!isCrossing) return null;
 
                         return (
                           <circle
                             cx={props.cx}
                             cy={props.cy}
-                            r={isCrossing ? 6 : 4}
-                            fill={isCrossing ? "#ffffff" : "#e04060"}
+                            r={6}
+                            fill="#ffffff"
                             stroke="#e04060"
                             strokeWidth={2.5}
                           />
@@ -1068,123 +1846,13 @@ export function ExperimentPage() {
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[240px] flex items-center justify-center rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground px-4">
-                  {chart.waiting}
+                  {panel.waiting}
                 </div>
               )}
 
               <div className="mt-4 rounded-xl border border-border/70 bg-muted/40 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-                {chart.detail}
+                {panel.detail}
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <div className="section-title mb-4">{l("Mesures en direct", "Live measurements", "القياسات المباشرة")}</div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {sensorCards.map((sensor) => (
-            <div key={sensor.key} className="bg-card border border-border rounded-2xl p-4 card-premium">
-              <div className="flex items-center justify-center gap-2 mb-4">
-                <span style={{ color: sensor.color }}>{sensor.icon}</span>
-                <span className="font-bold text-sm uppercase tracking-wider" style={{ color: sensor.color }}>
-                  {sensor.label}
-                </span>
-              </div>
-              <div className="flex justify-center mb-4">
-                <div className="w-[180px]">
-                  <SVGGauge value={sensor.value ?? 0} max={sensor.max} color={sensor.color} label="" unit={sensor.unit} />
-                </div>
-              </div>
-              {sensor.history.length >= 2 ? (
-                <ResponsiveContainer width="100%" height={100}>
-                  <AreaChart data={sensor.history} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id={`esp-${sensor.key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={sensor.color} stopOpacity={0.5} />
-                        <stop offset="70%" stopColor={sensor.color} stopOpacity={0.15} />
-                        <stop offset="100%" stopColor={sensor.color} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="4 4" stroke={sensor.color} strokeOpacity={0.15} />
-                    <XAxis dataKey="time" tick={{ fill: sensor.color, fontSize: 9, opacity: 0.8 }} axisLine={false} tickLine={false} minTickGap={20} />
-                    <YAxis tick={{ fill: sensor.color, fontSize: 9, opacity: 0.8 }} axisLine={false} tickLine={false} />
-                    {sensor.threshold !== undefined && (
-                      <ReferenceLine
-                        y={sensor.threshold}
-                        ifOverflow="extendDomain"
-                        stroke="#e04060"
-                        strokeDasharray="4 4"
-                        strokeOpacity={0.85}
-                        label={{
-                          value: `${l("Seuil", "Threshold", "العتبة")} ${sensor.threshold.toFixed(sensor.digits)}`,
-                          position: "right",
-                          fill: "#e04060",
-                          fontSize: 9,
-                        }}
-                      />
-                    )}
-                    {sensor.threshold !== undefined && sensor.history
-                      .filter((point, index, history) => index > 0 && history[index - 1].value <= sensor.threshold && point.value > sensor.threshold)
-                      .map((point) => (
-                        <ReferenceLine
-                          key={`${sensor.key}-${point.time}`}
-                          x={point.time}
-                          stroke="#e04060"
-                          strokeDasharray="3 3"
-                          strokeOpacity={0.4}
-                        />
-                      ))}
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke={sensor.color}
-                      strokeWidth={2.5}
-                      fill={`url(#esp-${sensor.key})`}
-                      dot={(props: { cx?: number; cy?: number; index?: number }) => {
-                        if (sensor.threshold === undefined || props.cx === undefined || props.cy === undefined || props.index === undefined) {
-                          return null;
-                        }
-
-                        const point = sensor.history[props.index];
-                        if (!point || point.value <= sensor.threshold) return null;
-
-                        const previousPoint = props.index > 0 ? sensor.history[props.index - 1] : null;
-                        const isCrossing = !previousPoint || previousPoint.value <= sensor.threshold;
-
-                        return (
-                          <circle
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={isCrossing ? 4.5 : 3.25}
-                            fill={isCrossing ? "#ffffff" : "#e04060"}
-                            stroke="#e04060"
-                            strokeWidth={2}
-                          />
-                        );
-                      }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[100px] flex items-center justify-center rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground px-4">
-                  {sensor.waiting}
-                </div>
-              )}
-              {(sensor.baselineLabel || sensor.thresholdLabel) && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {sensor.baselineLabel && (
-                    <Badge variant="outline" className="border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] text-primary">
-                      {sensor.baselineLabel}: {sensor.baseline !== null && sensor.baseline !== undefined ? `${sensor.baseline.toFixed(sensor.digits)} ${sensor.unit}` : "—"}
-                    </Badge>
-                  )}
-                  {sensor.threshold !== undefined && sensor.thresholdLabel && (
-                    <Badge variant="outline" className="border-destructive/30 bg-destructive/10 px-2.5 py-1 text-[10px] text-destructive">
-                      {sensor.thresholdLabel}: {sensor.threshold.toFixed(sensor.digits)} {sensor.unit}
-                    </Badge>
-                  )}
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -1215,94 +1883,6 @@ export function ExperimentPage() {
               )}
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-premium">
-          <div className="text-sm font-semibold text-foreground mb-3">{l("Détails banc d'essai", "Bench-test details", "تفاصيل منصة الاختبار")}</div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="industrial-label mb-1">{l("Vibration crête", "Peak vibration", "ذروة الاهتزاز")}</div>
-              <div className="text-2xl font-bold text-foreground">{formatValue(vibrationRaw, 2)}</div>
-            </div>
-            <div>
-              <div className="industrial-label mb-1">{l("Température", "Temperature", "الحرارة")}</div>
-              <div className="text-2xl font-bold text-foreground">{formatValue(temperatureC, 1)}<span className="text-sm text-muted-foreground"> °C</span></div>
-            </div>
-            <div>
-              <div className="industrial-label mb-1">{l("Courant", "Current", "التيار")}</div>
-              <div className="text-2xl font-bold text-foreground">{formatValue(currentA, 3)}<span className="text-sm text-muted-foreground"> A</span></div>
-            </div>
-            <div>
-              <div className="industrial-label mb-1">{l("Statut", "Status", "الحالة")}</div>
-              <div className="space-y-2">
-                <Badge variant="outline" className={cn("w-fit px-3 py-1.5 text-[11px] font-semibold tracking-[0.18em]", statusBadgeClasses(explainedStatus.led))}>
-                  {explainedStatus.badge}
-                </Badge>
-                <div className="text-xs leading-relaxed text-muted-foreground">{explainedStatus.detail}</div>
-                <div className="text-[11px] text-muted-foreground break-all">
-                  {firmwareStatus ?? l("NON PUBLIÉ", "NOT PUBLISHED", "غير منشور")}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-premium">
-          <div className="text-sm font-semibold text-foreground mb-3">{l("Format série attendu", "Expected serial format", "تنسيق السيريال المتوقع")}</div>
-          <div className="text-xs text-muted-foreground space-y-2">
-            <p>{l(
-              "La page ignore l'en-tête CSV et lit les lignes de cette forme :",
-              "The page ignores the CSV header and reads lines in this format:",
-              "تتجاهل الصفحة ترويسة CSV وتقرأ الأسطر بهذا التنسيق:"
-            )}</p>
-            <code className="block rounded-xl bg-muted px-3 py-2 text-[11px] text-foreground break-all">
-              timestamp_ms,current_a,vibration_raw,vibration_rms,temp_c,status,calib_count,calib_total,baseline_vib,baseline_current,thresh_vib,thresh_current
-            </code>
-            <p>{l(
-              "Les lignes commençant par `#` sont traitées comme notes firmware, utile pour les messages de calibration.",
-              "Lines starting with `#` are treated as firmware notes, which is useful for calibration messages.",
-              "يتم التعامل مع الأسطر التي تبدأ بـ `#` كملاحظات من البرنامج الثابت، وهذا مفيد لرسائل المعايرة."
-            )}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-premium">
-        <div className="text-sm font-semibold text-foreground mb-3">{l("Sortie pipeline ML (optionnelle)", "ML pipeline output (optional)", "مخرجات خط أنابيب ML (اختيارية)")}</div>
-        <p className="text-xs text-muted-foreground mb-4">
-          {l(
-            "Ces cartes restent séparées du test USB. Elles dépendent des données backend déjà présentes dans l'application.",
-            "These cards remain separate from the USB test. They depend on backend data already present in the app.",
-            "تبقى هذه البطاقات منفصلة عن اختبار USB. وهي تعتمد على بيانات الخلفية الموجودة مسبقًا في التطبيق."
-          )}
-        </p>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-premium text-center">
-            <div className="text-xs text-muted-foreground mb-2">{l("Indice de santé (HI)", "Machine health (HI)", "مؤشر الصحة")}</div>
-            <div className="text-4xl font-bold" style={{ color: hiColor(machineState?.hi_smooth) }}>
-              {machineState?.hi_smooth !== undefined ? (machineState.hi_smooth * 100).toFixed(0) : "—"}
-              <span className="text-lg font-normal text-muted-foreground"> %</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-1">Isolation Forest → Hybrid → HI</div>
-          </div>
-
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-premium text-center">
-            <div className="text-xs text-muted-foreground mb-2">{l("Zone", "Zone", "المنطقة")}</div>
-            <div className={`inline-block rounded-lg border px-4 py-2 text-sm font-semibold ${zoneColor(machineState?.zone)}`}>
-              {machineState?.zone ?? "—"}
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-premium text-center">
-            <div className="text-xs text-muted-foreground mb-2">{l("Durée de Vie Résiduelle", "Remaining Useful Life", "العمر المتبقي")}</div>
-            <div className="text-4xl font-bold text-foreground">
-              {machineState?.rul_days !== undefined && machineState.rul_days !== null ? machineState.rul_days.toFixed(0) : "—"}
-              <span className="text-lg font-normal text-muted-foreground"> {l("jours", "days", "أيام")}</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-1">Random Forest (300 arbres)</div>
-          </div>
         </div>
       </div>
     </div>

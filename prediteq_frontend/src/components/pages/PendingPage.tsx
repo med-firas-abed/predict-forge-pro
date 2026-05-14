@@ -12,7 +12,7 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
   const { lang, setLang, theme, setTheme, t } = useApp();
 
   const pendingUser = currentUser || allUsers.filter(u => u.status === "pending").sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  const assignedMachineLabel = pendingUser?.machineId
+  const assignedMachineLabel = pendingUser && (pendingUser.machineId || pendingUser.machineCode || pendingUser.machineName)
     ? getMachinePublicLabel({ code: pendingUser.machineCode, name: pendingUser.machineName })
     : null;
 

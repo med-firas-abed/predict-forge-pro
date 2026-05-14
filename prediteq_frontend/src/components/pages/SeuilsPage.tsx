@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Save, Mail, Loader2, AlertTriangle, Eye, Shield } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { apiFetch } from "@/lib/api";
@@ -32,40 +32,59 @@ export function SeuilsPage() {
   const [rulSurv, setRulSurv] = useState(30);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasLoadedRemoteConfig, setHasLoadedRemoteConfig] = useState(false);
 
-  useEffect(() => {
-    apiFetch<{
+  const loadThresholdConfig = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+
+    try {
+      const data = await apiFetch<{
       hi_critical: number;
       hi_surveillance: number;
       rul_critical_days: number;
       rul_surveillance_days: number;
       manager_email?: string | null;
       technician_email?: string | null;
-    }>("/seuils")
-      .then((data) => {
-        setHiCrit(data.hi_critical);
-        setHiSurv(data.hi_surveillance);
-        setRulCrit(data.rul_critical_days);
-        setRulSurv(data.rul_surveillance_days);
+      }>("/seuils");
 
-        const recipients = {
-          manager: data.manager_email ?? "",
-          technician: data.technician_email ?? "",
-        };
-        setManagerEmail(recipients.manager);
-        setTechEmail(recipients.technician);
-        setAlertEmails(recipients);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      setHiCrit(data.hi_critical);
+      setHiSurv(data.hi_surveillance);
+      setRulCrit(data.rul_critical_days);
+      setRulSurv(data.rul_surveillance_days);
+
+      const recipients = {
+        manager: data.manager_email ?? "",
+        technician: data.technician_email ?? "",
+      };
+      setManagerEmail(recipients.manager);
+      setTechEmail(recipients.technician);
+      setAlertEmails(recipients);
+      setHasLoadedRemoteConfig(true);
+    } catch {
+      setLoadError("Impossible de charger les seuils live. Rechargez la configuration avant toute sauvegarde.");
+    } finally {
+      setLoading(false);
+    }
   }, [setAlertEmails]);
+
+  useEffect(() => {
+    void loadThresholdConfig();
+  }, [loadThresholdConfig]);
 
   const hiOrderInvalid = hiCrit >= hiSurv;
   const rulOrderInvalid = rulCrit >= rulSurv;
   const hasValidationIssue = hiOrderInvalid || rulOrderInvalid;
-  const saveDisabled = saving || loading || hasValidationIssue;
+  const controlsDisabled = saving || loading || !hasLoadedRemoteConfig;
+  const saveDisabled = controlsDisabled || hasValidationIssue;
 
   const handleSave = async () => {
+    if (!hasLoadedRemoteConfig) {
+      toast.error("Rechargez d'abord les seuils depuis le serveur.");
+      return;
+    }
+
     if (hasValidationIssue) {
       toast.error(
         hiOrderInvalid
@@ -88,7 +107,10 @@ export function SeuilsPage() {
           technician_email: techEmail.trim() || null,
         }),
       });
-      setAlertEmails({ manager: managerEmail, technician: techEmail });
+      setAlertEmails({
+        manager: managerEmail.trim(),
+        technician: techEmail.trim(),
+      });
       toast.success(t("seuils.saved"));
     } catch (error) {
       toast.error(extractApiErrorMessage(error) ?? "Erreur lors de la sauvegarde des seuils");
@@ -118,6 +140,21 @@ export function SeuilsPage() {
           </button>
         </div>
       </div>
+
+      {loadError ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning shadow-sm">
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={() => void loadThresholdConfig()}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Recharger les seuils
+          </button>
+        </div>
+      ) : null}
 
       {hasValidationIssue ? (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive shadow-sm">
@@ -180,6 +217,7 @@ export function SeuilsPage() {
                   max={0.8}
                   step={0.01}
                   value={hiSurv}
+                  disabled={controlsDisabled}
                   onChange={(event) => setHiSurv(+event.target.value)}
                   className={SLIDER_WARN}
                 />
@@ -200,6 +238,7 @@ export function SeuilsPage() {
                   max={0.5}
                   step={0.01}
                   value={hiCrit}
+                  disabled={controlsDisabled}
                   onChange={(event) => setHiCrit(+event.target.value)}
                   className={SLIDER_CRIT}
                 />
@@ -226,6 +265,7 @@ export function SeuilsPage() {
                   max={90}
                   step={1}
                   value={rulSurv}
+                  disabled={controlsDisabled}
                   onChange={(event) => setRulSurv(+event.target.value)}
                   className={SLIDER_WARN}
                 />
@@ -246,6 +286,7 @@ export function SeuilsPage() {
                   max={30}
                   step={1}
                   value={rulCrit}
+                  disabled={controlsDisabled}
                   onChange={(event) => setRulCrit(+event.target.value)}
                   className={SLIDER_CRIT}
                 />
@@ -277,6 +318,7 @@ export function SeuilsPage() {
               <input
                 type="email"
                 value={managerEmail}
+                disabled={controlsDisabled}
                 onChange={(event) => setManagerEmail(event.target.value)}
                 className="w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
@@ -289,6 +331,7 @@ export function SeuilsPage() {
               <input
                 type="email"
                 value={techEmail}
+                disabled={controlsDisabled}
                 onChange={(event) => setTechEmail(event.target.value)}
                 className="w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               />

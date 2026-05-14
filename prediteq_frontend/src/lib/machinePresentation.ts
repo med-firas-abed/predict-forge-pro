@@ -48,6 +48,34 @@ function _normalizeMachineLabelValue(value: unknown): string {
   return normalized;
 }
 
+function _isDemoStyleMachineCode(value: string | null | undefined): boolean {
+  const normalized = _normalizeMachineLabelValue(value).toUpperCase();
+  return /^ASC-[A-Z]\d+$/.test(normalized);
+}
+
+function _getExplicitPublicMachineLabel(
+  value: string | null | undefined,
+  fallback = "Machine",
+): string | null {
+  const normalized = _normalizeMachineLabelValue(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const escapedFallback = fallback.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = normalized.match(new RegExp(`^${escapedFallback}\\s+(.+)$`, "i"));
+  if (!match) {
+    return null;
+  }
+
+  const suffix = match[1]?.trim();
+  if (!suffix) {
+    return fallback;
+  }
+
+  return `${fallback} ${suffix}`;
+}
+
 export function extractMachineOrdinal(
   ...values: Array<string | null | undefined>
 ): number | null {
@@ -76,18 +104,33 @@ export function getMachinePublicLabel(
   fallback = "Machine",
 ): string {
   if (typeof input === "string" || input == null) {
-    const ordinal = extractMachineOrdinal(input);
+    const normalized = _normalizeMachineLabelValue(input);
+    const explicitLabel = _getExplicitPublicMachineLabel(normalized, fallback);
+    if (explicitLabel) {
+      return explicitLabel;
+    }
+
+    const ordinal = _isDemoStyleMachineCode(normalized)
+      ? extractMachineOrdinal(normalized)
+      : null;
     if (ordinal != null) {
       return `${fallback} ${ordinal}`;
     }
 
-    const normalized = _normalizeMachineLabelValue(input);
     return normalized ? `${fallback} ${normalized}` : fallback;
   }
 
   const code = _normalizeMachineLabelValue(input.id) || _normalizeMachineLabelValue(input.code);
   const name = _normalizeMachineLabelValue(input.name);
-  const ordinal = extractMachineOrdinal(code, name);
+  const explicitNameLabel = _getExplicitPublicMachineLabel(name, fallback);
+  if (explicitNameLabel) {
+    return explicitNameLabel;
+  }
+
+  const ordinal =
+    _isDemoStyleMachineCode(code) || (!code && name)
+      ? extractMachineOrdinal(code, name)
+      : null;
 
   if (ordinal != null) {
     return `${fallback} ${ordinal}`;

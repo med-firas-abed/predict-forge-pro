@@ -51,6 +51,20 @@ class MachineUpdateRequest(BaseModel):
     rul: float | None = None
 
 
+def _strict_machine_code_or_400(machine_code: str) -> str:
+    normalized = machine_code.strip().upper()
+    if not _MACHINE_CODE_RE.match(normalized):
+        raise HTTPException(400, "Code machine invalide")
+    return normalized
+
+
+def _lookup_machine_code_or_400(machine_code: str) -> str:
+    normalized = machine_code.strip()
+    if not normalized or len(normalized) > 64:
+        raise HTTPException(400, "Code machine invalide")
+    return normalized
+
+
 def _zone_to_statut(zone: str | None, hi: float | None = None) -> str:
     if zone == "Excellent":
         return "operational"
@@ -243,9 +257,7 @@ async def create_machine(
     body: MachineCreateRequest,
     user: CurrentUser = Depends(require_admin),
 ):
-    code = body.code.strip().upper()
-    if not _MACHINE_CODE_RE.match(code):
-        raise HTTPException(400, "Code machine invalide")
+    code = _strict_machine_code_or_400(body.code)
 
     payload = {
         "code": code,
@@ -283,8 +295,7 @@ async def update_machine(
     body: MachineUpdateRequest,
     user: CurrentUser = Depends(require_admin),
 ):
-    if not _MACHINE_CODE_RE.match(machine_code):
-        raise HTTPException(400, "Code machine invalide")
+    machine_code = _lookup_machine_code_or_400(machine_code)
 
     payload = {}
     if body.name is not None:
@@ -352,8 +363,7 @@ async def delete_machine(
     machine_code: str,
     user: CurrentUser = Depends(require_admin),
 ):
-    if not _MACHINE_CODE_RE.match(machine_code):
-        raise HTTPException(400, "Code machine invalide")
+    machine_code = _lookup_machine_code_or_400(machine_code)
 
     sb = get_supabase()
     try:
@@ -387,8 +397,7 @@ async def delete_machine(
 
 @router.get("/{machine_code}")
 async def get_machine(machine_code: str, user: CurrentUser = Depends(require_auth)):
-    if not _MACHINE_CODE_RE.match(machine_code):
-        raise HTTPException(400, "Code machine invalide")
+    machine_code = _lookup_machine_code_or_400(machine_code)
 
     sb = get_supabase()
     try:
@@ -442,8 +451,7 @@ async def reset_after_maintenance(
     machine_code: str,
     user: CurrentUser = Depends(require_auth),
 ):
-    if not _MACHINE_CODE_RE.match(machine_code):
-        raise HTTPException(400, "Code machine invalide")
+    machine_code = _lookup_machine_code_or_400(machine_code)
 
     now = _time.time()
     if machine_code in _recent_resets and (now - _recent_resets[machine_code]) < 300:

@@ -38,7 +38,7 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
   const searchOptions = useMemo(() => {
     const machineOptions = machines.map((machine) => ({
       label: getMachinePublicLabel(machine),
-      keywords: [machine.id, machine.name, machine.city, machine.loc]
+      keywords: [getMachinePublicLabel(machine), machine.id, machine.name, machine.city, machine.loc]
         .filter(Boolean)
         .map((value) => String(value).toLowerCase()),
       route: `/dashboard?machine=${encodeURIComponent(machine.id)}`,

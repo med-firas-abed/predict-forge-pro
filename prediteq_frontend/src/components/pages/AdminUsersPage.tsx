@@ -11,8 +11,12 @@ export function AdminUsersPage() {
   const approvedAdminCount = approved.filter(u => u.role === "admin").length;
 
   const getMachineName = (user: { machineId?: string; machineCode?: string; machineName?: string }) => {
-    if (!user.machineId) return "Toutes les machines";
-    return getMachinePublicLabel({ code: user.machineCode, name: user.machineName });
+    if (!user.machineId && !user.machineCode && !user.machineName) return "Toutes les machines";
+    return getMachinePublicLabel({
+      id: user.machineId,
+      code: user.machineCode,
+      name: user.machineName,
+    });
   };
 
   // Confirmation + appel deleteUser. Côté backend : refuse self-delete et

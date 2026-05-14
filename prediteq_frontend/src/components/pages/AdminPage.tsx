@@ -54,8 +54,12 @@ export function AdminPage() {
     user: { machineId?: string; machineCode?: string; machineName?: string },
     allLabel: string,
   ) => {
-    if (!user.machineId) return allLabel;
-    return getMachinePublicLabel({ code: user.machineCode, name: user.machineName });
+    if (!user.machineId && !user.machineCode && !user.machineName) return allLabel;
+    return getMachinePublicLabel({
+      id: user.machineId,
+      code: user.machineCode,
+      name: user.machineName,
+    });
   };
 
   // Combien d'admins approuvés restent ? Sert à griser le bouton "Supprimer"
@@ -88,6 +92,7 @@ export function AdminPage() {
     if (!confirmed) return;
     try {
       await deleteUser(userId);
+      await loadAdminContext();
       toast.success(l("Compte supprimé", "Account deleted", "تم حذف الحساب"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : l("Erreur lors de la suppression", "Error during deletion", "خطأ أثناء الحذف"));
@@ -104,6 +109,7 @@ export function AdminPage() {
   const [recipientPreview, setRecipientPreview] = useState<MachineRecipientPreview[]>([]);
   const [machineDrafts, setMachineDrafts] = useState<Record<string, string>>({});
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [reviewingUserId, setReviewingUserId] = useState<string | null>(null);
 
   const loadAdminContext = useCallback(async () => {
     if (!(currentUser?.role === "admin" && currentUser.status === "approved")) {
@@ -175,6 +181,33 @@ export function AdminPage() {
       );
     } finally {
       setUpdatingUserId(null);
+    }
+  };
+
+  const handleReviewUser = async (userId: string, action: "approve" | "reject") => {
+    try {
+      setReviewingUserId(userId);
+      if (action === "approve") {
+        await approveUser(userId);
+      } else {
+        await rejectUser(userId);
+      }
+      await loadAdminContext();
+      toast.success(
+        action === "approve"
+          ? l("Compte approuvé", "Account approved", "تمت الموافقة على الحساب")
+          : l("Compte refusé", "Account rejected", "تم رفض الحساب"),
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : action === "approve"
+            ? l("Erreur lors de l'approbation", "Approval failed", "حدث خطأ أثناء الموافقة.")
+            : l("Erreur lors du refus", "Rejection failed", "حدث خطأ أثناء الرفض."),
+      );
+    } finally {
+      setReviewingUserId(null);
     }
   };
 
@@ -255,18 +288,20 @@ export function AdminPage() {
                       {!isSelf && (
                         <div className="flex gap-2 ml-4">
                           <button
-                            onClick={async () => { await approveUser(user.id); toast.success(l("Compte approuvé", "Account approved", "تمت الموافقة على الحساب")); }}
+                            onClick={() => void handleReviewUser(user.id, "approve")}
+                            disabled={reviewingUserId === user.id}
                             className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-success/10 text-success border border-success/20 text-xs font-semibold hover:bg-success/20 transition-colors"
                           >
                             <UserCheck className="w-3.5 h-3.5" />
-                            {l("Approuver", "Approve", "موافقة")}
+                            {reviewingUserId === user.id ? l("Traitement...", "Working...", "جارٍ التنفيذ...") : l("Approuver", "Approve", "موافقة")}
                           </button>
                           <button
-                            onClick={async () => { await rejectUser(user.id); toast.error(l("Compte refusé", "Account rejected", "تم رفض الحساب")); }}
+                            onClick={() => void handleReviewUser(user.id, "reject")}
+                            disabled={reviewingUserId === user.id}
                             className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-destructive/10 text-destructive border border-destructive/20 text-xs font-semibold hover:bg-destructive/20 transition-colors"
                           >
                             <UserX className="w-3.5 h-3.5" />
-                            {l("Rejeter", "Reject", "رفض")}
+                            {reviewingUserId === user.id ? l("Traitement...", "Working...", "جارٍ التنفيذ...") : l("Rejeter", "Reject", "رفض")}
                           </button>
                           {/* Suppression définitive d'une demande en attente —
                               parfois utile pour purger un compte de test. */}

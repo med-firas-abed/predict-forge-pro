@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Trash2,
   Wrench,
   X,
 } from "lucide-react";
@@ -121,7 +122,13 @@ function toCalendarEvent(task: GmaoTache): CalendarEvent | null {
 export function MaintenancePage() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { taches, addTache, updateTache, isLoading: isLoadingTasks } = useGmaoTaches(currentUser?.machineId);
+  const {
+    taches,
+    addTache,
+    updateTache,
+    deleteTache,
+    isLoading: isLoadingTasks,
+  } = useGmaoTaches(currentUser?.machineId);
   const { machines } = useMachines(currentUser?.machineId);
   const { insights, byMachineId, isFetching: isRefreshingInsights } = useFleetPredictiveInsights(machines);
   const isAdmin = currentUser?.role === "admin";
@@ -377,19 +384,24 @@ export function MaintenancePage() {
     toast.success("Export CSV pret");
   };
 
-  const createTask = () => {
+  const createTask = async () => {
     if (!draft.title.trim() || !draft.machineId) return;
-    addTache.mutate({
-      machine_id: draft.machineId,
-      titre: draft.title,
-      type: draft.type,
-      date_planifiee: draft.date || undefined,
-      technicien: draft.technician || undefined,
-      cout_estime: draft.cost ? Number(draft.cost) : undefined,
-    });
-    setShowCreate(false);
-    setDraft(EMPTY_DRAFT);
-    toast.success("Tâche créée");
+
+    try {
+      await addTache.mutateAsync({
+        machine_id: draft.machineId,
+        titre: draft.title,
+        type: draft.type,
+        date_planifiee: draft.date || undefined,
+        technicien: draft.technician || undefined,
+        cout_estime: draft.cost ? Number(draft.cost) : undefined,
+      });
+      setShowCreate(false);
+      setDraft(EMPTY_DRAFT);
+      toast.success("Tâche créée");
+    } catch {
+      // The mutation hook already surfaced the failure toast.
+    }
   };
 
   const openDetail = (event: CalendarEvent) => {
@@ -405,6 +417,7 @@ export function MaintenancePage() {
   const saveEdit = async () => {
     if (!selectedEvent) return;
     const completedNow = selectedEvent.status !== "terminee" && editStatus === "terminee";
+    const machineCode = selectedEvent.machineCode;
 
     try {
       await updateTache.mutateAsync({
@@ -416,17 +429,44 @@ export function MaintenancePage() {
         cout_estime: editCost ? Number(editCost) : null,
       });
 
-      if (completedNow) {
-        await apiFetch(`/machines/reset/${encodeURIComponent(selectedEvent.machineCode)}`, {
-          method: "POST",
-        });
-      }
-
       setSelectedEvent(null);
       setEditing(false);
-      toast.success("Tâche mise à jour");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Mise à jour impossible");
+
+      if (!completedNow) {
+        toast.success("Tâche mise à jour");
+        return;
+      }
+
+      try {
+        await apiFetch(`/machines/reset/${encodeURIComponent(machineCode)}`, {
+          method: "POST",
+        });
+        toast.success("Tâche clôturée et machine réinitialisée");
+      } catch (error) {
+        toast.warning(
+          error instanceof Error
+            ? `Tâche clôturée, mais la réinitialisation automatique a échoué : ${error.message}`
+            : "Tâche clôturée, mais la réinitialisation automatique a échoué.",
+        );
+      }
+    } catch {
+      // The mutation hook already surfaced the failure toast.
+    }
+  };
+
+  const deleteSelectedEvent = async () => {
+    if (!selectedEvent) return;
+    if (!window.confirm(`Supprimer la tâche "${selectedEvent.title}" ?`)) {
+      return;
+    }
+
+    try {
+      await deleteTache.mutateAsync(selectedEvent.id);
+      setSelectedEvent(null);
+      setEditing(false);
+      toast.success("Tâche supprimée");
+    } catch {
+      // The mutation hook already surfaced the failure toast.
     }
   };
 
@@ -794,6 +834,7 @@ export function MaintenancePage() {
               <div className="section-title">Nouvelle tâche</div>
               <button
                 onClick={() => setShowCreate(false)}
+                aria-label="Fermer la création de tâche"
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-3 text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -848,12 +889,12 @@ export function MaintenancePage() {
                 className="w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
               />
               <button
-                onClick={createTask}
-                disabled={!draft.title.trim() || !draft.machineId}
+                onClick={() => void createTask()}
+                disabled={addTache.isPending || !draft.title.trim() || !draft.machineId}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
-                Enregistrer
+                {addTache.isPending ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
           </div>
@@ -886,9 +927,20 @@ export function MaintenancePage() {
                   {!editing && (
                     <button
                       onClick={() => setEditing(true)}
+                      aria-label="Modifier la tâche"
                       className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20"
                     >
                       <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {!editing && (
+                    <button
+                      onClick={() => void deleteSelectedEvent()}
+                      disabled={deleteTache.isPending}
+                      aria-label="Supprimer la tâche"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
                   <button
@@ -896,6 +948,7 @@ export function MaintenancePage() {
                       setSelectedEvent(null);
                       setEditing(false);
                     }}
+                    aria-label="Fermer la tâche"
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-3 text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-4 w-4" />
@@ -995,10 +1048,11 @@ export function MaintenancePage() {
                 {editing && (
                   <button
                     onClick={() => void saveEdit()}
+                    disabled={updateTache.isPending}
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
                   >
                     <Save className="h-4 w-4" />
-                    Enregistrer
+                    {updateTache.isPending ? "Enregistrement..." : "Enregistrer"}
                   </button>
                 )}
               </div>

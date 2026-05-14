@@ -12,6 +12,8 @@ import {
   getMachinePublicLabel,
 } from "@/lib/machinePresentation";
 
+const MACHINE_CODE_RE = /^[A-Z]{2,5}-[A-Z0-9]{1,5}$/;
+
 const EMPTY_MACHINE: Machine = {
   id: "",
   name: "",
@@ -33,11 +35,63 @@ const EMPTY_MACHINE: Machine = {
   last: new Date().toISOString().slice(0, 10),
 };
 
+function getMachineSourceMeta(machine: Machine) {
+  switch (machine.dataSource ?? machine.decision?.dataSource ?? "no_data") {
+    case "live_runtime":
+      return {
+        label: "Flux live",
+        className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700",
+      };
+    case "simulator_demo":
+      return {
+        label: "Replay demo",
+        className: "border-sky-500/20 bg-sky-500/10 text-sky-700",
+      };
+    case "persisted_reference":
+      return {
+        label: "Reference",
+        className: "border-amber-500/20 bg-amber-500/10 text-amber-700",
+      };
+    default:
+      return {
+        label: "En attente",
+        className: "border-border bg-surface-3 text-muted-foreground",
+      };
+  }
+}
+
+function getTelemetrySourceLabel(source?: string | null) {
+  const normalized = (source ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes("labview")) return "Bridge LabVIEW / boss PC";
+  if (normalized.includes("boss_pc")) return "Bridge boss PC";
+  if (normalized.includes("simulator")) return "Replay demo";
+  if (normalized.includes("runtime")) return "Pipeline live";
+  return source?.replace(/_/g, " ") ?? null;
+}
+
+function getFreshnessLabel(machine: Machine) {
+  switch (machine.freshnessState ?? machine.decision?.freshnessState ?? null) {
+    case "live":
+      return "Lecture fraiche";
+    case "retard_leger":
+      return "Flux a confirmer";
+    case "retard":
+      return "Flux en retard";
+    case "reference_recente":
+      return "Reference recente";
+    case "reference_figee":
+      return "Reference figee";
+    default:
+      return null;
+  }
+}
+
 interface MachineFormProps {
   machine: Machine;
   isNew: boolean;
   existingIds: string[];
-  onSave: (machine: Machine) => void;
+  onSave: (machine: Machine) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -45,24 +99,52 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
   const { t } = useApp();
   const [form, setForm] = useState<Machine>({ ...machine });
   const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const publicLabelPreview = getMachinePublicLabel(form);
+  const normalizedExistingIds = useMemo(
+    () => new Set(existingIds.map((entry) => entry.trim().toUpperCase())),
+    [existingIds],
+  );
 
-  const setField = <K extends keyof Machine>(key: K, value: Machine[K]) =>
+  const setField = <K extends keyof Machine>(key: K, value: Machine[K]) => {
+    if (error) {
+      setError("");
+    }
     setForm((previous) => ({ ...previous, [key]: value }));
+  };
 
   const inputClassName =
     "w-full rounded-lg border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30";
   const labelClassName = "mb-1.5 block text-xs font-semibold text-muted-foreground";
 
-  const handleSave = () => {
-    if (!form.id.trim()) {
+  const handleSave = async () => {
+    const normalizedId = form.id.trim().toUpperCase();
+
+    if (!normalizedId) {
       setError(t("mach.idRequired"));
       return;
     }
-    if (isNew && existingIds.includes(form.id)) {
+    if (!MACHINE_CODE_RE.test(normalizedId)) {
+      setError("Le code doit suivre le format ASC-A1.");
+      return;
+    }
+    if (isNew && normalizedExistingIds.has(normalizedId)) {
       setError(t("mach.idExists"));
       return;
     }
-    onSave(form);
+
+    setError("");
+    setIsSaving(true);
+    try {
+      await onSave({
+        ...form,
+        id: normalizedId,
+      });
+    } catch {
+      // The mutation hook already surfaces the backend error; keep the form open.
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -88,17 +170,23 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
       <div className="mb-3 section-title text-xs">Informations machine</div>
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <div>
-          <label className={labelClassName}>ID machine</label>
+          <label className={labelClassName}>Code interne</label>
           <input
             className={inputClassName}
             value={form.id}
             onChange={(event) => setField("id", event.target.value)}
             disabled={!isNew}
           />
+          <div className="mt-1 text-[0.68rem] leading-relaxed text-muted-foreground">
+            Ce code doit correspondre au `machine_id` envoye par le bridge LabVIEW/PLC.
+          </div>
         </div>
         <div>
-          <label className={labelClassName}>Nom / client</label>
+          <label className={labelClassName}>Nom public</label>
           <input className={inputClassName} value={form.name} onChange={(event) => setField("name", event.target.value)} />
+          <div className="mt-1 text-[0.68rem] leading-relaxed text-muted-foreground">
+            Affichage dans l&apos;app : {publicLabelPreview}. Exemple conseille : `Machine 4`.
+          </div>
         </div>
         <div>
           <label className={labelClassName}>Ville</label>
@@ -164,16 +252,18 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
       <div className="flex justify-end gap-3">
         <button
           onClick={onCancel}
+          disabled={isSaving}
           className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-secondary-foreground hover:bg-surface-3"
         >
           Annuler
         </button>
         <button
           onClick={handleSave}
+          disabled={isSaving}
           className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-teal px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20"
         >
           <Save className="h-4 w-4" />
-          Enregistrer
+          {isSaving ? "Enregistrement..." : "Enregistrer"}
         </button>
       </div>
     </div>
@@ -182,6 +272,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
 
 export function MachinesPage() {
   const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const { machines, addMachine: addMachineMut, updateMachine: updateMachineMut, deleteMachine: deleteMachineMut } =
     useMachines(currentUser?.machineId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -198,7 +289,9 @@ export function MachinesPage() {
     return machines.filter((machine) => {
       if (statusFilter !== "all" && machine.status !== statusFilter) return false;
       if (!normalizedQuery) return true;
+      const publicLabel = getMachinePublicLabel(machine).toLowerCase();
       return (
+        publicLabel.includes(normalizedQuery) ||
         machine.id.toLowerCase().includes(normalizedQuery) ||
         machine.name.toLowerCase().includes(normalizedQuery) ||
         machine.city.toLowerCase().includes(normalizedQuery) ||
@@ -244,14 +337,14 @@ export function MachinesPage() {
     toast.success("Export CSV pret");
   };
 
-  if (showAdd) {
+  if (showAdd && isAdmin) {
     return (
       <MachineForm
         machine={EMPTY_MACHINE}
         isNew
         existingIds={machines.map((machine) => machine.id)}
-        onSave={(machine) => {
-          addMachineMut.mutate({
+        onSave={async (machine) => {
+          await addMachineMut.mutateAsync({
             ...machine,
             last: new Date().toISOString().slice(0, 10),
             anom: 0,
@@ -276,8 +369,8 @@ export function MachinesPage() {
         machine={machine}
         isNew={false}
         existingIds={machines.map((entry) => entry.id)}
-        onSave={(updatedMachine) => {
-          updateMachineMut.mutate({ id: editingId, updates: updatedMachine });
+        onSave={async (updatedMachine) => {
+          await updateMachineMut.mutateAsync({ id: editingId, updates: updatedMachine });
           setEditingId(null);
         }}
         onCancel={() => setEditingId(null)}
@@ -302,13 +395,15 @@ export function MachinesPage() {
             <Download className="h-3.5 w-3.5" />
             Exporter
           </button>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Ajouter machine
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Ajouter machine
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -339,6 +434,9 @@ export function MachinesPage() {
         {filteredMachines.map((machine) => {
           const statusConfig = STATUS_CONFIG[machine.status];
           const hiPct = typeof machine.hi === "number" ? Math.round(machine.hi * 100) : null;
+          const sourceMeta = getMachineSourceMeta(machine);
+          const telemetrySourceLabel = getTelemetrySourceLabel(machine.telemetrySource);
+          const freshnessLabel = getFreshnessLabel(machine);
           return (
             <div key={machine.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-premium">
               <div className="flex items-stretch">
@@ -352,6 +450,23 @@ export function MachinesPage() {
                     <div className="text-sm text-secondary-foreground">{machine.city || "Site industriel"}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {machine.loc || "Emplacement non renseigné"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[0.66rem] font-semibold ${sourceMeta.className}`}
+                      >
+                        {sourceMeta.label}
+                      </span>
+                      {freshnessLabel ? (
+                        <span className="rounded-full border border-border bg-surface-3 px-2.5 py-1 text-[0.66rem] font-semibold text-muted-foreground">
+                          {freshnessLabel}
+                        </span>
+                      ) : null}
+                      {telemetrySourceLabel ? (
+                        <span className="rounded-full border border-border bg-surface-3 px-2.5 py-1 text-[0.66rem] font-semibold text-muted-foreground">
+                          {telemetrySourceLabel}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -388,38 +503,63 @@ export function MachinesPage() {
                     <BarChart3 className="h-3.5 w-3.5" />
                     Voir analyse
                   </button>
-                  <button
-                    onClick={() => setEditingId(machine.id)}
-                    className="flex items-center gap-1.5 rounded-lg bg-surface-3 px-3 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Modifier
-                  </button>
-                  {confirmDeleteId === machine.id ? (
-                    <div className="flex gap-1.5">
+                  {isAdmin ? (
+                    <>
                       <button
-                        onClick={() => {
-                          deleteMachineMut.mutate(machine.id);
-                          setConfirmDeleteId(null);
-                        }}
-                        className="rounded-xl bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground"
+                        onClick={() => setEditingId(machine.id)}
+                        className="flex items-center gap-1.5 rounded-lg bg-surface-3 px-3 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
                       >
-                        Oui
+                        <Pencil className="h-3.5 w-3.5" />
+                        Modifier
                       </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-secondary-foreground"
-                      >
-                        Non
-                      </button>
-                    </div>
+                      {confirmDeleteId === machine.id ? (
+                        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-2">
+                          <div className="mb-2 text-[0.68rem] font-semibold text-destructive">
+                            Supprimer {getMachinePublicLabel(machine)} ?
+                          </div>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await deleteMachineMut.mutateAsync(machine.id);
+                                  if (selectedId === machine.id) {
+                                    setSelectedId(null);
+                                  }
+                                  setConfirmDeleteId(null);
+                                } catch {
+                                  // The mutation hook already shows the failure toast.
+                                }
+                              }}
+                              disabled={deleteMachineMut.isPending}
+                              className="rounded-xl bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deleteMachineMut.isPending ? "Suppression..." : "Oui"}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              disabled={deleteMachineMut.isPending}
+                              className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-secondary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Non
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(machine.id)}
+                          className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive transition-all hover:bg-destructive/20"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Supprimer
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <button
-                      onClick={() => setConfirmDeleteId(machine.id)}
-                      className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive transition-all hover:bg-destructive/20"
+                      disabled
+                      className="flex items-center gap-1.5 rounded-lg bg-surface-3 px-3 py-2 text-xs font-semibold text-muted-foreground"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Supprimer
+                      Lecture seule
                     </button>
                   )}
                 </div>

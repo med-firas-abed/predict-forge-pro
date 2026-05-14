@@ -26,9 +26,10 @@ health from 0% to 100%, every second, based on vibration, power consumption,
 temperature, and humidity readings.
 
 Validated pipeline order for the current project: Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> Step 6 -> Step 6B -> Step 6C -> Step 7.
-For soutenance figures and artifact counts, `INDEX_RESULTATS.md` is the source of truth.
+For soutenance figures and artifact counts, `INDEX_RESULTATS.md` is the human-readable map.
+For exact numeric metrics, rely on `prediteq_ml/outputs/*.json`.
 
-The pipeline has 8 execution stages in practice and 7 main teaching chapters in this narrative:
+The pipeline has 9 labeled execution entries in practice (including Step 6B and Step 6C) and 7 main teaching chapters in this narrative:
   Step 1: Simulate realistic sensor data (because we don't have years of real failure data)
   Step 2: Transform raw sensor readings into meaningful features
   Step 3: Detect anomalies using Isolation Forest + a hybrid ensemble

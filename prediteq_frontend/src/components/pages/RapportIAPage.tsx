@@ -124,15 +124,25 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         setReportText(repairText(text));
       }
 
+      if (!repairText(text).trim()) {
+        throw new Error("EMPTY_REPORT");
+      }
+
       await loadHistory();
       toast.success(l("Rapport genere", "Report generated", "تم انشاء التقرير"));
-    } catch {
+    } catch (error) {
       toast.error(
-        l(
-          "Erreur lors de la generation du rapport",
-          "Failed to generate the report",
-          "فشل انشاء التقرير",
-        ),
+        error instanceof Error && error.message === "EMPTY_REPORT"
+          ? l(
+              "Le rapport n'a renvoye aucun contenu. Veuillez reessayer.",
+              "The report returned no content. Please try again.",
+              "The report returned no content. Please try again.",
+            )
+          : l(
+              "Erreur lors de la generation du rapport",
+              "Failed to generate the report",
+              "فشل انشاء التقرير",
+            ),
       );
     } finally {
       setGenerating(false);

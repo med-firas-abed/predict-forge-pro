@@ -38,7 +38,7 @@ class DemoScenario(TypedDict):
 
 DEMO_MACHINE_SCENARIOS: dict[str, DemoScenario] = {
     "ASC-A1": {
-        "site": "Ben Arous",
+        "site": "Bizerte",
         "health_state": "good",
         "health_label": "Opérationnel",
         "usage_case": "Cycle modéré, charges légères et installation protégée",

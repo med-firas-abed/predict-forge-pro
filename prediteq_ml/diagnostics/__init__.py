@@ -32,7 +32,7 @@ Références scientifiques globales :
       MSSP 104:799-834
     - Saxena & Goebel (2008), NASA CMAPSS run-to-failure benchmark
 
-Auteur : Firas Zouari — ISAMM PFE 2026
+Auteur : Mohamed Firas Abed — ISAMM PFE 2026
 """
 from .rul_confidence import (
     predict_with_interval,

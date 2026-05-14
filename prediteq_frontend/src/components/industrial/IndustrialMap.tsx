@@ -13,6 +13,7 @@ type TileMode = "roadmap" | "satellite";
 
 interface IndustrialMapProps {
   mode?: MapMode;
+  machines?: Machine[];
   predictiveInsights?: Record<string, PredictiveInsight>;
   heightClass?: string;
   focusedMachineId?: string;
@@ -161,13 +162,15 @@ function makePopupHTML(
 
 export function IndustrialMap({
   mode = "status",
+  machines: providedMachines,
   predictiveInsights = {},
   heightClass = "h-[620px]",
   focusedMachineId,
   onMachineSelect,
 }: IndustrialMapProps) {
   const { lang } = useApp();
-  const { machines } = useMachines();
+  const { machines: fetchedMachines } = useMachines();
+  const machines = providedMachines ?? fetchedMachines;
   const [tileMode, setTileMode] = useState<TileMode>("roadmap");
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);

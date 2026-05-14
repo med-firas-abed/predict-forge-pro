@@ -243,7 +243,8 @@ export function AlertsPage() {
   const activeSignalCount = activeSignals.length;
   const filteredEmailHistory = useMemo(() => {
     return emailHistory.filter((entry) => {
-      if (machineFilter !== "all" && entry.machineId !== machineFilter) return false;
+      const entryMachineId = entry.machineCode || entry.machineId;
+      if (machineFilter !== "all" && entryMachineId !== machineFilter) return false;
       const createdAt = new Date(entry.createdAt);
       if (startDate && createdAt < new Date(`${startDate}T00:00:00`)) return false;
       if (endDate && createdAt > new Date(`${endDate}T23:59:59.999`)) return false;

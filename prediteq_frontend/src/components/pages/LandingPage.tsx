@@ -39,7 +39,7 @@ const bg = (d: string, l: string) => ({ dark: d, light: l });
 const tc = (d: string, l: string) => ({ dark: d, light: l });
 
 const T = {
-  nav: { features: { fr: "Fonctionnalités", en: "Features" }, how: { fr: "Comment ça marche", en: "How it Works" }, metrics: { fr: "Métriques", en: "Metrics" }, pricing: { fr: "Tarifs", en: "Pricing" }, signin: { fr: "Connexion", en: "Sign In" }, getStarted: { fr: "Commencer", en: "Get Started" } },
+  nav: { features: { fr: "Fonctionnalités", en: "Features" }, how: { fr: "Comment ça marche", en: "How it Works" }, metrics: { fr: "Métriques", en: "Metrics" }, pricing: { fr: "Périmètre", en: "Scope" }, signin: { fr: "Connexion", en: "Sign In" }, getStarted: { fr: "Commencer", en: "Get Started" } },
   hero: {
     badge: { fr: "SaaS Prédictif propulsé par l'IA", en: "AI-Powered Predictive SaaS" },
     h1a: { fr: "Prédisez les pannes", en: "Predict Equipment Failures" },
@@ -55,9 +55,9 @@ const T = {
   trust: { fr: "Technologie Aroteq", en: "Aroteq Technology" },
   challenge: {
     label: { fr: "Défi & Solution", en: "Challenge & Solution" },
-    title: { fr: "Le problème de maintenance\nindustrielle résolu.", en: "The industrial maintenance\nproblem solved." },
+    title: { fr: "Une réponse lisible au problème\nde maintenance industrielle.", en: "A readable answer to the\nindustrial maintenance challenge." },
     challengeLabel: { fr: "Défi :", en: "Challenge:" },
-    challengeText: { fr: "Prédire les pannes en temps réel sur plusieurs sites industriels, que ce soit sur les machines que nous fabriquons ou sur celles déjà en service chez nos clients, équipées de nos capteurs IoT.", en: "Predict equipment failures in real-time across multiple industrial sites — whether on machines we manufacture or on existing client equipment retrofitted with our IoT sensors." },
+    challengeText: { fr: "Anticiper les dérives et pannes potentielles sur plusieurs contextes industriels à partir de signaux instrumentés, de bancs de test connectés ou d'une future intégration terrain.", en: "Anticipate drift and potential failures across industrial contexts using instrumented signals, connected test benches, or a future field integration." },
     solutionLabel: { fr: "Solution :", en: "Solution:" },
     solutionText: { fr: "Une plateforme SaaS prédictive multi-capteurs combinant la détection d'anomalies par ", en: "An AI-powered predictive SaaS platform combining " },
     solutionIF: { fr: "Isolation Forest", en: "Isolation Forest" },
@@ -72,11 +72,11 @@ const T = {
   },
   features: {
     label: { fr: "Notre Plateforme", en: "Our Platform" },
-    title: { fr: "Intelligence de Grade Industriel", en: "Industrial-Grade Intelligence" },
-    sub: { fr: "Des capacités de surveillance avancées conçues pour les écosystèmes industriels complexes.", en: "Deep monitoring capabilities designed for complex industrial ecosystems." },
+    title: { fr: "Intelligence prédictive lisible", en: "Readable Predictive Intelligence" },
+    sub: { fr: "Des fonctions conçues pour relier signaux, diagnostic, pronostic et décision dans un même parcours produit.", en: "Capabilities designed to connect signals, diagnosis, prognosis, and action in one product flow." },
     items: [
-      { title: { fr: "Indice de santé (HI)", en: "Machine health (HI)" }, desc: { fr: "Calcul continu de la santé machine via la télémétrie multi-capteurs installée sur vos machines.", en: "Continuous calculation of machine health using multi-parameter sensor telemetry installed on your machines." } },
-      { title: { fr: "Prédiction RUL", en: "RUL Prediction" }, desc: { fr: "Nos modèles IA prédisent la Durée de Vie Restante avec des estimations précises basées sur les patterns d'usure actuels.", en: "AI models predict Remaining Useful Life with precise failure window estimates based on current wear patterns." } },
+      { title: { fr: "Indice de santé (HI)", en: "Machine health (HI)" }, desc: { fr: "Calcul continu de la santé machine à partir d'une télémétrie multi-capteurs reliée à un démonstrateur, un banc instrumenté ou une machine cible.", en: "Continuous machine-health estimation from multi-sensor telemetry connected to a demonstrator, an instrumented bench, or a target machine." } },
+      { title: { fr: "Prédiction RUL", en: "RUL Prediction" }, desc: { fr: "Le pronostic RUL est publié lorsque le contexte et l'historique disponibles rendent l'estimation défendable pour la maintenance.", en: "RUL is published when the available context and history make the estimate defensible for maintenance planning." } },
       { title: { fr: "Détection d'Anomalies", en: "Anomaly Detection" }, desc: { fr: "Identification instantanée des déviations subtiles dans les signatures thermiques, vibratoires ou acoustiques.", en: "Instant identification of subtle deviations in thermal, vibration, or acoustic signatures using unsupervised learning." } },
       { title: { fr: "Alertes Intelligentes", en: "Smart Alerts" }, desc: { fr: "Notifications contextuelles par Email lorsque les seuils critiques sont approchés. Niveaux URGENCE, SURVEILLANCE, OK.", en: "Context-aware notifications via Email when critical thresholds are approached. URGENCE, SURVEILLANCE, OK levels." } },
       { title: { fr: "Rapports IA", en: "AI Reports" }, desc: { fr: "Synthèses exécutives et analyses techniques générées à la demande depuis les mêmes décisions que le tableau de bord.", en: "Executive summaries and technical analyses generated on demand from the same decisions used in the dashboard." } },
@@ -84,11 +84,11 @@ const T = {
     ],
   },
   steps: {
-    title: { fr: "La Feuille de Route vers\nZéro Arrêt", en: "The Roadmap to\nZero Downtime" },
+    title: { fr: "La Feuille de Route vers\nune maintenance mieux anticipée", en: "The Roadmap to\nEarlier Maintenance Decisions" },
     items: [
-      { title: { fr: "Installation des Capteurs", en: "Install Sensors" }, desc: { fr: "Nos techniciens installent les capteurs IoT sur vos machines existantes ou les intègrent directement aux équipements que nous fabriquons, puis relient les signaux à la plateforme PrediTeq.", en: "Our technicians install IoT sensors on your existing machines or integrate them directly into the equipment we manufacture, then connect those signals to the PrediTeq platform." } },
+      { title: { fr: "Connexion des Signaux", en: "Connect Signals" }, desc: { fr: "Le projet peut être relié à un banc instrumenté, à des signaux existants ou à une future chaîne industrielle selon le périmètre retenu.", en: "The project can be connected to an instrumented bench, existing signals, or a future industrial chain depending on the selected scope." } },
       { title: { fr: "L'IA Analyse", en: "AI Analyzes" }, desc: { fr: "Notre plateforme analyse les comportements nominaux et les dérives à partir des signaux multi-capteurs, pour produire HI, diagnostics et pronostic.", en: "Our platform analyzes nominal behavior and drift from multi-sensor signals to produce HI, diagnostics, and prognosis." } },
-      { title: { fr: "Prédire les Pannes", en: "Predict Failures" }, desc: { fr: "Recevez des alertes fiables des semaines avant les pannes potentielles, incluant le type de défaillance et sa sévérité estimée.", en: "Receive high-confidence alerts weeks before potential failures, including failure type and estimated severity." } },
+      { title: { fr: "Publier le Pronostic", en: "Publish Prognosis" }, desc: { fr: "Recevez des alertes exploitables lorsque le contexte, les seuils et l'historique rendent le pronostic publiable et utile pour la maintenance.", en: "Receive actionable alerts when context, thresholds, and history make the prognosis publishable and useful for maintenance." } },
       { title: { fr: "Agir en Avance", en: "Act Early" }, desc: { fr: "Alertes intelligentes, rapports IA automatisés et planification de maintenance avant que les pannes ne surviennent.", en: "Smart alerts, automated AI reports, and maintenance scheduling before failures occur." } },
     ],
   },
@@ -107,20 +107,20 @@ const T = {
     ],
   },
   pricing: {
-    label: { fr: "Tarifs", en: "Pricing" },
-    title: { fr: "Offres Adaptées à Votre Industrie", en: "Scalable Intelligence Tiers" },
-    sub: { fr: "Choisissez l'offre adaptée à votre parc machines. Le périmètre exact est ajusté selon le projet.", en: "Choose the plan that fits your industrial footprint. The exact scope is adjusted to the project." },
+    label: { fr: "Périmètres de projet", en: "Project scopes" },
+    title: { fr: "Formats de démonstration et de déploiement", en: "Demonstration and deployment formats" },
+    sub: { fr: "Le périmètre exact dépend du niveau de maturité recherché : démonstrateur, pilote ou extension industrielle.", en: "The exact scope depends on the target maturity level: demonstrator, pilot, or industrial extension." },
     mo: { fr: "/mois", en: "/mo" },
     plans: [
-      { name: { fr: "Essentiel", en: "Starter" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Jusqu'à 5 machines", en: "Up to 5 machines" }, features: { fr: ["Kit capteurs IoT (température, vibration)", "Indice de santé (HI) en temps réel", "Prédiction RUL basique", "Alertes par email", "Tableau de bord 1 site"], en: ["IoT sensor kit (temperature, vibration)", "Real-time machine health (HI)", "Basic RUL prediction", "Email alerts", "1-site dashboard"] }, popular: false },
-      { name: { fr: "Professionnel", en: "Professional" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Jusqu'à 20 machines", en: "Up to 20 machines" }, features: { fr: ["Kit capteurs avancé (6 paramètres)", "Indice de santé (HI) avancé", "RUL + intervalles de confiance", "Alertes multi-niveaux intelligentes", "Tableau de bord multi-site", "Rapports IA à la demande"], en: ["Advanced sensor kit (6 parameters)", "Advanced machine health (HI)", "Full RUL + confidence intervals", "Smart multi-level alerts", "Multi-site dashboard", "On-demand AI reports"] }, popular: true },
-      { name: { fr: "Entreprise", en: "Enterprise" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Machines illimitées", en: "Unlimited machines" }, features: { fr: ["Tout l'offre Professionnel", "Capteurs sur-mesure pour vos lignes", "Entraînement de modèle IA personnalisé", "Déploiement on-premise possible", "Tableau de bord en marque blanche", "Rapports IA en temps réel"], en: ["Everything in Professional", "Custom sensors for your production lines", "Custom AI model training", "On-premise deployment option", "White-label dashboard", "Real-time AI reports"] }, popular: false },
+      { name: { fr: "Démonstrateur", en: "Demonstrator" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Banc ou machine instrumentée", en: "Instrumented bench or target machine" }, features: { fr: ["Acquisition capteurs reliée à PrediTeq", "Indice de santé (HI) en temps réel", "Page Experiment et tableau de bord", "Alertes email de démonstration", "Rapport de validation fonctionnelle"], en: ["Sensor acquisition connected to PrediTeq", "Real-time machine health (HI)", "Experiment page and dashboard", "Demonstration email alerts", "Functional validation report"] }, popular: false },
+      { name: { fr: "Pilote", en: "Pilot" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Petit parc instrumenté", en: "Small instrumented fleet" }, features: { fr: ["Télémétrie multi-capteurs", "RUL avec intervalles de confiance", "Tableau de bord multi-machine", "Alertes et rapports à la demande", "Bridge MQTT et réglage des seuils terrain"], en: ["Multi-sensor telemetry", "RUL with confidence intervals", "Multi-machine dashboard", "Alerts and on-demand reports", "MQTT bridge and field-threshold tuning"] }, popular: true },
+      { name: { fr: "Extension industrielle", en: "Industrial extension" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Intégration selon projet", en: "Integration per project" }, features: { fr: ["Connexion LabVIEW / PLC / supervision", "Déploiement cloud ou on-premise", "Ajustement progressif avec données terrain", "Adaptation des pages métier et du planner", "Montée en charge selon le site"], en: ["LabVIEW / PLC / supervision connection", "Cloud or on-premise deployment", "Progressive tuning with field data", "Adaptation of business pages and planner", "Scale-up according to the site"] }, popular: false },
     ],
   },
   cta: {
-    h2a: { fr: "Prêt à éliminer", en: "Ready to eliminate" },
+    h2a: { fr: "Prêt à mieux anticiper", en: "Ready to better anticipate" },
     h2b: { fr: "les arrêts imprévus ?", en: "unplanned downtime?" },
-    sub: { fr: "Rejoignez les industriels qui utilisent PrediTeq pour prédire les pannes. Nos capteurs s'installent sur vos machines existantes. Démonstration et déploiement selon le projet.", en: "Join industrial operators using PrediTeq to predict failures before they happen. Our sensors install on your existing machines. Demo and rollout depend on the project scope." },
+    sub: { fr: "Découvrez le démonstrateur PrediTeq, la page Experiment et les scénarios de déploiement progressif selon le projet.", en: "Discover the PrediTeq demonstrator, the Experiment page, and the progressive deployment paths available per project." },
     btn: { fr: "Commencer Maintenant", en: "Get Started Now" },
   },
   footer: {
@@ -128,7 +128,7 @@ const T = {
     quick: { fr: "Accès Rapide", en: "Quick Access" },
     platform: { fr: "Plateforme", en: "Platform" },
     industries: { fr: "Industries", en: "Industries" },
-    pricingF: { fr: "Tarifs", en: "Pricing" },
+    pricingF: { fr: "Périmètres", en: "Scope" },
     contact: { fr: "Contact", en: "Contact" },
     resources: { fr: "Ressources", en: "Resources" },
     docs: { fr: "Documentation", en: "Documentation" },
@@ -239,6 +239,12 @@ function Navbar({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: 
               {lang === "fr" ? "🇬🇧 EN" : "🇫🇷 FR"}
             </button>
           </div>
+          <button
+            onClick={onLogin}
+            className={`block text-sm py-2 text-left ${dark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            {T.nav.signin[lang]}
+          </button>
           <button
             onClick={onGetStarted}
             className="w-full mt-2 px-5 py-2.5 rounded-lg text-white text-sm font-semibold"

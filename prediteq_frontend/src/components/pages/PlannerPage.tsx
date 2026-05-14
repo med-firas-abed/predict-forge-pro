@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import {
   AlertTriangle,
@@ -64,6 +65,9 @@ interface PlannerFleetRow extends RiskEntry {
   projected_cost: number;
   delayed_cost: number;
   delay_penalty: number;
+  task_context?: string | null;
+  similar_open_tasks?: number;
+  recent_completed_tasks?: number;
   task_suggestion?: ProposedTask;
 }
 
@@ -73,6 +77,13 @@ interface GeneratePlanResponse {
   markdown: string;
   tasks: ProposedTask[];
   fleet: PlannerFleetRow[];
+}
+
+interface ApproveTaskResponse {
+  status: string;
+  message: string;
+  machine_code: string;
+  repeat_note?: string | null;
 }
 
 interface PlannerPageProps {
@@ -148,6 +159,42 @@ function formatMachineLabel(machineCode: string | null | undefined, machineName?
   return getMachinePublicLabel({ id: machineCode ?? undefined, name: machineName ?? undefined });
 }
 
+function numberOrNull(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringValue(value: unknown, fallback = "") {
+  return repairText(typeof value === "string" ? value : fallback);
+}
+
+function nullableStringValue(value: unknown) {
+  return typeof value === "string" ? repairText(value) : null;
+}
+
+function numberValue(value: unknown, fallback = 0) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function stringArrayValue(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string").map((entry) => repairText(entry))
+    : [];
+}
+
+function trimPlannerText(value: string | null | undefined, maxLength = 72) {
+  const compact = repairText((value ?? "").replace(/\s+/g, " ").trim());
+  if (!compact) return null;
+  return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function normalizeRiskLevel(value: unknown): PlannerFleetRow["risk_level"] {
+  if (value === "critical" || value === "priority" || value === "watch" || value === "stable") {
+    return value;
+  }
+  return "stable";
+}
+
 function _suggestedDate(daysFromNow: number) {
   const date = new Date();
   date.setDate(date.getDate() + Math.max(0, daysFromNow));
@@ -160,6 +207,191 @@ function _priorityFromBand(band: RiskEntry["risk_level"]): ProposedTask["priorit
   return "basse";
 }
 
+function buildLocalTaskTitle(insight: PredictiveInsight) {
+  const baseTitle = trimPlannerText(
+    insight.taskTemplate.title || `Intervention ${insight.machine.id}`,
+    120,
+  ) ?? `Intervention ${insight.machine.id}`;
+  const titleWithMachine = baseTitle.includes(insight.machine.id)
+    ? baseTitle
+    : `${baseTitle} ${insight.machine.id}`;
+  const qualifiers: string[] = [];
+  const driver = trimPlannerText(insight.topDriver ?? insight.dominantAxis ?? null, 38);
+  if (driver) qualifiers.push(driver);
+  if ((insight.urgencyBand === "critical" || insight.urgencyBand === "priority") && typeof insight.rulDays === "number") {
+    qualifiers.push(`RUL ${Math.round(insight.rulDays)} j`);
+  } else if ((insight.urgencyBand === "critical" || insight.urgencyBand === "watch") && typeof insight.machine.hi === "number") {
+    qualifiers.push(`HI ${Math.round(insight.machine.hi * 100)}%`);
+  }
+  if ((insight.machine.decision?.openTasks ?? 0) > 0) {
+    qualifiers.push("reprise");
+  }
+
+  let title = titleWithMachine;
+  for (const qualifier of qualifiers) {
+    const candidate = `${title} - ${qualifier}`;
+    if (candidate.length > 200) break;
+    title = candidate;
+  }
+
+  return title;
+}
+
+function buildLocalTaskDescription(insight: PredictiveInsight) {
+  const parts: string[] = [];
+  const stateParts: string[] = [];
+  const recommendedAction = trimPlannerText(insight.recommendedAction, 260);
+  const plainReason = trimPlannerText(insight.plainReason, 320);
+  const hi = typeof insight.machine.hi === "number" ? `HI ${Math.round(insight.machine.hi * 100)}%` : null;
+  const rul = typeof insight.rulDays === "number" ? `RUL ${Math.round(insight.rulDays)} j` : null;
+  const zone = trimPlannerText(insight.machine.decision?.zone ?? null, 32);
+  const driver = trimPlannerText(insight.topDriver ?? insight.dominantAxis ?? null, 50);
+  const maintenanceWindow = trimPlannerText(insight.maintenanceWindow, 120);
+  const impact = trimPlannerText(insight.impact, 220);
+  const fieldCheck = trimPlannerText(insight.fieldChecks[0] ?? null, 140);
+  const evidence = insight.evidence
+    .slice(0, 3)
+    .map((entry) => trimPlannerText(entry, 90))
+    .filter((entry): entry is string => Boolean(entry));
+  const openTasks = insight.machine.decision?.openTasks ?? 0;
+
+  if (hi) stateParts.push(hi);
+  if (rul) stateParts.push(rul);
+  if (zone) stateParts.push(`zone ${zone}`);
+  stateParts.push(`score ${Math.round(insight.urgencyScore)}/100`);
+  if (driver) stateParts.push(`signal dominant ${driver}`);
+
+  if (recommendedAction) parts.push(`Action: ${recommendedAction}.`);
+  if (stateParts.length > 0) parts.push(`Etat: ${stateParts.join(", ")}.`);
+  if (plainReason) parts.push(`Motif: ${plainReason}.`);
+  if (maintenanceWindow) parts.push(`Fenetre: ${maintenanceWindow}.`);
+  if (impact) parts.push(`Impact: ${impact}.`);
+  if (evidence.length > 0) parts.push(`Preuves: ${evidence.join(" | ")}.`);
+  if (fieldCheck) parts.push(`Controle terrain: ${fieldCheck}.`);
+  if (openTasks > 0) {
+    parts.push(
+      `Contexte calendrier: ${openTasks} tache(s) deja ouverte(s) sur cette machine; une relance peut rester necessaire si les signaux persistent.`,
+    );
+  }
+
+  return parts.join(" ").trim();
+}
+
+function buildLocalTaskSuggestion(insight: PredictiveInsight, projectedCost: number): ProposedTask | undefined {
+  if (insight.urgencyBand === "stable") return undefined;
+
+  return {
+    machine_code: insight.machine.id,
+    titre: buildLocalTaskTitle(insight),
+    type: insight.taskTemplate.type,
+    priorite: _priorityFromBand(insight.urgencyBand),
+    date_planifiee: _suggestedDate(insight.taskTemplate.leadDays),
+    cout_estime: projectedCost,
+    description: buildLocalTaskDescription(insight),
+    technicien: "",
+  };
+}
+
+function normalizeProposedTask(raw: unknown): ProposedTask | null {
+  if (!raw || typeof raw !== "object") return null;
+  const task = raw as Record<string, unknown>;
+
+  const type = task.type;
+  const priorite = task.priorite;
+  if (type !== "preventive" && type !== "corrective" && type !== "inspection") return null;
+  if (priorite !== "haute" && priorite !== "moyenne" && priorite !== "basse") return null;
+
+  return {
+    machine_code: stringValue(task.machine_code),
+    titre: stringValue(task.titre),
+    type,
+    priorite,
+    date_planifiee: stringValue(task.date_planifiee),
+    cout_estime: numberOrNull(task.cout_estime),
+    description: stringValue(task.description),
+    technicien: stringValue(task.technicien),
+  };
+}
+
+function normalizePlannerFleetRow(raw: unknown): PlannerFleetRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+
+  const machineCode = stringValue(row.machine_code);
+  if (!machineCode) return null;
+
+  return {
+    machine_code: machineCode,
+    nom: stringValue(row.nom),
+    region: stringValue(row.region),
+    hi: numberOrNull(row.hi),
+    rul_days: numberOrNull(row.rul_days),
+    zone: nullableStringValue(row.zone),
+    risk_score: numberValue(row.risk_score ?? row.urgency_score, 0),
+    risk_level: normalizeRiskLevel(row.risk_level ?? row.urgency_band),
+    risk_label: stringValue(row.risk_label ?? row.urgency_label, "Stable"),
+    summary: stringValue(row.summary),
+    recommended_action: stringValue(row.recommended_action),
+    maintenance_window: nullableStringValue(row.maintenance_window),
+    open_tasks: numberValue(row.open_tasks, 0),
+    data_source: stringValue(row.data_source, "no_data"),
+    updated_at: nullableStringValue(row.updated_at),
+    is_stale: Boolean(row.is_stale),
+    plain_reason: stringValue(row.plain_reason),
+    impact: stringValue(row.impact),
+    evidence: stringArrayValue(row.evidence),
+    field_checks: stringArrayValue(row.field_checks),
+    projected_cost: numberValue(row.projected_cost, 0),
+    delayed_cost: numberValue(row.delayed_cost, 0),
+    delay_penalty: numberValue(row.delay_penalty, 0),
+    task_context: nullableStringValue(row.task_context),
+    similar_open_tasks: numberValue(row.similar_open_tasks, 0),
+    recent_completed_tasks: numberValue(row.recent_completed_tasks, 0),
+    task_suggestion: normalizeProposedTask(row.task_suggestion),
+  };
+}
+
+function normalizeGeneratePlanResponse(raw: unknown): GeneratePlanResponse | null {
+  if (!raw || typeof raw !== "object") return null;
+  const response = raw as Record<string, unknown>;
+  const fleet = Array.isArray(response.fleet)
+    ? response.fleet
+        .map((entry) => normalizePlannerFleetRow(entry))
+        .filter((entry): entry is PlannerFleetRow => Boolean(entry))
+    : [];
+  const tasks = Array.isArray(response.tasks)
+    ? response.tasks
+        .map((entry) => normalizeProposedTask(entry))
+        .filter((entry): entry is ProposedTask => Boolean(entry))
+    : fleet
+        .map((entry) => entry.task_suggestion)
+        .filter((entry): entry is ProposedTask => Boolean(entry));
+
+  return {
+    generated_at: stringValue(response.generated_at, new Date().toISOString()),
+    focus_machine: nullableStringValue(response.focus_machine),
+    markdown: stringValue(response.markdown),
+    tasks,
+    fleet,
+  };
+}
+
+function buildLocalGeneratePlanResponse(
+  rows: PlannerFleetRow[],
+  focusMachine: string | null,
+  l: (fr: string, en: string, ar: string) => string,
+): GeneratePlanResponse {
+  return {
+    generated_at: new Date().toISOString(),
+    focus_machine: focusMachine,
+    markdown: buildPlanNarrative(rows, focusMachine, l),
+    tasks: rows
+      .map((row) => row.task_suggestion)
+      .filter((task): task is ProposedTask => Boolean(task)),
+    fleet: rows,
+  };
+}
+
 function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRow[] {
   return [...insights]
     .sort((left, right) => right.urgencyScore - left.urgencyScore)
@@ -167,6 +399,7 @@ function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRo
       const avgCost = getBudgetReferenceCost(insight.taskTemplate.type);
       const projectedCost = Math.round(avgCost * insight.budgetMultiplier);
       const delayedCost = Math.round(projectedCost * insight.delayMultiplier);
+      const openTasks = insight.machine.decision?.openTasks ?? 0;
       const row: PlannerFleetRow = {
         machine_code: insight.machine.id,
         nom: insight.machine.name,
@@ -180,7 +413,7 @@ function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRo
         summary: insight.summary,
         recommended_action: insight.recommendedAction,
         maintenance_window: insight.maintenanceWindow,
-        open_tasks: insight.machine.decision?.openTasks ?? 0,
+        open_tasks: openTasks,
         data_source: insight.dataSource,
         updated_at: insight.updatedAt,
         is_stale: insight.isStale,
@@ -191,19 +424,13 @@ function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRo
         projected_cost: projectedCost,
         delayed_cost: delayedCost,
         delay_penalty: delayedCost - projectedCost,
-        task_suggestion:
-          insight.urgencyBand === "stable"
-            ? undefined
-            : {
-                machine_code: insight.machine.id,
-                titre: insight.taskTemplate.title || `Intervention ${insight.machine.id}`,
-                type: insight.taskTemplate.type,
-                priorite: _priorityFromBand(insight.urgencyBand),
-                date_planifiee: _suggestedDate(insight.taskTemplate.leadDays),
-                cout_estime: projectedCost,
-                description: `${insight.recommendedAction} Motif: ${insight.plainReason}`.trim(),
-                technicien: "",
-              },
+        task_context:
+          openTasks > 0
+            ? `Contexte calendrier: ${openTasks} tache(s) deja ouverte(s) sur cette machine; une relance peut rester necessaire si les signaux persistent.`
+            : null,
+        similar_open_tasks: openTasks,
+        recent_completed_tasks: 0,
+        task_suggestion: buildLocalTaskSuggestion(insight, projectedCost),
       };
       return row;
     });
@@ -283,6 +510,7 @@ function buildPlanNarrative(
 export function PlannerPage({ embedded = false }: PlannerPageProps) {
   const { lang } = useApp();
   const { currentUser } = useAuth();
+  const queryClient = useQueryClient();
   const { machines, isLoading: loadingMachines } = useMachines(currentUser?.machineId);
   const { insights } = useFleetPredictiveInsights(machines);
   const location = useLocation();
@@ -382,27 +610,24 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
   const generatePlan = async () => {
     setGenerating(true);
     setPlanText("");
+    setPlanGeneratedAt(null);
     setGeneratedFleet([]);
     setProposedTasks([]);
+    setEditingIdx(null);
 
     try {
       const scopedRows = focusMachine
         ? fallbackPlannerRows.filter((row) => row.machine_code === focusMachine)
         : fallbackPlannerRows;
 
-      if (scopedRows.length === 0) {
-        throw new Error("no_data");
+      const backendResponse = await apiFetch("/planner/generate", {
+        method: "POST",
+        body: JSON.stringify({ focus_machine: focusMachine }),
+      });
+      const data = normalizeGeneratePlanResponse(backendResponse);
+      if (!data || (data.fleet.length === 0 && scopedRows.length === 0)) {
+        throw new Error("planner_empty");
       }
-
-      const data: GeneratePlanResponse = {
-        generated_at: new Date().toISOString(),
-        focus_machine: focusMachine,
-        markdown: buildPlanNarrative(scopedRows, focusMachine, l),
-        tasks: scopedRows
-          .map((row) => row.task_suggestion)
-          .filter((task): task is ProposedTask => Boolean(task)),
-        fleet: scopedRows,
-      };
 
       setPlanText(data.markdown);
       setPlanGeneratedAt(data.generated_at);
@@ -416,14 +641,35 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
           `${data.tasks.length} task(s) proposed by the planner.`,
         ),
       );
-    } catch {
-      toast.error(
-        l(
-          "Erreur lors de la generation de la synthese",
-          "Failed to generate the summary",
-          "Failed to generate the summary",
-        ),
-      );
+    } catch (error) {
+      const scopedRows = focusMachine
+        ? fallbackPlannerRows.filter((row) => row.machine_code === focusMachine)
+        : fallbackPlannerRows;
+
+      if (scopedRows.length > 0) {
+        const fallbackData = buildLocalGeneratePlanResponse(scopedRows, focusMachine, l);
+        setPlanText(fallbackData.markdown);
+        setPlanGeneratedAt(fallbackData.generated_at);
+        setGeneratedFleet(fallbackData.fleet);
+        setProposedTasks(fallbackData.tasks);
+        toast.warning(
+          l(
+            "Plan backend indisponible - plan local de secours genere avec les donnees machines chargees.",
+            "Planner API unavailable - local fallback plan generated from loaded machine data.",
+            "Planner API unavailable - local fallback plan generated from loaded machine data.",
+          ),
+        );
+      } else {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : l(
+                "Erreur lors de la generation de la synthese",
+                "Failed to generate the summary",
+                "Failed to generate the summary",
+              ),
+        );
+      }
     } finally {
       setGenerating(false);
     }
@@ -431,13 +677,14 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
 
   const approveTask = async (idx: number) => {
     const task = proposedTasks[idx];
+    if (!task) return;
     setApprovingIdx(idx);
 
     try {
-      await apiFetch("/planner/approve", {
+      const response = (await apiFetch("/planner/approve", {
         method: "POST",
         body: JSON.stringify(task),
-      });
+      })) as ApproveTaskResponse;
       toast.success(
         l(
           `Tache "${task.titre}" creee dans la GMAO`,
@@ -445,7 +692,35 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
           `Task "${task.titre}" created in the GMAO`,
         ),
       );
+      if (response?.repeat_note) {
+        toast.warning(response.repeat_note);
+      }
+      setRiskData((previous) =>
+        previous.map((entry) =>
+          entry.machine_code === task.machine_code
+            ? { ...entry, open_tasks: entry.open_tasks + 1 }
+            : entry,
+        ),
+      );
+      setGeneratedFleet((previous) =>
+        previous.map((entry) =>
+          entry.machine_code === task.machine_code
+            ? {
+                ...entry,
+                open_tasks: entry.open_tasks + 1,
+                similar_open_tasks: (entry.similar_open_tasks ?? 0) + 1,
+              }
+            : entry,
+        ),
+      );
       setProposedTasks((previous) => previous.filter((_, index) => index !== idx));
+      setEditingIdx((previous) => {
+        if (previous == null) return previous;
+        if (previous === idx) return null;
+        return previous > idx ? previous - 1 : previous;
+      });
+      void queryClient.invalidateQueries({ queryKey: ["gmao_taches"] });
+      void queryClient.invalidateQueries({ queryKey: ["machines"] });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : l("Erreur d'approbation", "Approval failed", "Approval failed"),
@@ -799,9 +1074,22 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                             <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
                               {formatCurrency(row.projected_cost)}
                             </span>
+                            {(row.similar_open_tasks ?? 0) > 0 && (
+                              <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
+                                {row.similar_open_tasks} {l("relance(s) ouverte(s)", "similar open task(s)", "similar open task(s)")}
+                              </span>
+                            )}
+                            {(row.recent_completed_tasks ?? 0) > 0 && (
+                              <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
+                                {row.recent_completed_tasks} {l("action(s) recente(s)", "recent action(s)", "recent action(s)")}
+                              </span>
+                            )}
                           </div>
                           <div className="mt-3 text-sm text-secondary-foreground">{row.recommended_action}</div>
                           {row.impact && <div className="mt-2 text-xs text-muted-foreground">{row.impact}</div>}
+                          {row.task_context && (
+                            <div className="mt-2 text-[0.72rem] text-muted-foreground">{row.task_context}</div>
+                          )}
                           {checks && (
                             <div className="mt-2 text-[0.72rem] text-muted-foreground">
                               {l("Controle terrain", "Field checks", "Field checks")}: {checks}

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     MQTT_USER: str = ""
     MQTT_PASSWORD: str = ""
     MQTT_USE_SSL: bool = True
+    MQTT_ALLOW_PUBLIC_TEST_BROKER: bool = False
+    LIVE_INGEST_TOKEN: str = ""
 
     GROQ_API_KEY: str = ""
     EMAILJS_API_BASE: str = "https://api.emailjs.com"

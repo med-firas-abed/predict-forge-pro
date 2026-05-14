@@ -50,6 +50,20 @@ export function ChatWidget() {
     setMessages((previous) => [...previous, ...nextMessages].slice(-80));
   };
 
+  const upsertAssistantMessage = (content: string) => {
+    setMessages((previous) => {
+      const copy = [...previous];
+      const lastMessage = copy[copy.length - 1];
+
+      if (lastMessage?.role === "assistant" && !lastMessage.content.trim()) {
+        copy[copy.length - 1] = { role: "assistant", content };
+        return copy;
+      }
+
+      return [...copy, { role: "assistant", content }].slice(-80);
+    });
+  };
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -83,9 +97,25 @@ export function ChatWidget() {
           return copy;
         });
       }
+
+      if (!assistantText.trim()) {
+        upsertAssistantMessage(
+          l(
+            "Aucune reponse n'a ete renvoyee. Veuillez reessayer.",
+            "No reply was returned. Please try again.",
+            "No reply was returned. Please try again.",
+          ),
+        );
+      }
     } catch (error) {
       console.error("[ChatWidget] Stream error:", error);
-      appendMessages({ role: "assistant", content: "Erreur de connexion. Veuillez réessayer." });
+      upsertAssistantMessage(
+        l(
+          "Erreur de connexion. Veuillez reessayer.",
+          "Connection error. Please try again.",
+          "Connection error. Please try again.",
+        ),
+      );
     } finally {
       setLoading(false);
     }

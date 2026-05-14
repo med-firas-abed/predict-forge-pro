@@ -86,13 +86,21 @@ async def lifespan(app: FastAPI):
     # 5. Connect MQTT (optional — skipped if no broker configured)
     import asyncio as _aio
     from routers import mqtt
-    if settings.MQTT_BROKER and settings.MQTT_BROKER != "broker.emqx.io":
+    public_test_broker = settings.MQTT_BROKER == "broker.emqx.io"
+    if settings.MQTT_BROKER and (
+        not public_test_broker or settings.MQTT_ALLOW_PUBLIC_TEST_BROKER
+    ):
         try:
             await _aio.wait_for(mqtt.connect(), timeout=15.0)
         except _aio.TimeoutError:
             logger.warning("MQTT connection timeout — running in simulator-only mode")
         except Exception as e:
             logger.warning("MQTT connection failed: %s — running in simulator-only mode", e)
+    elif public_test_broker:
+        logger.info(
+            "MQTT skipped — public test broker blocked by default; "
+            "set MQTT_ALLOW_PUBLIC_TEST_BROKER=true to use broker.emqx.io temporarily"
+        )
     else:
         logger.info("MQTT skipped — no broker configured (simulated mode)")
 
@@ -258,6 +266,7 @@ from routers.chat import router as chat_router
 from routers.planner import router as planner_router
 from routers.diagnostics_rul import router as diagnostics_rul_router
 from routers.runtime_data import router as runtime_data_router
+from routers.live_ingest import router as live_ingest_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -271,3 +280,4 @@ app.include_router(chat_router)
 app.include_router(planner_router)
 app.include_router(diagnostics_rul_router)
 app.include_router(runtime_data_router)
+app.include_router(live_ingest_router)

@@ -51,6 +51,12 @@ rapport_firas/
 rapport_firas.zip
 rapport_firas_v2/
 rapport_firas_v2.zip
+old_pfe_reports/
+rapport_firas_v2__1_.pdf
 external-skills/
 .opencode/
 references/
+
+# Local transfer/runtime artifacts
+prediteq_api/TRANSFER_TO_PC2/scripts/.env.bridge
+prediteq_api/TRANSFER_TO_PC2/scripts/__pycache__/

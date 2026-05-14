@@ -106,6 +106,7 @@ export function GeoPage() {
 
       <IndustrialMap
         mode="predictive"
+        machines={machines}
         predictiveInsights={byMachineId}
         heightClass="h-[560px] md:h-[620px] xl:h-[700px]"
         focusedMachineId={focusedMachineId}
