@@ -20,4 +20,4 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
-Sitemap: https://prediteq-saas.vercel.app/sitemap.xml
+Sitemap: https://prediteq.aro-teq.com/sitemap.xml

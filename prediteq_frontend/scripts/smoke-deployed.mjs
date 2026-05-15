@@ -1,6 +1,6 @@
 import { chromium } from "@playwright/test";
 
-const frontendUrl = normalizeUrl(process.env.FRONTEND_URL ?? "https://prediteq-saas.vercel.app");
+const frontendUrl = normalizeUrl(process.env.FRONTEND_URL ?? "https://prediteq.aro-teq.com");
 const backendUrl = normalizeUrl(process.env.BACKEND_URL ?? "https://prediteq-saas.onrender.com");
 const retries = parsePositiveInt(process.env.SMOKE_RETRIES, 1);
 const delayMs = parsePositiveInt(process.env.SMOKE_DELAY_MS, 15_000);

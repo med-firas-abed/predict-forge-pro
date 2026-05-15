@@ -4,11 +4,16 @@
   signOutAuth,
 } from "@/lib/authClient";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "";
-if (!API_BASE && typeof window !== "undefined") {
+const configuredApiBase = String(import.meta.env.VITE_API_URL ?? "").trim();
+const isBrowser = typeof window !== "undefined";
+const isLocalHost =
+  isBrowser && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+const API_BASE = isBrowser && !isLocalHost ? "/api" : configuredApiBase;
+
+if (!API_BASE && isBrowser) {
   console.error(
-    "[PrediTeq] VITE_API_URL is not set - all API calls will fail. " +
-    "Set this in your Vercel/environment variables.",
+    "[PrediTeq] API base is not configured for local development. " +
+    "Set VITE_API_URL to your backend URL.",
   );
 }
 

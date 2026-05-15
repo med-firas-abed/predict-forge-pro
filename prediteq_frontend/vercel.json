@@ -4,6 +4,7 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://prediteq-saas.onrender.com/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
