@@ -1,5 +1,5 @@
 ﻿import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
-import { apiFetch } from "@/lib/api";
+import { API_BASE, apiFetch } from "@/lib/api";
 import {
   fetchAllProfileRows,
   fetchProfileRow,
@@ -290,7 +290,7 @@ function profileSeedFromAppUser(user: AppUser): ProfileSeed {
 async function fetchProfileViaApi(seed?: ProfileSeed): Promise<AppUser | null> {
   const { data } = await getAuthSession();
   const token = data.session?.access_token;
-  const apiBase = import.meta.env.VITE_API_URL ?? "";
+  const apiBase = API_BASE;
 
   if (!token || !apiBase) return null;
 
@@ -463,7 +463,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const apiBase = import.meta.env.VITE_API_URL ?? "";
+    const apiBase = API_BASE;
     try {
       const res = await fetch(`${apiBase}/auth/login`, {
         method: "POST",

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
+import { API_BASE } from "@/lib/api";
 import { repairText } from "@/lib/repairText";
 
 export type Lang = "fr" | "en" | "ar";
@@ -479,7 +480,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Fetch global thresholds from backend on mount
   useEffect(() => {
-    const base = import.meta.env.VITE_API_URL ?? "";
+    const base = API_BASE;
     if (!base) return; // no API configured
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10_000);
