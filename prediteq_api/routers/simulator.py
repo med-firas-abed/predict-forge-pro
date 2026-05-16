@@ -1470,8 +1470,8 @@ async def stop_simulator(admin: CurrentUser = Depends(require_admin)):
 
 
 @router.get("/status")
-async def simulator_status(user: CurrentUser = Depends(require_auth)):
-    """Get current simulator state."""
+async def simulator_status(admin: CurrentUser = Depends(require_admin)):
+    """Get current simulator state (admin only)."""
     _schedule_demo_prewarm()
     manager = get_manager()
     result = dict(_state)

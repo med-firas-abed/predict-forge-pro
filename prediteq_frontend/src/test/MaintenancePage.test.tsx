@@ -222,4 +222,52 @@ describe("MaintenancePage", () => {
     );
     expect(screen.queryByLabelText("Modifier la tâche")).not.toBeInTheDocument();
   });
+
+  it("keeps normal users in read-only mode for their machine", async () => {
+    useAuthMock.mockReturnValue({
+      currentUser: {
+        role: "user",
+        machineId: "uuid-a1",
+      },
+    });
+
+    useGmaoTachesMock.mockReturnValue({
+      taches: [
+        {
+          id: "task-1",
+          machineId: "uuid-a1",
+          machineCode: "ASC-A1",
+          titre: "Controle cabine",
+          description: "Verifier les capteurs",
+          statut: "planifiee",
+          technicien: "Firas",
+          datePlanifiee: new Date().toISOString().slice(0, 10),
+          coutEstime: 120,
+          type: "inspection",
+          createdAt: "2026-05-14T08:00:00.000Z",
+        },
+      ],
+      addTache: { mutateAsync: vi.fn(), isPending: false },
+      updateTache: { mutateAsync: vi.fn(), isPending: false },
+      deleteTache: { mutateAsync: vi.fn(), isPending: false },
+      isLoading: false,
+    });
+
+    renderPage();
+
+    expect(
+      screen.getByText(/lecture seule: vous voyez uniquement les informations de votre machine/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ajouter une tache manuelle/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ajouter sur ce jour/i })).not.toBeInTheDocument();
+
+    const taskTitles = await screen.findAllByText(/controle cabine/i);
+    fireEvent.click(taskTitles[0]);
+
+    expect(
+      screen.getByText(/lecture seule: cette fiche reste informative pour votre machine/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Modifier la tâche")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Supprimer la tâche")).not.toBeInTheDocument();
+  });
 });

@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from routers.mqtt import is_connected as mqtt_is_connected
 from ml.engine_manager import get_manager
-from core.auth import CurrentUser, require_auth
+from core.auth import CurrentUser, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +89,8 @@ def public_metrics():
 
 
 @router.get("/health/detail")
-def health_detail(user: CurrentUser = Depends(require_auth)):
-    """GET /health/detail — detailed probe (requires authentication)."""
+def health_detail(admin: CurrentUser = Depends(require_admin)):
+    """GET /health/detail — detailed probe (admin only)."""
     try:
         manager = get_manager()
 

@@ -285,6 +285,13 @@ export function AlertsPage() {
           </button>
         </div>
 
+        {!isAdmin ? (
+          <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+            Lecture seule: vous consultez uniquement les alertes et traces de votre machine. L'acquittement
+            et les actions de configuration restent reserves a l'administrateur.
+          </div>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-foreground">
             {activeMachineCount} machine{activeMachineCount > 1 ? "s" : ""} a traiter
@@ -435,14 +442,16 @@ export function AlertsPage() {
                             Les repetitions similaires restent regroupees pour garder une lecture claire.
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => acquitterAlertes.mutate(row.openIds)}
-                          disabled={acquitterAlertes.isPending}
-                          className="rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[0.72rem] font-semibold text-foreground transition-colors hover:bg-border-subtle disabled:opacity-50"
-                        >
-                          Acquitter les signaux
-                        </button>
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => acquitterAlertes.mutate(row.openIds)}
+                            disabled={acquitterAlertes.isPending}
+                            className="rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[0.72rem] font-semibold text-foreground transition-colors hover:bg-border-subtle disabled:opacity-50"
+                          >
+                            Acquitter les signaux
+                          </button>
+                        ) : null}
                       </div>
 
                       <div className="space-y-2">

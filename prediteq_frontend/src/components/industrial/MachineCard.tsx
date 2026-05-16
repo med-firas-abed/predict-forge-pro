@@ -7,11 +7,12 @@ import { useMachines } from "@/hooks/useMachines";
 interface MachineCardProps {
   machineId: string;
   onClick: (id: string) => void;
+  machineScopeId?: string;
 }
 
-export function MachineCard({ machineId, onClick }: MachineCardProps) {
+export function MachineCard({ machineId, onClick, machineScopeId }: MachineCardProps) {
   const { t } = useApp();
-  const { machines } = useMachines();
+  const { machines } = useMachines(machineScopeId);
   const m = machines.find(x => x.id === machineId);
   if (!m) return null;
   const cfg = STATUS_CONFIG[m.status];

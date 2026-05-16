@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from core.supabase_client import get_supabase
-from core.auth import CurrentUser, require_auth, get_machine_filter
+from core.auth import CurrentUser, require_admin, require_auth, get_machine_filter
 from core.email_history import read_email_events
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ async def list_alert_email_history(
 
 
 @router.post("/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: str, user: CurrentUser = Depends(require_auth)):
+async def acknowledge_alert(alert_id: str, user: CurrentUser = Depends(require_admin)):
     """POST /alerts/{id}/acknowledge — mark alert as acknowledged."""
     sb = get_supabase()
 

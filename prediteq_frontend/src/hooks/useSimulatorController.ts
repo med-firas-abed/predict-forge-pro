@@ -83,11 +83,13 @@ function localize(lang: Lang, fr: string, en: string, ar: string) {
 type UseSimulatorControllerOptions = {
   lang: Lang;
   refetchMachines?: (() => Promise<unknown>) | null;
+  enabled?: boolean;
 };
 
 export function useSimulatorController({
   lang,
   refetchMachines,
+  enabled = true,
 }: UseSimulatorControllerOptions) {
   const queryClient = useQueryClient();
   const state = useSyncExternalStore(
@@ -132,15 +134,23 @@ export function useSimulatorController({
   }, []);
 
   const loadSimulatorStatus = useCallback(async () => {
+    if (!enabled) {
+      return null;
+    }
+
     try {
       const data = await fetchSimulatorStatus();
       return applyFetchedStatus(data);
     } catch {
       return null;
     }
-  }, [applyFetchedStatus]);
+  }, [applyFetchedStatus, enabled]);
 
   const scheduleRefreshBurst = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
+
     clearRefreshBurst();
     clearRefreshBurstRef.current = scheduleSimulatorRefreshBurst({
       queryClient,
@@ -150,10 +160,14 @@ export function useSimulatorController({
     if (refetchMachines) {
       void refetchMachines();
     }
-  }, [clearRefreshBurst, loadSimulatorStatus, queryClient, refetchMachines]);
+  }, [clearRefreshBurst, enabled, loadSimulatorStatus, queryClient, refetchMachines]);
 
   const startSimulation = useCallback(
     async ({ speed }: { speed: number }) => {
+      if (!enabled) {
+        return;
+      }
+
       const snapshot = getSharedSimulatorState();
 
       if (snapshot.isStarting || snapshot.isStopping || snapshot.status?.running) {
@@ -233,10 +247,14 @@ export function useSimulatorController({
         toast.error(message);
       }
     },
-    [clearRefreshBurst, l, loadSimulatorStatus, scheduleRefreshBurst],
+    [clearRefreshBurst, enabled, l, loadSimulatorStatus, scheduleRefreshBurst],
   );
 
   const pauseSimulation = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
     const snapshot = getSharedSimulatorState();
 
     if (snapshot.isStarting || snapshot.isStopping || !snapshot.status?.running) {
@@ -300,9 +318,13 @@ export function useSimulatorController({
       }));
       toast.error(message);
     }
-  }, [clearRefreshBurst, l, loadSimulatorStatus]);
+  }, [clearRefreshBurst, enabled, l, loadSimulatorStatus]);
 
   const toggleResetRequest = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
+
     const snapshot = getSharedSimulatorState();
 
     if (snapshot.isStarting || snapshot.isStopping || snapshot.status?.running) {
@@ -329,17 +351,26 @@ export function useSimulatorController({
             "Reset cleared.",
           ),
     );
-  }, [l]);
+  }, [enabled, l]);
 
   useEffect(() => {
+    if (!enabled) {
+      clearRefreshBurst();
+      return;
+    }
+
     void loadSimulatorStatus();
 
     return () => {
       clearRefreshBurst();
     };
-  }, [clearRefreshBurst, loadSimulatorStatus]);
+  }, [clearRefreshBurst, enabled, loadSimulatorStatus]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const intervalMs =
       state.status?.running || state.isStarting || state.isBootstrapping
         ? ACTIVE_POLL_MS
@@ -353,32 +384,50 @@ export function useSimulatorController({
       window.clearInterval(intervalId);
     };
   }, [
+    enabled,
     loadSimulatorStatus,
     state.isBootstrapping,
     state.isStarting,
     state.status?.running,
   ]);
 
+  const exposedStatus = enabled ? state.status : null;
+  const isRunning = enabled && exposedStatus?.running === true;
+  const isStarting = enabled && state.isStarting;
+  const isStopping = enabled && state.isStopping;
+  const isBootstrapping = enabled && state.isBootstrapping;
+  const isActive =
+    enabled &&
+    (exposedStatus?.running === true || isStarting || isBootstrapping);
+  const isStartLocked =
+    enabled &&
+    (exposedStatus?.running === true ||
+      isStarting ||
+      isBootstrapping ||
+      isStopping);
+  const canPause =
+    enabled &&
+    exposedStatus?.running === true &&
+    !isStarting &&
+    !isStopping;
+  const canReset =
+    enabled &&
+    exposedStatus?.running !== true &&
+    !isStarting &&
+    !isStopping &&
+    !isBootstrapping;
+
   return {
-    simStatus: state.status,
-    isRunning: state.status?.running === true,
-    isStarting: state.isStarting,
-    isStopping: state.isStopping,
-    isBootstrapping: state.isBootstrapping,
-    isActive: state.status?.running === true || state.isStarting || state.isBootstrapping,
-    isStartLocked:
-      state.status?.running === true ||
-      state.isStarting ||
-      state.isBootstrapping ||
-      state.isStopping,
-    canPause:
-      state.status?.running === true && !state.isStarting && !state.isStopping,
-    canReset:
-      state.status?.running !== true &&
-      !state.isStarting &&
-      !state.isStopping &&
-      !state.isBootstrapping,
-    resetRequested: state.resetRequested,
+    simStatus: exposedStatus,
+    isRunning,
+    isStarting,
+    isStopping,
+    isBootstrapping,
+    isActive,
+    isStartLocked,
+    canPause,
+    canReset,
+    resetRequested: enabled && state.resetRequested,
     loadSimulatorStatus,
     startSimulation,
     pauseSimulation,

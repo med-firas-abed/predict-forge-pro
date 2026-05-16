@@ -18,12 +18,13 @@ interface AppTopbarProps {
 export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
   const { t, lang, setLang, theme, setTheme } = useApp();
   const { currentUser } = useAuth();
-  const { alertes } = useAlertes();
+  const { alertes } = useAlertes(currentUser?.machineId);
   const { machines } = useMachines(currentUser?.machineId);
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const isAdmin = currentUser?.role === "admin";
 
   const L = useMemo(() => {
     const m: Record<string, Record<string, string>> = {
@@ -51,11 +52,13 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
       { label: t("nav.maintenance"), keywords: ["maintenance", "gmao", "tache", "intervention"], route: "/maintenance", group: L("g.pages") },
       { label: t("nav.alerts"), keywords: ["alerte", "alertes", "alerts", "notification", "anomalie"], route: "/alertes", group: L("g.pages") },
       { label: t("nav.ia"), keywords: ["rapport", "report", "agent", "planner", "ia", "ai", "pdf", "plan"], route: "/ia", group: L("g.pages") },
-      { label: t("nav.machines"), keywords: ["machine", "machines", "stockeur", "carrousel", "parc"], route: "/machines", group: L("g.pages") },
+      ...(isAdmin
+        ? [{ label: t("nav.machines"), keywords: ["machine", "machines", "stockeur", "carrousel", "parc"], route: "/machines", group: L("g.pages") }]
+        : []),
     ];
 
     return [...machineOptions, ...pageOptions];
-  }, [L, machines, t]);
+  }, [L, isAdmin, machines, t]);
 
   const defaultSuggestions = useMemo(
     () => [...searchOptions.filter((option) => option.group === L("g.machines")).slice(0, 3), ...searchOptions.filter((option) => option.group === L("g.pages")).slice(0, 5)],

@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { STATUS_CONFIG } from "@/data/machines";
 import {
   getBearingReference,
@@ -220,9 +221,10 @@ function FactorBar({
 
 export function DiagnosticsPage() {
   const { lang } = useApp();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { machines, isLoading: isLoadingMachines } = useMachines();
+  const { machines, isLoading: isLoadingMachines } = useMachines(currentUser?.machineId);
   const { byMachineId } = useFleetPredictiveInsights(machines);
   const requestedMachineId = searchParams.get("machine");
   const selected =

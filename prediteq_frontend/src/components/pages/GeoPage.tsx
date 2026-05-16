@@ -8,6 +8,7 @@ import {
 import { IndustrialMap } from "@/components/industrial/IndustrialMap";
 import { KpiCard } from "@/components/industrial/KpiCard";
 import { useApp } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useMachines } from "@/hooks/useMachines";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
@@ -16,7 +17,8 @@ import { repairText } from "@/lib/repairText";
 
 export function GeoPage() {
   const { t, lang } = useApp();
-  const { machines } = useMachines();
+  const { currentUser } = useAuth();
+  const { machines } = useMachines(currentUser?.machineId);
   const { insights, byMachineId } = useFleetPredictiveInsights(machines);
   const [focusedMachineId, setFocusedMachineId] = useState("");
   const l = (fr: string, en: string, ar: string) =>
@@ -107,6 +109,7 @@ export function GeoPage() {
       <IndustrialMap
         mode="predictive"
         machines={machines}
+        machineScopeId={currentUser?.machineId}
         predictiveInsights={byMachineId}
         heightClass="h-[560px] md:h-[620px] xl:h-[700px]"
         focusedMachineId={focusedMachineId}

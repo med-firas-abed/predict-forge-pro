@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from core.auth import CurrentUser, get_machine_filter, require_auth
+from core.auth import CurrentUser, get_machine_filter, require_admin, require_auth
 from core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -201,7 +201,7 @@ async def list_tasks(
 @router.post("/tasks")
 async def create_task(
     body: TaskCreateRequest,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_admin),
 ):
     effective_machine_id = _resolve_machine_scope(user, body.machine_id)
     sb = get_supabase()
@@ -236,7 +236,7 @@ async def create_task(
 async def update_task(
     task_id: str,
     body: TaskUpdateRequest,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_admin),
 ):
     task = _load_task_for_update(task_id)
     _resolve_machine_scope(user, task.get("machine_id"))
@@ -257,7 +257,7 @@ async def update_task(
 @router.delete("/tasks/{task_id}")
 async def delete_task(
     task_id: str,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_admin),
 ):
     task = _load_task_for_update(task_id)
     _resolve_machine_scope(user, task.get("machine_id"))

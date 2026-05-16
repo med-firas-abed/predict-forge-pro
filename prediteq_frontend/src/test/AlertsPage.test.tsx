@@ -124,4 +124,98 @@ describe("AlertsPage", () => {
     expect(screen.queryByText("a1@prediteq.test")).not.toBeInTheDocument();
     expect(screen.getByText("b2@prediteq.test")).toBeInTheDocument();
   });
+
+  it("keeps normal users in read-only mode for alert actions", () => {
+    useAuthMock.mockReturnValue({
+      currentUser: {
+        role: "user",
+        machineId: "uuid-a1",
+      },
+    });
+
+    useMachinesMock.mockReturnValue({
+      machines: [
+        {
+          id: "ASC-A1",
+          name: "Machine 1",
+          city: "Bizerte",
+          loc: "Site Nord",
+          hi: 0.96,
+        },
+      ],
+    });
+
+    useAlertesMock.mockReturnValue({
+      alertes: [
+        {
+          id: "alert-a1",
+          machineId: "uuid-a1",
+          machineCode: "ASC-A1",
+          titre: "Temperature elevee",
+          description: "Capteur moteur au-dessus du seuil.",
+          severite: "urgence",
+          acquitte: false,
+          createdAt: "2026-05-12T12:00:00.000Z",
+        },
+      ],
+      acquitterAlertes: { mutate: vi.fn(), isPending: false },
+    });
+
+    useAlertEmailHistoryMock.mockReturnValue({
+      emailHistory: [
+        {
+          id: "mail-a1",
+          machineId: "uuid-a1",
+          machineCode: "ASC-A1",
+          machineName: "Machine 1",
+          recipientEmail: "a1@prediteq.test",
+          success: true,
+          type: "hi",
+          source: "scheduler",
+          severity: "urgence",
+          subject: "A1",
+          note: "",
+          createdAt: "2026-05-12T10:00:00.000Z",
+        },
+      ],
+    });
+
+    useFleetPredictiveInsightsMock.mockReturnValue({
+      insights: [
+        {
+          urgencyScore: 20,
+          urgencyBand: "critical",
+          maintenanceWindow: "Sous 24 h",
+          plainReason: "Verifier la temperature moteur",
+          recommendedAction: "Inspection immediate",
+          impact: "Eviter une degradation rapide",
+          stressValue: 0.82,
+          machine: { id: "ASC-A1", hi: 0.96 },
+        },
+      ],
+      byMachineId: {
+        "ASC-A1": {
+          urgencyScore: 20,
+          urgencyBand: "critical",
+          urgencyLabel: "Critique",
+          maintenanceWindow: "Sous 24 h",
+          plainReason: "Verifier la temperature moteur",
+          recommendedAction: "Inspection immediate",
+          impact: "Eviter une degradation rapide",
+          stressValue: 0.82,
+          machine: { id: "ASC-A1", hi: 0.96 },
+        },
+      },
+    });
+
+    renderPage();
+
+    expect(
+      screen.getByText(/lecture seule: vous consultez uniquement les alertes et traces de votre machine/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /voir les signaux actifs/i }));
+
+    expect(screen.queryByRole("button", { name: /acquitter les signaux/i })).not.toBeInTheDocument();
+  });
 });

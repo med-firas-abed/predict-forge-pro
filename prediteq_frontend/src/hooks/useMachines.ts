@@ -24,7 +24,8 @@ const STATUT_MAP: Record<string, Machine["status"]> = {
 };
 
 const KW_TO_AMPS = 1000 / (Math.sqrt(3) * 400 * 0.8);
-const MACHINE_CACHE_KEY = "prediteq-machine-cache-v4";
+const MACHINE_CACHE_KEY_PREFIX = "prediteq-machine-cache-v5";
+const LEGACY_MACHINE_CACHE_KEY = "prediteq-machine-cache-v4";
 
 function formatLastUpdate(value?: string | null) {
   if (!value) return "";
@@ -68,6 +69,10 @@ function safeStorageSet(key: string, value: string) {
   } catch {
     // Ignore storage failures so the UI can still render.
   }
+}
+
+function buildMachineCacheKey(machineId?: string) {
+  return `${MACHINE_CACHE_KEY_PREFIX}:${machineId ?? "all"}`;
 }
 
 function statusFromRuntime(
@@ -273,20 +278,40 @@ function filterMachines(machines: Machine[], machineId?: string): Machine[] {
   return machines.filter((machine) => machine.uuid === machineId || machine.id === machineId);
 }
 
-function readCachedMachines(machineId?: string): Machine[] {
-  const raw = safeStorageGet(MACHINE_CACHE_KEY);
-  if (!raw) return [];
+function parseCachedMachines(raw: string, machineId?: string): Machine[] | null {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return filterMachines(repairTextDeep(parsed as Machine[]), machineId);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function writeCachedMachines(machines: Machine[]) {
-  safeStorageSet(MACHINE_CACHE_KEY, JSON.stringify(machines));
+function readCachedMachines(machineId?: string): Machine[] {
+  const candidateKeys = [
+    buildMachineCacheKey(machineId),
+    machineId ? buildMachineCacheKey() : null,
+    LEGACY_MACHINE_CACHE_KEY,
+  ].filter((key): key is string => Boolean(key));
+
+  for (const key of candidateKeys) {
+    const raw = safeStorageGet(key);
+    if (raw == null) {
+      continue;
+    }
+
+    const parsed = parseCachedMachines(raw, machineId);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return [];
+}
+
+function writeCachedMachines(machines: Machine[], machineId?: string) {
+  safeStorageSet(buildMachineCacheKey(machineId), JSON.stringify(machines));
 }
 
 async function fetchMachines(machineId?: string): Promise<Machine[]> {
@@ -305,7 +330,7 @@ async function fetchMachines(machineId?: string): Promise<Machine[]> {
       }
     }
 
-    writeCachedMachines(machines);
+    writeCachedMachines(machines, machineId);
     return filterMachines(machines, machineId);
   } catch (error) {
     console.warn("[useMachines] live fetch failed, falling back", error);

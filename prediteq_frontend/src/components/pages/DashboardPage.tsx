@@ -148,12 +148,12 @@ export function DashboardPage() {
     error: machinesError,
     isLoading: isLoadingMachines,
     refetch: refetchMachines,
-  } = useMachines();
+  } = useMachines(currentUser?.machineId);
   const { insights, byMachineId, isLoading: isLoadingInsights } = useFleetPredictiveInsights(machines);
   const [isExplainOpen, setIsExplainOpen] = useState(false);
   const [isMachineContextOpen, setIsMachineContextOpen] = useState(false);
   const isAdmin = currentUser?.role === "admin";
-  const simulator = useSimulatorController({ lang, refetchMachines });
+  const simulator = useSimulatorController({ lang, refetchMachines, enabled: isAdmin });
   const simStatus = simulator.simStatus;
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
@@ -1011,6 +1011,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {isAdmin ? (
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="flex flex-wrap items-start gap-4">
           <div className="flex-1">
@@ -1129,6 +1130,7 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+      ) : null}
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-5 flex items-center gap-4">

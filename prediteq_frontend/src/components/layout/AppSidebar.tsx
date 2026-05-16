@@ -60,7 +60,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { t, theme, lang } = useApp();
   const { logout, currentUser } = useAuth();
-  const { alertes } = useAlertes();
+  const { alertes } = useAlertes(currentUser?.machineId);
   const activeCaseCount = getActiveAlertCaseCount(alertes);
   const isAdmin = userRole === "admin";
   const l = (fr: string, en: string, ar: string) =>

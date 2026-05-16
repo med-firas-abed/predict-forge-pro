@@ -449,7 +449,7 @@ _recent_resets: dict[str, float] = {}
 @router.post("/reset/{machine_code}")
 async def reset_after_maintenance(
     machine_code: str,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_admin),
 ):
     machine_code = _lookup_machine_code_or_400(machine_code)
 

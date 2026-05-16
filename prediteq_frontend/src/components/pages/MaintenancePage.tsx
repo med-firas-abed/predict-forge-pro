@@ -327,6 +327,10 @@ export function MaintenancePage() {
   }, [didAutoSeedSelection, getDefaultDateForMonth, isLoadingTasks, month, selectedDate, year]);
 
   const openCreateModal = (prefill?: Partial<TaskDraft>) => {
+    if (!isAdmin) {
+      toast.error("Lecture seule pour votre machine");
+      return;
+    }
     setDraft({
       ...EMPTY_DRAFT,
       machineId: prefill?.machineId ?? machines[0]?.uuid ?? machines[0]?.id ?? "",
@@ -385,6 +389,10 @@ export function MaintenancePage() {
   };
 
   const createTask = async () => {
+    if (!isAdmin) {
+      toast.error("Lecture seule pour votre machine");
+      return;
+    }
     if (!draft.title.trim() || !draft.machineId) return;
 
     try {
@@ -416,6 +424,10 @@ export function MaintenancePage() {
 
   const saveEdit = async () => {
     if (!selectedEvent) return;
+    if (!isAdmin) {
+      toast.error("Lecture seule pour votre machine");
+      return;
+    }
     const completedNow = selectedEvent.status !== "terminee" && editStatus === "terminee";
     const machineCode = selectedEvent.machineCode;
 
@@ -456,6 +468,10 @@ export function MaintenancePage() {
 
   const deleteSelectedEvent = async () => {
     if (!selectedEvent) return;
+    if (!isAdmin) {
+      toast.error("Lecture seule pour votre machine");
+      return;
+    }
     if (!window.confirm(`Supprimer la tâche "${selectedEvent.title}" ?`)) {
       return;
     }
@@ -488,15 +504,24 @@ export function MaintenancePage() {
             <Download className="h-3.5 w-3.5" />
             Exporter
           </button>
-          <button
-            onClick={() => openCreateModal()}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Ajouter une tache manuelle
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={() => openCreateModal()}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Ajouter une tache manuelle
+            </button>
+          ) : null}
         </div>
       </div>
+
+      {!isAdmin ? (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+          Lecture seule: vous voyez uniquement les informations de votre machine. Les ajouts, editions,
+          suppressions et reconfigurations restent reserves a l'administrateur.
+        </div>
+      ) : null}
 
       <div className="order-1 grid grid-cols-1 gap-3 md:grid-cols-3">
         {statusCards.map((card) => (
@@ -636,13 +661,15 @@ export function MaintenancePage() {
                   : "Aucune tache validee pour cette date."}
               </p>
             </div>
-            <button
-              onClick={() => openCreateModal({ date: selectedDate })}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Ajouter sur ce jour
-            </button>
+            {isAdmin ? (
+              <button
+                onClick={() => openCreateModal({ date: selectedDate })}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Ajouter sur ce jour
+              </button>
+            ) : null}
           </div>
 
           <div className="mb-4 grid grid-cols-3 gap-2">
@@ -721,8 +748,9 @@ export function MaintenancePage() {
           ) : (
             <div className="space-y-3">
               <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-                Cette date est libre pour l'instant. Vous pouvez y ajouter une tache manuelle, ou ouvrir le
-                plan d'action pour valider une recommandation IA avant de l'envoyer ici.
+                {isAdmin
+                  ? "Cette date est libre pour l'instant. Vous pouvez y ajouter une tache manuelle, ou ouvrir le plan d'action pour valider une recommandation IA avant de l'envoyer ici."
+                  : "Cette date est libre pour l'instant. Vous pouvez consulter les prochaines actions validees et ouvrir l'espace IA pour suivre les recommandations de votre machine."}
               </div>
 
               {fallbackEvents.length > 0 && (
@@ -786,8 +814,9 @@ export function MaintenancePage() {
             </div>
 
             <p className="mb-3 text-xs text-muted-foreground">
-              Le plan d'action IA reste l'espace de decision. Une fois validees, les taches issues du
-              pronostic arrivent ici automatiquement ; l'ajout manuel reste aussi possible.
+              {isAdmin
+                ? "Le plan d'action IA reste l'espace de decision. Une fois validees, les taches issues du pronostic arrivent ici automatiquement ; l'ajout manuel reste aussi possible."
+                : "Le plan d'action IA reste l'espace de decision. Une fois validees, les taches issues du pronostic apparaissent ici automatiquement pour votre machine."}
             </p>
 
             <div className="rounded-xl border border-border bg-card p-3">
@@ -821,7 +850,7 @@ export function MaintenancePage() {
         </div>
       </div>
 
-      {showCreate && (
+      {showCreate && isAdmin && (
         <div
           className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setShowCreate(false)}
@@ -924,7 +953,7 @@ export function MaintenancePage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {!editing && (
+                  {isAdmin && !editing && (
                     <button
                       onClick={() => setEditing(true)}
                       aria-label="Modifier la tâche"
@@ -933,7 +962,7 @@ export function MaintenancePage() {
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  {!editing && (
+                  {isAdmin && !editing && (
                     <button
                       onClick={() => void deleteSelectedEvent()}
                       disabled={deleteTache.isPending}
@@ -966,9 +995,16 @@ export function MaintenancePage() {
                   </span>
                 </div>
 
+                {!isAdmin ? (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
+                    Lecture seule: cette fiche reste informative pour votre machine. Les modifications et
+                    validations de maintenance sont reservees a l'administrateur.
+                  </div>
+                ) : null}
+
                 <div className="flex items-center gap-3">
                   <span className="w-24 text-xs text-muted-foreground">Technicien</span>
-                  {editing ? (
+                  {isAdmin && editing ? (
                     <input
                       value={editTech}
                       onChange={(event) => setEditTech(event.target.value)}
@@ -981,7 +1017,7 @@ export function MaintenancePage() {
 
                 <div className="flex items-center gap-3">
                   <span className="w-24 text-xs text-muted-foreground">Date</span>
-                  {editing ? (
+                  {isAdmin && editing ? (
                     <input
                       type="date"
                       value={editDate}
@@ -995,7 +1031,7 @@ export function MaintenancePage() {
 
                 <div className="flex items-center gap-3">
                   <span className="w-24 text-xs text-muted-foreground">Coût</span>
-                  {editing ? (
+                  {isAdmin && editing ? (
                     <input
                       type="number"
                       value={editCost}
@@ -1009,7 +1045,7 @@ export function MaintenancePage() {
                   )}
                 </div>
 
-                {editing && (
+                {isAdmin && editing && (
                   <>
                     <div className="flex items-center gap-3">
                       <span className="w-24 text-xs text-muted-foreground">Statut</span>
@@ -1045,7 +1081,7 @@ export function MaintenancePage() {
                   </div>
                 )}
 
-                {editing && (
+                {isAdmin && editing && (
                   <button
                     onClick={() => void saveEdit()}
                     disabled={updateTache.isPending}
