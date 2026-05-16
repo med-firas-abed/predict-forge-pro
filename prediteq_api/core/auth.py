@@ -54,12 +54,14 @@ def _metadata_account_status(user: object) -> Optional[str]:
     return None
 
 
-async def _get_user_from_token(authorization: str = Header(...)) -> CurrentUser:
+async def _get_user_from_token(
+    authorization: str | None = Header(default=None),
+) -> CurrentUser:
     """
     Validate Supabase JWT and load profile.
     Expects: Authorization: Bearer <token>
     """
-    if not authorization.startswith("Bearer "):
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing Bearer token")
     token = authorization[7:]
 
