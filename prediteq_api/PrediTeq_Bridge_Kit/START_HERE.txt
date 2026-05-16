@@ -10,16 +10,23 @@ What the MacBook does:
 - sends machine ARO-01 to MQTT
 - behaves like the final boss-side sender for v1
 
-What your Windows PC does:
-- runs the PrediTeq backend
-- runs the frontend
-- receives the MQTT data and updates Machine reelle
+What the PrediTeq platform does:
+- in local rehearsal, your Windows PC runs the backend and frontend
+- in production, Render and Vercel receive and display the data
+- in both cases, ARO-01 updates Machine reelle
 
 Files you should care about:
 - run_mac_fake_csv_rehearsal.sh
 - run_mac_real_csv.sh
 - PREFERRED_LABVIEW_CSV_TEMPLATE.csv
 - BRIDGE_CONFIG_EXAMPLE.txt
+
+Recommended production use:
+- copy BRIDGE_CONFIG_EXAMPLE.txt to BRIDGE_CONFIG.txt
+- fill BRIDGE_CONFIG.txt with your private MQTT broker values
+- the shell scripts will read BRIDGE_CONFIG.txt automatically
+- for a low-cost continuous setup, start with PUBLISH_INTERVAL_S=5.0
+- then the MacBook only needs the real CSV command
 
 Typical use on the MacBook:
 
@@ -47,9 +54,22 @@ Typical use on the MacBook:
 
 Using a private broker:
 - by default the shell scripts use broker.emqx.io
-- for the real setup, use your private broker
+- for the real setup, prepare BRIDGE_CONFIG.txt first
 
-Example:
+Example BRIDGE_CONFIG.txt:
+
+   MACHINE_ID=ARO-01
+   PUBLISH_TRANSPORT=mqtt
+   MQTT_HOST=your-private-broker
+   MQTT_PORT=8883
+   MQTT_USER=your-user
+   MQTT_PASSWORD=your-password
+   MQTT_USE_SSL=true
+   MQTT_TOPIC=prediteq/{machine_id}/sensors
+   PUBLISH_INTERVAL_S=5.0
+   SOURCE_LABEL=boss_macbook_csv
+
+Manual override example:
 
    MQTT_HOST=your-private-broker \
    MQTT_PORT=8883 \
@@ -59,17 +79,17 @@ Example:
 
 Real CSV example:
 
-   MQTT_HOST=your-private-broker \
-   MQTT_PORT=8883 \
-   MQTT_USER=your-user \
-   MQTT_PASSWORD=your-password \
    bash ./run_mac_real_csv.sh "/absolute/path/to/real_labview_output.csv" ARO-01
+
+The real CSV script uses PUBLISH_INTERVAL_S from BRIDGE_CONFIG.txt.
+If you do not set it, the default real-data interval is 5 seconds.
 
 Important:
 - use ARO-01 as the machine code
 - in the app, ARO-01 appears as Machine reelle
 - use fake data only with the public test broker
-- keep the real backend and frontend running on your own PC
+- for local rehearsal, keep the backend and frontend running on your own PC
+- for production, point the bridge to your private broker and let Render/Vercel handle the app side
 - do NOT copy prediteq_api/.env to the MacBook
 - do NOT copy Supabase or backend secrets to the MacBook
 

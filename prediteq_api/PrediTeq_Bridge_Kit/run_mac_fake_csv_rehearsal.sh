@@ -2,16 +2,32 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/BRIDGE_CONFIG.txt"
+ENV_FILE="$SCRIPT_DIR/.env.bridge"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+  set +a
+elif [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-MACHINE_ID="${1:-ARO-01}"
-CSV_PATH="${2:-$SCRIPT_DIR/labview_mock_output.csv}"
+MACHINE_ID="${1:-${MACHINE_ID:-ARO-01}}"
+CSV_PATH="${2:-${SOURCE_CSV_PATH:-$SCRIPT_DIR/labview_mock_output.csv}}"
 BROKER_HOST="${MQTT_HOST:-broker.emqx.io}"
 BROKER_PORT="${MQTT_PORT:-8883}"
 BROKER_USER="${MQTT_USER:-}"
 BROKER_PASSWORD="${MQTT_PASSWORD:-}"
 USE_SSL="${MQTT_USE_SSL:-true}"
 SOURCE_LABEL="${SOURCE_LABEL:-macbook_fake_csv_rehearsal}"
+PUBLISH_INTERVAL="${PUBLISH_INTERVAL_S:-1.0}"
 
 cleanup() {
   if [[ -n "${WRITER_PID:-}" ]]; then
@@ -34,7 +50,7 @@ MQTT_USER=$BROKER_USER
 MQTT_PASSWORD=$BROKER_PASSWORD
 MQTT_USE_SSL=$USE_SSL
 MQTT_TOPIC=prediteq/{machine_id}/sensors
-PUBLISH_INTERVAL_S=1.0
+PUBLISH_INTERVAL_S=$PUBLISH_INTERVAL
 SOURCE_MODE=csv-last-row
 SOURCE_CSV_PATH=$CSV_PATH
 SOURCE_LABEL=$SOURCE_LABEL

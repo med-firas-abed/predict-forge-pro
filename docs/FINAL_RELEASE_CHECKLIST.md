@@ -4,8 +4,8 @@ This checklist is the safest way to freeze a jury-ready and demo-ready version o
 
 ## Current verified baseline
 
-- Manual local QA verified on `2026-05-09`
-- Manual deployed smoke verified on `2026-05-09`
+- Manual frontend production build verified on `2026-05-15`
+- Manual deployed smoke verified on `2026-05-15`
 - Frontend live URL: `https://prediteq-saas.vercel.app`
 - Backend live URL: `https://prediteq-saas.onrender.com`
 
@@ -62,6 +62,7 @@ Expected outcome:
 - public machine list returns data
 - frontend login page loads
 - unauthenticated routing remains correct
+- backend CORS accepts `https://prediteq-saas.vercel.app`
 
 ## Demo rehearsal
 

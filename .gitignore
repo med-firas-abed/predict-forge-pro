@@ -60,3 +60,5 @@ references/
 # Local transfer/runtime artifacts
 prediteq_api/TRANSFER_TO_PC2/scripts/.env.bridge
 prediteq_api/TRANSFER_TO_PC2/scripts/__pycache__/
+prediteq_api/PrediTeq_Bridge_Kit/BRIDGE_CONFIG.txt
+prediteq_api/scripts/BRIDGE_CONFIG.txt

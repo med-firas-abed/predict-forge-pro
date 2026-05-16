@@ -9,10 +9,15 @@ This file records the current known-good deployment wiring so local, GitHub, Ver
 
 ## Last Verified State
 
-- Local QA manually re-verified on `2026-05-09`
-- Deployed smoke manually re-verified on `2026-05-09`
+- Local frontend production build re-verified on `2026-05-15`
+- Deployed smoke manually re-verified on `2026-05-15`
 - Verification command: `cd prediteq_frontend && npm run smoke:deployed`
-- Result on `2026-05-09`: passed against the Vercel and Render live URLs above
+- Result on `2026-05-15`: passed against the Vercel and Render live URLs above
+- Additional live checks on `2026-05-15`:
+  - `GET https://prediteq-saas.onrender.com/health` returned `{"status":"ok","version":"1.0.0"}`
+  - `GET https://prediteq-saas.onrender.com/health/public-metrics` returned the expected verified pipeline JSON
+  - `GET https://prediteq-saas.vercel.app/login` returned `200`
+  - backend CORS accepted `Origin: https://prediteq-saas.vercel.app`
 
 ## Frontend Environment Variables
 
@@ -27,6 +32,7 @@ Notes:
 - The frontend build bakes `VITE_API_URL` into the bundle.
 - `VITE_SUPABASE_ANON_KEY` is a public client key, not the service-role key.
 - Local frontend dev should still use `VITE_API_URL=http://localhost:8000`.
+- If `VITE_API_URL` is missing in Vercel, the app will render but API calls will fail.
 
 ## Backend Environment Variables
 
@@ -62,6 +68,7 @@ What they cover:
 - The deployed smoke script lives in [prediteq_frontend/scripts/smoke-deployed.mjs](./prediteq_frontend/scripts/smoke-deployed.mjs).
 - If GitHub Actions browser tests run without a local `.env`, the workflow now injects safe placeholder Supabase values so the app can boot in CI.
 - The current manual freeze package is documented in [docs/FINAL_RELEASE_CHECKLIST.md](./docs/FINAL_RELEASE_CHECKLIST.md) and [docs/HANDOFF_RUNBOOK.md](./docs/HANDOFF_RUNBOOK.md).
+- The backend currently returns `405` to `HEAD /health`; Render health checks use `GET /health`, which is the path validated above.
 
 ## Rollback Plan
 

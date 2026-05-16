@@ -7,16 +7,32 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/BRIDGE_CONFIG.txt"
+ENV_FILE="$SCRIPT_DIR/.env.bridge"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+  set +a
+elif [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 CSV_PATH="$1"
-MACHINE_ID="${2:-ARO-01}"
+MACHINE_ID="${2:-${MACHINE_ID:-ARO-01}}"
 BROKER_HOST="${MQTT_HOST:-broker.emqx.io}"
 BROKER_PORT="${MQTT_PORT:-8883}"
 BROKER_USER="${MQTT_USER:-}"
 BROKER_PASSWORD="${MQTT_PASSWORD:-}"
 USE_SSL="${MQTT_USE_SSL:-true}"
 SOURCE_LABEL="${SOURCE_LABEL:-macbook_real_csv}"
+PUBLISH_INTERVAL="${PUBLISH_INTERVAL_S:-5.0}"
 
 echo "Using Python: $PYTHON_BIN"
 "$PYTHON_BIN" -m pip install -r "$SCRIPT_DIR/requirements_bridge.txt"
@@ -33,7 +49,7 @@ MQTT_USER=$BROKER_USER
 MQTT_PASSWORD=$BROKER_PASSWORD
 MQTT_USE_SSL=$USE_SSL
 MQTT_TOPIC=prediteq/{machine_id}/sensors
-PUBLISH_INTERVAL_S=1.0
+PUBLISH_INTERVAL_S=$PUBLISH_INTERVAL
 SOURCE_MODE=csv-last-row
 SOURCE_CSV_PATH=$CSV_PATH
 SOURCE_LABEL=$SOURCE_LABEL
