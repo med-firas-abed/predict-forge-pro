@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MQTT_USER: str = ""
     MQTT_PASSWORD: str = ""
     MQTT_USE_SSL: bool = True
+    MQTT_CLIENT_ID: str = ""
     MQTT_ALLOW_PUBLIC_TEST_BROKER: bool = False
     LIVE_INGEST_TOKEN: str = ""
 

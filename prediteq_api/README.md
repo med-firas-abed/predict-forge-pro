@@ -74,6 +74,22 @@ Then confirm the main runtime imports still load:
 python -c "import main, routers.simulator, routers.report, routers.planner"
 ```
 
+Run the backend regression tests with the package virtualenv:
+
+```bash
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Run the live authenticated smoke against a running backend:
+
+```bash
+.venv\Scripts\python.exe scripts\live_auth_smoke.py --backend-url http://127.0.0.1:8000
+```
+
+The live smoke creates disposable admin and operator accounts with the service
+role from `.env`, verifies real login and protected routes, then deletes the
+temporary users again.
+
 ## Delivery notes
 
 - This backend is a runtime layer, not a training workspace.

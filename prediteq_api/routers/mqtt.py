@@ -5,6 +5,9 @@ Uses gmqtt async client with auto-reconnection.
 
 import json
 import logging
+import os
+import re
+import socket
 import ssl
 
 from gmqtt import Client as MQTTClient
@@ -19,6 +22,31 @@ TOPIC = "prediteq/+/sensors"
 
 _mqtt: MQTTClient | None = None
 _connected = False
+_disconnecting = False
+
+
+def _sanitize_client_id_fragment(value: str) -> str:
+    collapsed = re.sub(r"[^a-zA-Z0-9_-]+", "-", value.strip()).strip("-_")
+    return (collapsed or "host").lower()[:24]
+
+
+def _resolve_client_id() -> str:
+    configured = settings.MQTT_CLIENT_ID.strip()
+    if configured:
+        return configured
+
+    host = _sanitize_client_id_fragment(socket.gethostname())
+    return f"prediteq-api-{host}-{os.getpid()}"[:64]
+
+
+def _disconnect_details(packet, exc) -> str:
+    details: list[str] = []
+    reason_code = getattr(packet, "reason_code", None)
+    if reason_code is not None:
+        details.append(f"reason={reason_code}")
+    if exc is not None:
+        details.append(f"error={exc}")
+    return ", ".join(details) if details else "no details"
 
 
 def _load_machine_from_db(machine_code: str) -> dict | None:
@@ -98,15 +126,21 @@ async def _on_message(client, topic, payload, qos, properties):
 def _on_disconnect(client, packet, exc=None):
     global _connected
     _connected = False
-    logger.warning("MQTT disconnected (will auto-reconnect)")
+    details = _disconnect_details(packet, exc)
+    if _disconnecting:
+        logger.info("MQTT disconnected cleanly (%s)", details)
+        return
+    logger.warning("MQTT disconnected (will auto-reconnect): %s", details)
 
 
 async def connect():
     """Connect to the MQTT broker. Non-fatal if it fails."""
-    global _mqtt
+    global _mqtt, _disconnecting
     try:
+        client_id = _resolve_client_id()
+        _disconnecting = False
         _mqtt = MQTTClient(
-            "prediteq-api-server",
+            client_id,
             reconnect_retries=10,
             reconnect_delay=30,
         )
@@ -131,9 +165,10 @@ async def connect():
             **kwargs,
         )
         logger.info(
-            "MQTT connecting to %s:%d ...",
+            "MQTT connecting to %s:%d with client id %s ...",
             settings.MQTT_BROKER,
             settings.MQTT_PORT,
+            client_id,
         )
     except Exception as exc:
         logger.error("MQTT connection failed: %s - running without MQTT", exc)
@@ -141,10 +176,12 @@ async def connect():
 
 
 async def disconnect():
-    global _mqtt, _connected
-    if _mqtt and _connected:
+    global _mqtt, _connected, _disconnecting
+    client = _mqtt
+    _disconnecting = True
+    if client:
         try:
-            await _mqtt.disconnect()
+            await client.disconnect()
         except Exception:
             pass
     _mqtt = None
