@@ -90,6 +90,17 @@ The live smoke creates disposable admin and operator accounts with the service
 role from `.env`, verifies real login and protected routes, then deletes the
 temporary users again.
 
+If live logs mention a missing `public.audit_logs` table, run this repair in
+Supabase SQL Editor:
+
+```bash
+prediteq_api/sql/013_repair_audit_logs.sql
+```
+
+That repair is idempotent: it recreates `audit_logs`, re-adds the indexes,
+restores the admin/service-role policies, and reapplies the required Data API
+grants for audit access.
+
 ## Delivery notes
 
 - This backend is a runtime layer, not a training workspace.
