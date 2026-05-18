@@ -1,8 +1,13 @@
+import os
 import unittest
 from unittest.mock import patch
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+
+# Keep tests self-contained when CI runs without a local prediteq_api/.env file.
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-role-key")
 
 from core import audit
 from core.auth import _get_user_from_token
