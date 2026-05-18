@@ -1,0 +1,3493 @@
+--- PAGE 1 ---
+Code PFE : ..........
+Ministère de l’Enseignement Supérieur et de la Recherche
+Scientiﬁque
+Université de Manouba
+Institut Supérieur des Arts Multimédia de la Manouba
+Mémoire de ﬁn d’études
+Préparé en vue de l’obtention du diplôme de licence en sciences de l’informatique
+Parcours Micro-Informatique et Machines Embarquées (MIME)
+PrediTeq : Plateforme SaaS de maintenance
+prédictive industrielle
+basée sur l’IoT et le Machine Learning
+Réalisé par
+Mohamed Firas Abed
+Encadré par
+M. Kais Brik, ISAMM
+M. Saber Abeda, AROTEQ
+Année universitaire : 2025 – 2026
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 2 ---
+Dédicace
+Dédicace
+Je dédie ce travail à ma famille, pour son soutien constant, sa patience et sa conﬁance
+tout au long de ce projet.
+Je le dédie également à toutes les personnes qui m’ont encouragé à viser un travail à
+la fois utile, rigoureux et compréhensible, au-delà de la seule performance technique.
+i
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 3 ---
+Remerciements
+Remerciements
+Je tiens à remercier vivement mon encadrant académique, M. Kais Brik. Je le re-
+mercie pour son accompagnement, ses remarques structurantes et sa disponibilité tout au
+long de ce projet.
+J’adresse également mes remerciements à M. Saber Abeda ainsi qu’à l’équipe
+d’AROTEQ pour leur conﬁance, leur retour terrain et l’opportunité de construire un
+sujet relié à un besoin industriel concret.
+Je remercie aussi Dr. Lilia Sfaxi pour ses conseils méthodologiques, en particulier
+sur la progression à adopter lorsque les données réelles sont encore rares : partir d’une
+génération réaliste, valider le preprocessing et l’analyse du signal, structurer l’extraction de
+caractéristiques, puis avancer par étapes vers la détection d’anomalies et la modélisation
+du RUL.
+Je remercie enﬁn toutes les personnes qui ont contribué, de près ou de loin, à la
+maturation de PrediTeq : par des échanges techniques, des retours de démonstration, des
+conseils de présentation ou des remarques de fond sur le réalisme du produit et de ses
+scénarios.
+ii
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 4 ---
+Résumé
+Résumé
+Ce projet de ﬁn d’études présente PrediTeq, une plateforme de maintenance prédictive
+industrielle fondée sur l’Internet des objets industriel et le Machine Learning, conçue
+pour être réutilisable sur diﬀérentes machines. Le moteur d’un stockeur vertical rotatif
+constitue le premier cas de référence. Il ancre la simulation physique, le produit actuel et
+la démonstration, sans ﬁxer la limite ﬁnale de la plateforme. La solution relie trois blocs
+cohérents : une chaîne d’apprentissage hors ligne, un service d’inférence temps réel et une
+interface web de supervision.
+PrediTeq est conçu comme une plateforme logicielle en mode service, ou Software
+as a Service (SaaS). Cette orientation commerciale reste mesurée dans le mémoire. Elle
+signiﬁe que le pipeline scientiﬁque doit alimenter un produit partageable, gouvernable et
+compréhensible par l’utilisateur ﬁnal. L’architecture va dans ce sens : le service temps
+réel s’appuie sur un contrat de données générique, et la chaîne d’apprentissage peut être
+réentraînée pour une autre famille de machines.
+Le noyau scientiﬁque du projet repose sur une simulation physiquement guidée du mo-
+teur de référence. Cette simulation génère 200 trajectoires cohérentes avec les constantes
+nominales de la machine, les cas de charge et les cycles d’usage retenus. Le pipeline extrait
+ensuite des caractéristiques, détecte les dérives, construit un indice de santé et estime une
+durée de vie résiduelle. Le point méthodologique essentiel est que la cible du pronostic
+est dérivée d’un signal observable de santé et non d’une vérité cachée inaccessible en
+exploitation.
+Les résultats exportés sont solides. Le modèle de durée de vie résiduelle atteint un
+coeﬃcient de détermination de 0,980 sur le jeu de test, avec une erreur absolue moyenne
+de 1,65 jour. La validation croisée par groupes (GroupKFold) donne un coeﬃcient moyen
+de 0,982. L’ensemble hybride de détection d’anomalies atteint une mesure F1 de 0,964. La
+validation externe sur NASA CMAPSS, ou Commercial Modular Aero-Propulsion System
+Simulation, conserve un coeﬃcient de détermination de 0,886. Ces résultats ne prouvent
+pas encore la plateforme sur toute machine industrielle. Ils montrent en revanche que la
+méthode a déjà une portée qui dépasse le seul cas interne du stockeur.
+Sur le plan applicatif, le service backend charge les artefacts au démarrage, crée un
+moteur d’inférence par machine, reçoit les mesures, calcule l’indice de santé, historise les
+valeurs et pilote les alertes. L’interface web expose ensuite un tableau de bord, un diag-
+iii
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 5 ---
+Résumé
+nostic avancé, un calendrier de maintenance, un centre d’alertes, un module de rapports,
+un simulateur à trois scénarios et une page d’acquisition expérimentale. Une première
+chaîne produit de bout en bout est désormais déployée en version v1 : une source locale
+industrielle, ou un poste local, écrit un ﬁchier CSV (Comma-Separated Values), un pont
+PrediTeq le normalise, un broker Message Queuing Telemetry Transport (MQTT) privé
+sécurisé en Transport Layer Security (TLS) sur le port 8883 l’achemine, le backend cloud
+le consomme et le frontend public sur domaine propre l’aﬃche. Cette étape ne vaut pas
+encore validation terrain sur données réelles de ARO-01. Le prochain jalon consiste à re-
+cevoir du partenaire industriel le CSV réel attendu, avec son chemin exact, son en-tête
+conﬁrmé, une ligne d’exemple et la conﬁrmation que le ﬁchier se met bien à jour lorsque
+la machine fonctionne.
+Le projet atteint ainsi un niveau de maturité plus précis. Le pipeline est validé scien-
+tiﬁquement. Le produit est démontré fonctionnellement et une chaîne produit v1 existe
+déjà de bout en bout. Le simulateur reste un outil de démonstration guidée. La valida-
+tion terrain sur données réelles reste l’étape suivante avant une généralisation à d’autres
+machines AROTEQ puis à d’autres contextes industriels.
+Mots-clés : maintenance prédictive, plateforme SaaS, indice de santé, durée de vie
+résiduelle, apprentissage automatique, Internet des objets industriel
+iv
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 6 ---
+Abstract
+Abstract
+This end-of-study project presents PrediTeq, an industrial predictive-maintenance
+platform built on IoT and Machine Learning and designed to be reusable across diﬀerent
+machines. The drive motor of a vertical rotary storage carousel is used as the ﬁrst reference
+case. It grounds the physical simulation, the current product, and the demonstration, wi-
+thout deﬁning the ﬁnal limit of the platform. The solution combines three coherent layers :
+an oﬄine learning pipeline, a runtime inference service, and a web supervision interface.
+PrediTeq is designed as a software-as-a-service platform. This commercial positioning
+is kept in a measured academic tone. It means that the scientiﬁc pipeline must feed a
+shareable, governable, and readable product. The architecture already reﬂects that goal
+through a generic runtime data contract and a retrainable pipeline for other machine
+families.
+The scientiﬁc core relies on a physically guided simulation of the reference motor. This
+simulation generates 200 trajectories that remain consistent with the machine’s nominal
+constants, load cases, and usage cycles. The pipeline then extracts features, detects drifts,
+computes a health index, and estimates remaining useful life. The key methodological
+point is that the prognostic target is derived from an observable health signal rather than
+from a hidden label unavailable in real operation.
+Exported results are strong. The remaining-useful-life model reaches an R2 of 0.980
+on the holdout set, with a mean absolute error of 1.65 day. Group-based cross-validation
+yields a mean R2 of 0.982. The hybrid anomaly detector reaches an F1 score of 0.964.
+External validation on NASA CMAPSS FD001 still gives an R2 of 0.886. These results do
+not prove the platform on every machine type, but they do show that the method already
+transfers beyond the internal stocker case.
+On the application side, the backend loads the artifacts at startup, creates one infe-
+rence engine per machine, receives telemetry, computes the health index, stores histories,
+and triggers alerts. The web interface then exposes a dashboard, advanced diagnostics,
+maintenance planning, alerts, reports, a three-scenario simulator, and an experimental
+acquisition page. A ﬁrst end-to-end product chain is now deployed in a v1 form : a local
+industrial source, or a local workstation, writes a CSV ﬁle, a PrediTeq bridge normalizes
+it, a private MQTT broker secured with TLS on port 8883 carries it, the cloud backend
+consumes it, and the public frontend on its own domain displays it. This does not yet
+v
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 7 ---
+Abstract
+count as ﬁeld validation on real ARO-01 telemetry. The next milestone is to receive the
+real industrial CSV contract : exact ﬁle path, conﬁrmed header, sample row, and conﬁr-
+mation that the ﬁle is updated while the machine is running.
+PrediTeq therefore reaches a more precise maturity level. The pipeline is scientiﬁcally
+validated. The product is functionally demonstrated, and a v1 product chain already exists
+end to end. The simulator remains a guided demonstration layer. Real-ﬁeld validation on
+actual telemetry remains the next step before rollout to other AROTEQ machines and,
+later, broader industrial use.
+vi
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 8 ---
+Table des ﬁgures
+Table des ﬁgures
+1.1
+AROTEQ : identité visuelle et environnement d’atelier. . . . . . . . . . . .
+5
+1.2
+Organigramme fonctionnel simpliﬁé d’AROTEQ et ancrage du stage.
+. . .
+6
+1.3
+Positionnement du stage dans le ﬂux projet. . . . . . . . . . . . . . . . . .
+6
+1.4
+Technologies industrielles.
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+7
+1.5
+Système de test industriel. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+1.6
+Familles de maintenance . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9
+1.7
+Vue d’ensemble de PrediTeq . . . . . . . . . . . . . . . . . . . . . . . . . .
+12
+1.8
+Cycle de travail retenu . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+13
+1.9
+Planning simpliﬁé du travail . . . . . . . . . . . . . . . . . . . . . . . . . .
+13
+2.1
+Lecture produit du pronostic . . . . . . . . . . . . . . . . . . . . . . . . . .
+17
+2.2
+Architecture MQTT
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+19
+2.3
+Capteurs visés et capteurs de banc
+. . . . . . . . . . . . . . . . . . . . . .
+20
+3.1
+Cas d’utilisation principaux
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+24
+3.2
+Cycle de surveillance temps réel . . . . . . . . . . . . . . . . . . . . . . . .
+31
+4.1
+Architecture générale de PrediTeq . . . . . . . . . . . . . . . . . . . . . . .
+33
+4.2
+Diagramme de classes simpliﬁé du noyau runtime
+. . . . . . . . . . . . . .
+34
+4.3
+Séquence simpliﬁée de la supervision temps réel . . . . . . . . . . . . . . .
+36
+5.1
+Base physique de la simulation . . . . . . . . . . . . . . . . . . . . . . . . .
+40
+5.2
+Proﬁls et charges . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+41
+5.3
+Chronologie des anomalies . . . . . . . . . . . . . . . . . . . . . . . . . . .
+44
+5.4
+Courbes d’indice de santé
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+45
+5.5
+RUL réelle et RUL prédite . . . . . . . . . . . . . . . . . . . . . . . . . . .
+48
+5.6
+Résumé d’explicabilité
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+49
+5.7
+Sensibilité des réglages . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+50
+5.8
+Validation NASA CMAPSS
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+50
+5.9
+Calibration des intervalles
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+51
+5.10 Tableau de bord PrediTeq . . . . . . . . . . . . . . . . . . . . . . . . . . .
+54
+5.11 Structure du simulateur
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+55
+vii
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 9 ---
+Table des ﬁgures
+Table des ﬁgures
+5.12 Banc d’essai expérimental
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+56
+5.13 Scénario Experiment . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+57
+5.14 Validation fonctionnelle de la chaîne produit v1
+. . . . . . . . . . . . . . .
+57
+5.15 Architecture de déploiement . . . . . . . . . . . . . . . . . . . . . . . . . .
+59
+5.16 Chaîne v1 d’intégration réelle
+. . . . . . . . . . . . . . . . . . . . . . . . .
+60
+viii
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 10 ---
+Liste des tableaux
+Liste des tableaux
+1.1
+Fiche synthétique d’AROTEQ . . . . . . . . . . . . . . . . . . . . . . . . .
+5
+1.2
+Axes de contexte utiles au projet
+. . . . . . . . . . . . . . . . . . . . . . .
+8
+1.3
+Lecture comparative de l’existant . . . . . . . . . . . . . . . . . . . . . . .
+11
+3.1
+Acteurs du système . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+23
+3.2
+Besoins fonctionnels retenus . . . . . . . . . . . . . . . . . . . . . . . . . .
+25
+3.3
+Besoins non fonctionnels . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+26
+3.4
+Contraintes majeures du projet
+. . . . . . . . . . . . . . . . . . . . . . . .
+27
+3.5
+User stories prioritaires . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+29
+4.1
+Structures principales de persistance
+. . . . . . . . . . . . . . . . . . . . .
+35
+4.2
+Organisation fonctionnelle de l’interface . . . . . . . . . . . . . . . . . . . .
+37
+5.1
+Environnement de réalisation
+. . . . . . . . . . . . . . . . . . . . . . . . .
+39
+5.2
+Constantes de référence . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+40
+5.3
+Paramètres de simulation . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+41
+5.4
+Étapes de la chaîne d’apprentissage . . . . . . . . . . . . . . . . . . . . . .
+42
+5.5
+Variables principales extraites par le pipeline . . . . . . . . . . . . . . . . .
+42
+5.6
+Paramétrage du pronostic
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+46
+5.7
+Résultats principaux du pronostic . . . . . . . . . . . . . . . . . . . . . . .
+47
+5.8
+Parcours utilisateur principal
+. . . . . . . . . . . . . . . . . . . . . . . . .
+52
+5.9
+Pages principales de la plateforme . . . . . . . . . . . . . . . . . . . . . . .
+53
+5.10 Scénarios machine de démonstration
+. . . . . . . . . . . . . . . . . . . . .
+55
+5.11 Maturité actuelle des briques PrediTeq . . . . . . . . . . . . . . . . . . . .
+58
+5.12 Synthèse des apports personnels . . . . . . . . . . . . . . . . . . . . . . . .
+63
+6.1
+Cartographie fonctionnelle du dépôt . . . . . . . . . . . . . . . . . . . . . .
+67
+6.2
+Détails utiles des scénarios machine . . . . . . . . . . . . . . . . . . . . . .
+69
+6.3
+Trace simple entre besoins, pages produit et preuves de validation . . . . .
+72
+ix
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 11 ---
+Liste des sigles et abréviations
+Liste des sigles et abréviations
+ACS712 Capteur à eﬀet Hall de mesure de courant
+API Interface de programmation applicative
+CMAPSS Commercial Modular Aero-Propulsion System Simulation, benchmark NASA de
+pronostic
+ECE Erreur de calibration attendue
+ESP32 Microcontrôleur 32 bits de la famille Espressif
+GMAO Gestion de maintenance assistée par ordinateur
+HI Indice de santé
+IEC Commission électrotechnique internationale
+IF Isolation Forest
+IoT Internet des objets
+ISAMM Institut Supérieur des Arts Multimédia de la Manouba
+ISO Organisation internationale de normalisation
+JSON JavaScript Object Notation, format d’échange de données
+LabVIEW Environnement logiciel d’instrumentation virtuelle
+MAE Erreur absolue moyenne
+MEMS Systèmes micro-électromécaniques
+ML Apprentissage automatique
+MQTT Message Queuing Telemetry Transport, protocole de télémétrie légère
+MPU6050 Module MEMS inertiel accéléromètre + gyroscope
+NASA Agence spatiale américaine
+PFE Projet de ﬁn d’études
+PHM Pronostic et gestion de santé
+PLC Automate programmable industriel
+RF Forêt aléatoire
+RMSE Racine de l’erreur quadratique moyenne
+RMS Valeur eﬃcace
+x
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 12 ---
+Liste des sigles et abréviations
+RUL Durée de vie résiduelle
+SaaS Logiciel en tant que service
+SHAP Explications additives de Shapley
+USB Universal Serial Bus
+xi
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 13 ---
+Table des matières
+Table des matières
+Dédicace
+i
+Remerciements
+ii
+Résumé
+iii
+Abstract
+v
+Liste des ﬁgures
+vii
+Liste des tableaux
+ix
+Liste des sigles et abréviations
+x
+Introduction générale
+1
+Apports personnels et périmètre réalisé . . . . . . . . . . . . . . . . . . . . . . .
+2
+Organisation du mémoire
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2
+1
+Cadre général du projet
+4
+1.1
+Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+4
+1.2
+Présentation de l’organisme d’accueil . . . . . . . . . . . . . . . . . . . . .
+5
+1.3
+Présentation du projet et problématique
+. . . . . . . . . . . . . . . . . . .
+9
+1.4
+Étude de l’existant . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+10
+1.5
+Critique de l’existant . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+11
+1.6
+Solution proposée . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+12
+1.7
+Méthodologie de travail . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+13
+1.8
+Conclusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+14
+2
+État de l’art
+15
+2.1
+Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+15
+2.2
+Maintenance industrielle et prédiction . . . . . . . . . . . . . . . . . . . . .
+15
+2.3
+Concepts clés de pronostic . . . . . . . . . . . . . . . . . . . . . . . . . . .
+16
+2.4
+Méthodes de Machine Learning retenues
+. . . . . . . . . . . . . . . . . . .
+17
+xii
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 14 ---
+Table des matières
+Table des matières
+2.5
+IoT, instrumentation et communication . . . . . . . . . . . . . . . . . . . .
+18
+2.6
+Environnement logiciel . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+20
+2.7
+Conclusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+21
+3
+Analyse des besoins
+22
+3.1
+Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+22
+3.2
+Identiﬁcation des acteurs . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+23
+3.3
+Besoins fonctionnels . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+25
+3.4
+Besoins non fonctionnels . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+26
+3.5
+Contraintes du projet . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+27
+3.6
+User stories prioritaires . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+28
+3.7
+Cycle de surveillance visé . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+30
+3.8
+Conclusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+32
+4
+Conception
+33
+4.1
+Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+33
+4.2
+Architecture générale de la solution . . . . . . . . . . . . . . . . . . . . . .
+33
+4.3
+Noyau runtime
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+34
+4.4
+Conception de la persistance . . . . . . . . . . . . . . . . . . . . . . . . . .
+35
+4.5
+Séquence de supervision temps réel . . . . . . . . . . . . . . . . . . . . . .
+36
+4.6
+Conception de l’interface et des droits . . . . . . . . . . . . . . . . . . . . .
+37
+4.7
+Conclusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+37
+5
+Réalisation
+38
+5.1
+Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+38
+5.2
+Environnement matériel et logiciel . . . . . . . . . . . . . . . . . . . . . . .
+38
+5.3
+Réalisation du noyau scientiﬁque
+. . . . . . . . . . . . . . . . . . . . . . .
+40
+5.4
+Réalisation de la plateforme de supervision . . . . . . . . . . . . . . . . . .
+51
+5.5
+Validation fonctionnelle, discussion critique et ouverture industrielle . . . .
+56
+5.6
+Conclusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+60
+Conclusion générale et perspectives
+61
+Apports personnels majeurs . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+63
+Bibliographie et webographie
+65
+6
+Annexes pratiques
+67
+6.1
+Annexe A : cartographie résumée du dépôt . . . . . . . . . . . . . . . . . .
+67
+6.2
+Annexe B : commandes utiles . . . . . . . . . . . . . . . . . . . . . . . . .
+68
+6.3
+Annexe C : trois machines du simulateur . . . . . . . . . . . . . . . . . . .
+69
+6.4
+Annexe D : protocole de démonstration . . . . . . . . . . . . . . . . . . . .
+69
+xiii
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 15 ---
+Table des matières
+Table des matières
+6.5
+Annexe E : chaîne v1 d’intégration réelle . . . . . . . . . . . . . . . . . . .
+70
+6.6
+Annexe F : traçabilité user stories, pages et preuves de test . . . . . . . . .
+72
+xiv
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 16 ---
+Introduction générale
+Introduction générale
+La maintenance prédictive cherche à répondre à une question simple : intervenir avant
+la panne sans remplacer trop tôt un équipement encore exploitable. Dans un atelier réel,
+cette question devient vite exigeante. Les mesures sont bruitées. Les historiques de dé-
+faillance sont rares. Les résultats n’ont de valeur que s’ils restent compréhensibles pour
+l’exploitant.
+C’est dans ce contexte qu’a été développé PrediTeq. Le projet est pensé comme une
+plateforme générale de maintenance prédictive industrielle fondée sur l’Internet des objets
+industriel et le Machine Learning. Le moteur d’un stockeur vertical rotatif en constitue
+le premier cas de référence. Ce choix ancre la simulation physique, le produit actuel et la
+démonstration. Il ne ﬁxe pas pour autant la limite ﬁnale de la plateforme. L’architecture
+relie trois blocs complémentaires : un apprentissage hors ligne, un service de supervision
+temps réel et une interface web de pilotage.
+Le projet est aussi pensé comme une plateforme logicielle en mode service, ou Software
+as a Service (SaaS). Le pipeline ne vaut donc pas seulement par ses métriques. Il doit
+aussi alimenter un produit capable de surveiller une machine, d’aﬃcher un diagnostic,
+de publier un horizon de maintenance et de garder une trace exploitable des décisions.
+Cette ambition générale est visible dans la conception même de PrediTeq : le service
+runtime s’appuie sur un contrat de données générique, et la chaîne d’apprentissage peut
+être réadaptée à une autre famille de machines.
+La progression retenue reste volontairement concrète. Le pipeline commence par si-
+muler des trajectoires cohérentes avec les constantes du moteur et les cas de charge de la
+machine. Il extrait ensuite des caractéristiques, détecte les dérives, calcule un indice de
+santé et estime une durée de vie résiduelle. Le service applicatif reprend enﬁn cette logique
+sur ﬂux live pour produire un état machine, des alertes et une lecture de maintenance.
+Les niveaux de maturité du projet sont distincts. L’apprentissage hors ligne ne se
+confond pas avec l’usage temps réel. Le simulateur applicatif ne remplace pas un essai
+terrain durable. La page d’acquisition expérimentale ne remplace pas non plus une in-
+tégration industrielle complète. Cette séparation permet de distinguer ce qui est validé
+scientiﬁquement, ce qui est démontré fonctionnellement et ce qui reste à industrialiser.
+L’ouverture vers la donnée réelle n’est plus seulement préparée. Une première chaîne
+produit de bout en bout est désormais déployée : une source industrielle, ou un poste
+1
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 17 ---
+Introduction générale
+local, écrit un ﬁchier CSV (Comma-Separated Values), un pont PrediTeq le normalise,
+un broker Message Queuing Telemetry Transport (MQTT) privé sécurisé en Transport
+Layer Security (TLS) sur le port 8883 l’achemine, le backend cloud le consomme et le
+frontend public sur domaine propre l’aﬃche. Cette architecture v1 fonctionne déjà, mais
+le raccordement terrain de ARO-01 attend encore la fourniture du CSV réel par l’industriel :
+chemin exact, en-tête conﬁrmé, ligne d’exemple et preuve de mise à jour en marche.
+Apports personnels et périmètre réalisé
+Dans sa phase ﬁnale, le projet a été consolidé autour de plusieurs apports structurants :
+— une simulation portée à 200 trajectoires, avec une lecture physiquement guidée de
+la dégradation ;
+— une formulation du pronostic fondée sur un signal de santé observable, aﬁn d’éviter
+toute fuite d’information vers une vérité cachée ;
+— une séparation plus nette entre apprentissage hors ligne, exécution temps réel et
+comportement produit ;
+— une démonstration lisible articulée autour de trois scénarios machine et d’une page
+d’acquisition expérimentale ;
+— la mise en oeuvre d’une première chaîne produit v1 entre un CSV local, un pont de
+normalisation, un broker MQTT privé, le backend cloud et le frontend public.
+Le prochain jalon n’est donc plus d’inventer cette chaîne, mais de la qualiﬁer sur
+données réelles de ARO-01.
+Organisation du mémoire
+Le mémoire suit l’organisation suivante :
+— le chapitre 1 présente le cadre général du projet, l’organisme d’accueil, la problé-
+matique, l’existant, la critique de l’existant, la solution proposée et la méthodologie
+de travail ;
+— le chapitre 2 expose l’état de l’art : maintenance prédictive, indice de santé, durée
+de vie résiduelle, méthodes retenues et environnement IoT ;
+— le chapitre 3 formalise l’analyse des besoins, les acteurs, les fonctions attendues et
+les contraintes du système ;
+— le chapitre 4 présente la conception de la solution, de l’architecture et des ﬂux de
+supervision ;
+— le chapitre 5 rassemble la réalisation du pipeline, du service applicatif, de la pla-
+teforme web, des validations et de l’ouverture industrielle.
+2
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 18 ---
+Introduction générale
+Le document se termine par une conclusion générale, une bibliographie et des annexes
+pratiques destinées à faciliter la reprise du projet.
+3
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 19 ---
+Chapitre 1
+Chapitre 1
+Cadre général du projet
+1.1
+Introduction
+Ce chapitre présente le cadre industriel et organisationnel du projet PrediTeq. Il situe
+d’abord l’organisme d’accueil et la place du stage. Il expose ensuite le besoin traité,
+l’existant et les limites des approches déjà disponibles. Il précise enﬁn la solution proposée
+et la méthodologie de travail retenue.
+4
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 20 ---
+Chapitre 1
+1.2 Présentation de l’organisme d’accueil
+1.2
+Présentation de l’organisme d’accueil
+1.2.1
+Présentation de la société AROTEQ
+AROTEQ est une entreprise tunisienne implantée à Ben Arous. Elle intervient dans
+l’ingénierie industrielle, l’automatisation, l’intégration électrique et logicielle, ainsi que
+la réalisation de machines spéciales. Son activité couvre la conception, la fabrication,
+l’intégration et la mise en service de solutions industrielles sur mesure.
+Ce contexte est directement lié au projet PrediTeq. Les équipements suivis par ARO-
+TEQ combinent instrumentation, automatisme, acquisition de données et contraintes
+d’exploitation. La disponibilité des machines y a donc une valeur immédiate pour la
+production.
+Table 1.1 – Fiche synthétique d’AROTEQ
+Champ
+Contenu
+Nom de l’entreprise
+AROTEQ
+Localisation
+Ben Arous, Tunisie
+Spécialité
+Ingénierie industrielle, machines spéciales, systèmes de test,
+automatisation et intégration robotique
+Compétences clés
+Conception mécanique et électrique, automatisme, systèmes
+embarqués, vision industrielle, supervision et intégration de
+solutions intelligentes
+Partenaires mentionnés
+dans la documentation
+Keyence, Bosch Rexroth, Festo, Equiptest
+Cadre du stage
+Projet de maintenance prédictive basé sur l’IoT, l’acquisition
+embarquée et le Machine Learning
+Figure 1.1 – AROTEQ : identité visuelle et environnement d’atelier.
+5
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 21 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 22 ---
+Chapitre 1
+1.2 Presentation de l'organisme d'accueil
+6 bis
+Organigramme fonctionnel detaille d'AROTEQ
+L'organigramme ci-dessous complete la presentation de l'organisme d'accueil. Il montre la
+position de la direction generale, les fonctions support et les poles techniques qui
+interviennent dans la conception, l'integration et la mise en service des machines speciales.
+Cette lecture facilite l'ancrage du stage dans le flux reel d'AROTEQ.
+Illustration complementaire - Organigramme detaille d'AROTEQ fourni par l'entreprise.
+Cette organisation confirme le caractere transversal de PrediTeq : le projet se situe entre le
+bureau d'etude, le logiciel, l'automatisme, l'integration electrique, l'integration mecanique et
+la direction projet. Il ne s'agit donc pas seulement d'un developpement informatique, mais
+d'une solution logicielle rattachee a un contexte industriel complet.
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 23 ---
+Chapitre 1
+1.2 Présentation de l’organisme d’accueil
+1.2.3
+Domaines d’activité et intérêt pour le projet
+Les documents internes d’AROTEQ montrent un portefeuille cohérent avec PrediTeq :
+— conception et fabrication de machines spéciales ;
+— réalisation de postes automatisés ;
+— développement de systèmes de test et de contrôle ;
+— intégration de solutions de robotique et d’automatisation ;
+— mise en oeuvre de solutions combinant instrumentation, supervision, IoT et sys-
+tèmes embarqués.
+Dans un tel environnement, une panne n’est pas seulement un incident technique. Elle
+aﬀecte la cadence, la qualité et la disponibilité. La maintenance prédictive y prend donc
+un sens concret.
+Figure 1.4 – Technologies industrielles.
+7
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 24 ---
+Chapitre 1
+1.2 Présentation de l’organisme d’accueil
+Figure 1.5 – Système de test industriel.
+Table 1.2 – Axes de contexte utiles au projet
+Axe
+Lecture utile pour le projet
+Automatisation
+industrielle
+Nécessité de systèmes ﬁables, répétables et simples à supervi-
+ser.
+Intégration électrique
+et logicielle
+Le projet doit relier signaux, logique applicative, communica-
+tion et visualisation.
+Disponibilité machine
+Une panne détectée trop tard entraîne arrêt, coût et désorga-
+nisation.
+Systèmes de test et
+de contrôle
+Le contexte valorise naturellement le suivi d’état, la mesure et
+l’interprétation des signaux.
+Ouverture vers le
+terrain
+La future chaîne LabVIEW ou automate programmable indus-
+triel impose de penser l’interopérabilité des ﬂux.
+8
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 25 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 26 ---
+Chapitre 1
+1.3 Presentation du projet et problematique
+9 bis
+Premier cas d'etude : ascenseur rotatif AROTEQ
+Le premier cas d'etude retenu pour PrediTeq est un stockeur vertical rotatif, appele ici
+ascenseur rotatif. Les photographies suivantes situent la machine reelle qui sert de
+reference au raisonnement : structure aluminium, carter de protection, motorisation,
+guidage vertical et zones d'acces aux plateaux. Elles donnent un support visuel au choix du
+moteur et a l'ouverture vers ARO-01.
+Illustration complementaire - Vues generales du premier cas d'etude : ascenseur rotatif utilise comme
+reference industrielle.
+Ces vues generales permettent de relier la problematique de maintenance predictive a une machine
+concrete : un equipement mobile, motorise et soumis a des cycles repetes. Le suivi de courant, de vibration
+et de temperature y devient pertinent pour decrire l'effort, la degradation et l'horizon de maintenance.
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 27 ---
+Chapitre 1
+1.3 Presentation du projet et problematique
+9 ter
+Details techniques visibles sur l'ascenseur rotatif
+Les vues de detail montrent les elements qui justifient le choix d'un cas de maintenance
+predictive : entrainement motorise, chaine de guidage, niveaux numerotes, plateaux mobiles
+et coffret d'automatisme. Ces composants rendent l'etat de la machine observable par des
+signaux physiques et par l'evolution de ses cycles.
+Illustration complementaire - Mecanisme interne, niveaux du stockeur, motorisation et partie automatisme
+du cas d'etude.
+Dans le memoire, ces photographies peuvent etre lues comme une preuve visuelle du perimetre industriel :
+la machine existe, son architecture est mecanique et electrique, et PrediTeq vise a transformer ses signaux
+d'exploitation en indicateurs de diagnostic et de pronostic.
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 28 ---
+Chapitre 1
+1.4 Étude de l’existant
+Cette problématique implique quatre besoins :
+1. produire une base d’apprentissage cohérente malgré le manque initial de données
+terrain longues ;
+2. transformer les signaux en indicateurs lisibles pour un non-spécialiste ;
+3. intégrer ces indicateurs dans une plateforme logicielle complète ;
+4. préparer une ouverture progressive vers un ﬂux industriel réel.
+1.3.3
+Objectifs du projet
+L’objectif général est de proposer une plateforme logicielle en mode service, ou Software
+as a Service (SaaS), capable de surveiller l’état d’une machine, d’estimer un horizon de
+maintenance et de présenter cette information dans une interface exploitable. Le moteur
+du stockeur vertical rotatif sert ici de première base de référence, et non de limite déﬁnitive.
+Cet objectif se décline en objectifs plus précis :
+— construire un pipeline de simulation, d’apprentissage et d’export cohérent pour une
+première famille de machines ;
+— charger ces artefacts dans un backend de supervision temps réel ;
+— proposer une interface web de diagnostic, de planiﬁcation et de suivi ;
+— oﬀrir une démonstration lisible avec plusieurs scénarios machine ;
+— préparer un raccordement futur à une source industrielle réelle ;
+— préparer l’extension vers d’autres machines AROTEQ, puis vers des usages indus-
+triels plus généraux.
+1.4
+Étude de l’existant
+1.4.1
+Familles de solutions existantes
+Les solutions de maintenance prédictive se répartissent souvent en trois familles :
+— les oﬀres industrielles propriétaires, robustes mais souvent coûteuses et peu ou-
+vertes ;
+— les suites de gestion de maintenance et de supervision, utiles pour l’organisation
+mais plus limitées en pronostic natif ;
+— les démonstrateurs académiques, solides sur le plan méthodologique mais peu reliés
+à un produit logiciel complet.
+Cette lecture de l’existant est importante pour situer PrediTeq. Le projet ne doit ni
+être comparé à une simple maquette de laboratoire, ni être présenté comme une suite
+industrielle déjà ﬁnalisée.
+10
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 29 ---
+Chapitre 1
+1.5 Critique de l’existant
+1.4.2
+Lecture comparative
+Table 1.3 – Lecture comparative de l’existant
+Critère
+Suite
+industrielle
+fermée
+Prototype
+ML pur
+PrediTeq
+Simulation
+physiquement guidée
+Variable
+Parfois
+Oui
+Pipeline
+d’apprentissage
+traçable
+Variable
+Oui
+Oui
+Backend métier
+Souvent oui
+Rare
+Oui
+Frontend multi-pages
+Oui
+Rare
+Oui
+Démonstration guidée
+Faible
+Variable
+Oui
+Ouverture vers un
+ﬂux industriel réel
+Variable
+Rare
+Oui
+Adaptation à une
+PME industrielle
+Faible
+Moyenne
+Forte
+1.5
+Critique de l’existant
+L’étude de l’existant fait apparaître deux limites récurrentes.
+La première limite concerne les solutions industrielles fermées. Elles oﬀrent des fonc-
+tions avancées, mais leur coût, leur faible ouverture et leur dépendance à un fournisseur
+les rendent moins adaptées à un projet de PFE centré sur la compréhension complète de
+la chaîne.
+La seconde limite concerne les prototypes purement académiques. Ils valident souvent
+une méthode de traitement ou de prédiction, mais ils laissent de côté le backend, la
+persistance, la gouvernance des accès et la démonstration produit.
+Le besoin traité par PrediTeq se situe précisément entre ces deux extrêmes. Il faut une
+solution techniquement sérieuse, mais aussi lisible, démontrable et réutilisable.
+11
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 30 ---
+Chapitre 1
+1.6 Solution proposée
+1.6
+Solution proposée
+1.6.1
+Vue d’ensemble de PrediTeq
+PrediTeq répond à ce besoin par une architecture en trois blocs :
+— un apprentissage hors ligne pour la simulation, l’entraînement, la validation et l’ex-
+port des artefacts ;
+— un backend de supervision temps réel pour charger les modèles, recevoir les mesures
+et produire l’état machine ;
+— une interface web pour la visualisation, le diagnostic, la planiﬁcation et l’adminis-
+tration.
+Cette architecture est pensée pour dépasser le seul cas de référence. Le service temps
+réel repose sur un contrat de données commun à la supervision. La chaîne d’apprentissage,
+elle, peut être réentraînée pour une autre famille de machines à partir de ses propres
+signaux et de ses propres hypothèses physiques. Le stockeur vertical rotatif sert donc de
+point de départ crédible, pas de frontière déﬁnitive.
+Acquisition
+Apprentissage hors ligne
+Backend temps réel
+Interface web
+signaux et télémétrie
+simulation, santé et pronostic
+diagnostic, alertes
+pilotage et décision
+Figure 1.7 – Vue d’ensemble de PrediTeq
+1.6.2
+Apports attendus
+La solution proposée apporte trois niveaux de valeur.
+Elle apporte d’abord une valeur scientiﬁque. Elle formalise une chaîne complète de
+simulation, d’indice de santé et de durée de vie résiduelle.
+Elle apporte ensuite une valeur logicielle. Elle transforme cette chaîne en service de
+supervision, avec persistance, comptes, alertes et interface.
+Elle apporte enﬁn une valeur de démonstration et d’ouverture. Le projet dispose d’un
+simulateur guidé, d’une page d’acquisition expérimentale et d’une trajectoire claire vers
+une source industrielle réelle.
+Son positionnement doit donc être formulé avec mesure. PrediTeq n’est pas encore
+prouvé sur toute machine industrielle. En revanche, il est conçu pour généraliser sa logique
+de supervision. Le benchmark NASA CMAPSS montre déjà que la méthode conserve de
+la valeur sur un autre type de machine. La prochaine étape préparée consiste à déployer
+cette logique sur d’autres machines AROTEQ, puis à élargir le périmètre d’usage.
+12
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 31 ---
+Chapitre 1
+1.7 Méthodologie de travail
+1.7
+Méthodologie de travail
+1.7.1
+Choix d’une conduite agile
+Le projet combine plusieurs types de travail : simulation, backend, frontend, démons-
+tration et intégration progressive. Une conduite strictement séquentielle aurait rendu les
+ajustements diﬃciles. Une organisation inspirée de Scrum était donc plus adaptée [11].
+Cette approche permet de livrer par incréments, de vériﬁer chaque bloc et d’ajuster le
+produit à mesure que les besoins deviennent plus concrets.
+Backlog
+Planiﬁcation
+Réalisation
+Revue
+Ajustement
+Figure 1.8 – Cycle de travail retenu
+1.7.2
+Découpage du travail
+Le développement s’est structuré autour de grands incréments :
+— construction du pipeline et du socle d’indice de santé ;
+— mise en place du backend temps réel et du simulateur ;
+— réalisation du frontend produit ;
+— ajout de la page d’acquisition expérimentale ;
+— préparation de la future intégration industrielle.
+Incrément
+S1
+S2
+S3
+S4
+S5
+Simulation et pipeline
+ML
+X
+X
+Backend temps réel et
+simulateur
+X
+X
+Frontend produit
+X
+X
+Page Experiment et
+démonstration
+X
+X
+Préparation de
+l’intégration réelle
+X
+Figure 1.9 – Planning simpliﬁé du travail
+13
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 32 ---
+Chapitre 1
+1.8 Conclusion
+1.8
+Conclusion
+Ce chapitre a présenté le cadre industriel du projet, le besoin traité et les limites des
+solutions existantes. Il a montré que PrediTeq répond à une situation intermédiaire entre
+prototype académique et produit industriel. Il a aussi précisé la solution proposée et la
+méthodologie de travail retenue. Le chapitre suivant expose maintenant l’état de l’art
+nécessaire pour comprendre les notions de maintenance prédictive, d’indice de santé, de
+durée de vie résiduelle et d’acquisition.
+14
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 33 ---
+Chapitre 2
+Chapitre 2
+État de l’art
+2.1
+Introduction
+PrediTeq se situe au croisement de plusieurs domaines : maintenance industrielle,
+analyse de signaux, apprentissage automatique, IoT et plateformes de supervision. Ce
+chapitre présente les notions utiles à la lecture du projet. Il précise d’abord les bases de la
+maintenance prédictive. Il introduit ensuite l’indice de santé et la durée de vie résiduelle.
+Il expose enﬁn les méthodes retenues et l’environnement technologique de la solution.
+2.2
+Maintenance industrielle et prédiction
+2.2.1
+Maintenance corrective, préventive et prédictive
+La maintenance corrective intervient après la panne. Elle est simple à comprendre,
+mais elle expose l’atelier à des arrêts subis.
+La maintenance préventive intervient selon une périodicité ﬁxe. Elle réduit le risque
+de panne brutale, mais elle peut conduire à intervenir trop tôt.
+La maintenance prédictive cherche une lecture plus ﬁne. Elle s’appuie sur les signaux
+de la machine et sur leur évolution pour choisir le moment d’intervention le plus pertinent.
+2.2.2
+Pourquoi cette approche est pertinente ici
+Dans le cas d’un stockeur vertical rotatif, l’enjeu n’est pas seulement de savoir si la
+machine tourne encore. Il faut aussi savoir dans quel état de fatigue elle se trouve et
+combien de temps il reste avant une zone critique.
+Cette logique conduit naturellement à deux indicateurs complémentaires :
+— un indicateur d’état courant ;
+— un indicateur d’horizon de maintenance.
+15
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 34 ---
+Chapitre 2
+2.3 Concepts clés de pronostic
+2.3
+Concepts clés de pronostic
+2.3.1
+Indice de santé
+L’indice de santé, ou Health Index (HI), est une variable synthétique qui résume l’état
+d’une machine. Il ne s’agit pas d’une mesure physique directe. C’est un indicateur recons-
+truit à partir des signaux observables.
+Son intérêt est double. Il condense plusieurs symptômes en une lecture simple. Il sert
+aussi de base à la déﬁnition des zones d’état et à la construction du pronostic.
+Dans PrediTeq, les zones du HI suivent une lecture compatible avec l’esprit de l’ISO
+10816-3 :2009 [4] :
+— HI supérieur ou égal à 0,8 : situation saine ;
+— HI entre 0,6 et 0,8 : situation correcte à surveiller ;
+— HI entre 0,3 et 0,6 : situation dégradée ;
+— HI inférieur à 0,3 : situation critique.
+2.3.2
+Durée de vie résiduelle
+La durée de vie résiduelle, ou Remaining Useful Life (RUL), représente le temps estimé
+avant l’entrée dans une zone critique. C’est l’indicateur qui transforme la lecture d’état
+en horizon d’action.
+Dans PrediTeq, ce pronostic repose sur un point méthodologique important. La cible
+d’apprentissage ﬁnale est construite à partir d’un signal de santé lissé et observable, puis
+d’un franchissement persistant du seuil critique. Le modèle n’apprend donc pas directe-
+ment sur une variable cachée inaccessible en exploitation.
+Cette construction rapproche l’apprentissage de ce qui sera réellement disponible plus
+tard dans le service temps réel.
+2.3.3
+Publication progressive du pronostic
+Le produit n’aﬃche pas toujours immédiatement un nombre de jours. Trois situations
+doivent être distinguées :
+— une machine encore très saine reste dans une lecture de référence stable ;
+— une machine récemment démarrée passe par une phase d’initialisation, le temps de
+constituer un historique suﬃsant ;
+— une machine disposant d’un historique exploitable peut recevoir un pronostic publié
+avec son intervalle de conﬁance.
+Cette logique protège l’utilisateur contre des chiﬀres prématurés. Elle privilégie un
+résultat plus tardif, mais plus crédible.
+16
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 35 ---
+Chapitre 2
+2.4 Méthodes de Machine Learning retenues
+Référence
+stable
+Phase d’initiali-
+sation
+Pronostic publié
+machine très saine
+pas de RUL live
+historique encore insuﬃsant
+dérive observée
+historique suﬃsant
+Repère de
+comparaison
+RUL calibré et intervalle
+de conﬁance
+Figure 2.1 – Lecture produit du pronostic
+2.4
+Méthodes de Machine Learning retenues
+2.4.1
+Apprentissage supervisé et non supervisé
+PrediTeq combine deux logiques complémentaires :
+— une logique non supervisée pour repérer les comportements anormaux ;
+— une logique supervisée pour estimer la durée de vie résiduelle.
+La première répond à la question : « ce comportement ressemble-t-il encore à une zone
+saine ? »
+La seconde répond à la question : « combien de temps reste-t-il avant un état cri-
+tique ? »
+2.4.2
+Détection d’anomalies et score hybride
+La détection d’anomalies s’appuie sur l’Isolation Forest [2]. Cette méthode est bien
+adaptée lorsque l’on décrit mieux le comportement sain que l’ensemble des pannes pos-
+sibles.
+Dans PrediTeq, cette lecture n’est pas laissée seule. Elle est combinée à un indicateur
+vibratoire direct pour former un score hybride. Cette combinaison permet de conserver
+une lecture physique simple tout en proﬁtant d’une analyse plus riche des signaux.
+17
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 36 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+2.4.3
+Régression pour la durée de vie résiduelle
+Le pronostic de durée de vie résiduelle repose sur une Random Forest [1]. Ce choix est
+cohérent avec les besoins du projet :
+— gérer des relations non linéaires ;
+— accepter des variables de nature diﬀérente ;
+— conserver un bon compromis entre performance, robustesse et lisibilité.
+La méthode retenue reste ainsi compatible avec un mémoire d’ingénierie où l’explica-
+bilité et la stabilité comptent autant que le score ﬁnal.
+2.4.4
+Pourquoi ne pas commencer par des modèles plus lourds
+Des approches plus complexes, comme les réseaux récurrents ou les autoencodeurs,
+auraient été possibles. Elles n’étaient pas le meilleur point de départ ici.
+Le projet avait d’abord besoin d’une chaîne lisible, défendable et progressive. Il fallait
+d’abord stabiliser la simulation, le prétraitement, les caractéristiques, la détection d’ano-
+malies et l’indice de santé. Ce choix méthodologique est plus adapté au niveau réel des
+données disponibles.
+2.4.5
+Validation par groupes et validation externe
+L’évaluation ne doit pas mélanger des fragments d’une même trajectoire entre appren-
+tissage et test. C’est pourquoi PrediTeq s’appuie sur une validation croisée par groupes
+(GroupKFold) [8]. Cette précaution évite une fuite d’information.
+Le projet ajoute aussi une validation externe sur NASA CMAPSS, ou Commercial
+Modular Aero-Propulsion System Simulation [6]. Cette étape ne cherche pas à assimiler
+un moteur de stockeur à un moteur aéronautique. Elle vériﬁe plus simplement que la
+logique du pipeline conserve une valeur méthodologique au-delà du seul jeu de simulation
+interne.
+2.5
+IoT, instrumentation et communication
+18
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 37 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 38 ---
+Chapitre 2
+2.6 Environnement logiciel
+2.5.3
+Capteurs industriels et capteurs de banc
+Le projet distingue les capteurs visés en exploitation et les capteurs retenus pour la
+démonstration de banc. Pour la page Experiment, le choix s’est porté sur deux capteurs
+simples :
+— un capteur de courant ACS712 5A ;
+— un capteur inertiel MPU6050 pour la vibration.
+Leur rôle n’est pas de valider toute l’instrumentation industrielle ﬁnale. Leur rôle est
+de prouver qu’un ﬂux live simple peut être reçu, aﬃché et interprété dans l’application.
+Capteurs visés en ex-
+ploitation
+– vibration industrielle
+– puissance ou courant
+moteur
+– température
+– humidité ou contexte
+ambiant
+– identiﬁcation machine et
+horodatage
+Capteurs du banc ex-
+périmental
+– courant ACS712 5A
+– vibration MPU6050
+– lecture USB série
+– démonstration courte et
+visuelle
+– test fonctionnel d’acqui-
+sition
+Figure 2.3 – Capteurs visés et capteurs de banc
+2.6
+Environnement logiciel
+2.6.1
+Interface web
+L’interface est réalisée avec React, TypeScript et Vite. Ce choix convient à une appli-
+cation de supervision riche en états, en composants réutilisables et en pages spécialisées.
+2.6.2
+Backend de supervision
+Le backend repose sur FastAPI. Cette solution est adaptée au chargement des artefacts
+d’apprentissage, à la publication de routes métier et à la gestion d’une supervision temps
+réel lisible.
+20
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 39 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+Capteurs industriels installés sur le cas d’étude
+Les photographies suivantes complètent la section consacrée à l’instrumentation. Elles
+montrent l’implantation réelle des principaux éléments utilisés pour relier le cas d’étude
+à une logique de maintenance prédictive : mesure vibratoire, mesure thermique, suivi de
+puissance et automate programmable.
+Illustration complémentaire - Vues annotées du banc industriel : capteur de vibrations VTV122,
+transmetteur/sonde de température HMT370EX, compteur de puissance 7KM2200 et API Sie-
+mens.
+Ces vues permettent de relier les variables visées par PrediTeq à des composants physiques
+identifiables sur la machine. Le suivi combiné de la vibration, de la température et de la
+puissance fournit une base observable pour construire l’indice de santé et préparer le
+pronostic de maintenance.
+20 bis
+
+
+--- PAGE 40 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+Vues complémentaires de l’architecture d’acquisition
+Les vues non annotées ci-dessous conservent le contexte visuel complet du montage. Elles
+montrent la position du moteur, du réducteur, de la structure aluminium, du coffret
+d’automatisme et des câblages associés. Elles servent de support à la compréhension du
+passage entre machine réelle, signaux mesurés et plateforme de supervision.
+Illustration complémentaire - Vues non annotées du mécanisme, de la motorisation et du coffret
+d’automatisme du cas d’étude.
+L’ajout de ces photographies renforce la continuité entre l’étude théorique des capteurs
+visés et la réalité du banc industriel. Il montre que la chaîne PrediTeq s’inscrit dans un
+environnement mécanique et électrique concret, avec des points de mesure directement
+exploitables pour l’acquisition future.
+20 ter
+
+
+--- PAGE 41 ---
+Chapitre 2
+2.7 Conclusion
+2.6.3
+Persistance et gouvernance
+La persistance s’appuie sur Supabase. Cette base centralise les machines, les histo-
+riques, les comptes, les seuils et les journaux utiles au suivi du produit.
+2.6.4
+Cohérence de la pile
+La pile React, FastAPI, Supabase et MQTT suit une logique simple :
+— React pour l’expérience de supervision ;
+— FastAPI pour le service de diagnostic ;
+— Supabase pour la persistance et la gouvernance ;
+— MQTT pour le transport léger du live.
+L’ensemble forme une base cohérente pour une plateforme de maintenance prédictive.
+2.7
+Conclusion
+Ce chapitre a présenté les notions nécessaires à la lecture du projet : maintenance
+prédictive, indice de santé, durée de vie résiduelle, détection d’anomalies, régression, ac-
+quisition et pile logicielle. Il a montré que les choix de PrediTeq reposent sur une chaîne
+cohérente plutôt que sur une accumulation d’outils. Le chapitre suivant formalise main-
+tenant les besoins, les acteurs et les contraintes du système.
+21
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 42 ---
+Chapitre 3
+Chapitre 3
+Analyse des besoins
+3.1
+Introduction
+L’analyse des besoins part des usages réellement couverts par PrediTeq. La plateforme
+ne se limite pas à un calcul prédictif. Elle doit recevoir des mesures, construire un diag-
+nostic, publier un pronostic lorsque l’historique le permet, conserver les traces utiles et
+présenter l’ensemble dans une interface compréhensible.
+Cette analyse précise d’abord les acteurs. Elle identiﬁe ensuite les besoins fonctionnels
+et non fonctionnels. Elle reformule ensuite les usages sous forme de user stories. Elle
+rappelle enﬁn les contraintes qui encadrent le projet et le cycle de surveillance visé.
+22
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 43 ---
+Chapitre 3
+3.2 Identiﬁcation des acteurs
+3.2
+Identiﬁcation des acteurs
+Table 3.1 – Acteurs du système
+Acteur
+Justiﬁcation
+Rôle principal
+Administrateur
+Gestion des comptes, des
+seuils, des machines et de
+l’espace de démonstration
+Piloter la plateforme, paramétrer les
+machines, approuver les comptes,
+suivre les coûts et administrer les
+seuils terrain
+Utilisateur aﬀecté
+à une machine
+Consultation des pages
+métier et accès limité à la
+machine concernée
+Lire l’état de sa machine, suivre les
+alertes, consulter les tâches et ex-
+ploiter les synthèses disponibles
+Source de mesures
+Ingestion en temps réel
+par voie industrielle,
+réseau ou acquisition
+expérimentale
+Envoyer les mesures brutes du mo-
+teur vers la plateforme
+Service de
+notiﬁcation
+Gestion des courriels et
+des traces d’envoi
+Transmettre les alertes aux destina-
+taires conﬁgurés
+Service de
+synthèse
+Génération de rapports à
+la demande
+Produire une synthèse rédigée à par-
+tir de l’état courant de la machine
+Deux familles d’acteurs apparaissent. La première agit directement sur la plateforme
+et prend les décisions de maintenance. La seconde alimente, relaie ou restitue l’information
+sans se substituer au décideur humain.
+23
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 44 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 45 ---
+Chapitre 3
+3.3 Besoins fonctionnels
+3.3
+Besoins fonctionnels
+Les besoins fonctionnels sont regroupés dans le tableau 3.2. Ils décrivent la chaîne
+attendue, depuis la mesure brute jusqu’à l’action de maintenance.
+Table 3.2 – Besoins fonctionnels retenus
+Code
+Fonction attendue
+Eﬀet attendu
+BF1
+Acquérir des mesures en
+temps réel
+Recevoir les valeurs de vibration, de puissance,
+de température et d’humidité depuis une source
+réseau ou expérimentale
+BF2
+Interpréter l’état
+courant
+Transformer les mesures brutes en indice de santé,
+zone d’état et indicateurs de diagnostic
+BF3
+Publier un pronostic
+exploitable
+Estimer une durée de vie résiduelle avec intervalle
+de conﬁance lorsque l’historique requis est dispo-
+nible
+BF4
+Conserver la traçabilité
+Enregistrer les historiques de santé, de pronostic,
+d’alertes, de coûts et d’actions d’administration
+BF5
+Alerter les utilisateurs
+Déclencher des alertes locales et des courriels selon
+l’état de la machine et les seuils terrain
+BF6
+Piloter la maintenance
+Gérer des tâches, un calendrier, des priorités et
+des coûts de maintenance
+BF7
+Visualiser la ﬂotte
+Oﬀrir un tableau de bord, une vue multi-machine,
+une page diagnostic et des indicateurs de synthèse
+BF8
+Produire des synthèses
+Générer un rapport d’aide à la décision et une res-
+titution lisible pour le technicien ou le responsable
+de maintenance
+BF9
+Administrer la solution
+Gérer les comptes, l’aﬀectation des machines, les
+seuils et les espaces de démonstration
+Ces besoins montrent que la plateforme ne s’arrête pas au calcul d’un score. Elle doit
+convertir une mesure en information utile, puis cette information en décision, en trace
+historique et en restitution visuelle.
+25
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 46 ---
+Chapitre 3
+3.4 Besoins non fonctionnels
+3.4
+Besoins non fonctionnels
+Table 3.3 – Besoins non fonctionnels
+Code
+Exigence
+Justiﬁcation
+BNF1
+Séparation claire des
+couches
+L’apprentissage hors ligne, le backend temps réel
+et l’interface web doivent rester distincts pour
+faciliter la maintenance et l’évolution
+BNF2
+Sécurité d’accès
+L’application doit imposer l’authentiﬁcation, les
+rôles, le contrôle d’accès par machine et la pro-
+tection des routes sensibles
+BNF3
+Traçabilité
+Chaque décision importante doit laisser une
+trace : historiques, alertes, journaux de courriels
+et journaux d’audit
+BNF4
+Conﬁgurabilité terrain
+Les seuils opérationnels doivent pouvoir évoluer
+sans réentraîner la chaîne hors ligne
+BNF5
+Fonctionnement
+multi-machine
+Le service temps réel doit gérer une instance lo-
+gique par machine et conserver un historique dis-
+tinct
+BNF6
+Continuité de service
+Le backend doit redémarrer en rechargeant ses
+artefacts et ses machines sans perdre la logique
+de supervision
+BNF7
+Lisibilité pour la
+démonstration
+Le système doit fournir un simulateur et une
+page expérimentale aﬁn de montrer la chaîne
+complète même sans campagne terrain longue
+26
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 47 ---
+Chapitre 3
+3.5 Contraintes du projet
+3.5
+Contraintes du projet
+Le projet est encadré par plusieurs contraintes de conception.
+Table 3.4 – Contraintes majeures du projet
+Contrainte
+Conséquence sur la solution
+Historique terrain encore
+limité
+L’apprentissage repose d’abord sur une simulation de dé-
+gradation physiquement guidée
+Apprentissage séparé du
+runtime
+Le service temps réel recharge des artefacts exportés ; il
+n’entraîne pas lui-même les modèles
+Seuils opérationnels
+variables
+Les seuils utilisés en exploitation peuvent diﬀérer des seuils
+hors ligne car ils sont ajustables dans la base
+Mode démonstration
+nécessaire
+Le simulateur applique des scénarios publics stables pour
+garantir une lecture claire en soutenance
+Ces contraintes ﬁxent le niveau réel de maturité de PrediTeq. Le projet constitue une
+base solide pour la supervision, le diagnostic et la démonstration. Son apprentissage reste
+encore nourri principalement par une simulation physiquement guidée.
+27
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 48 ---
+Chapitre 3
+3.6 User stories prioritaires
+3.6
+User stories prioritaires
+Les besoins précédents peuvent aussi être formulés sous forme de user stories. Cette
+écriture relie l’usage attendu à la valeur rendue. Elle aide donc à vériﬁer que la plateforme
+ne se limite pas à calculer un indicateur, mais soutient bien une décision de maintenance.
+28
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 49 ---
+Chapitre 3
+3.6 User stories prioritaires
+Table 3.5 – User stories prioritaires
+Acteur
+User story
+Valeur attendue
+Priorité
+Administrateur
+En tant qu’administrateur, je veux
+enregistrer une machine, ses seuils
+et ses utilisateurs aﬁn d’initialiser
+une supervision exploitable.
+Mise en service
+cohérente de la
+plateforme
+Haute
+Utilisateur
+aﬀecté
+En tant qu’utilisateur aﬀecté à
+une machine, je veux consulter le
+tableau de bord et le diagnostic
+avancé aﬁn de savoir si une action
+est nécessaire.
+Lecture rapide du
+risque et de son
+contexte
+Haute
+Utilisateur
+aﬀecté
+En tant qu’utilisateur aﬀecté à une
+machine, je veux recevoir ou consul-
+ter une alerte lorsque la machine
+entre en zone dégradée ou critique
+aﬁn de préparer l’intervention.
+Réaction plus
+rapide à une dérive
+Haute
+Administrateur
+En tant qu’administrateur, je veux
+planiﬁer une tâche de maintenance
+et suivre son coût aﬁn d’organiser
+l’intervention et son impact.
+Passage du
+diagnostic à la
+décision
+Moyenne
+Source de
+mesures
+En tant que source de mesures, je
+veux transmettre une mesure ho-
+rodatée au service temps réel aﬁn
+d’alimenter le calcul de l’état ma-
+chine.
+Alimentation
+continue de la
+supervision
+Haute
+Administrateur
+En tant qu’administrateur, je veux
+générer une synthèse de l’état ma-
+chine aﬁn de partager rapidement
+une recommandation exploitable.
+Communication
+plus claire avec les
+décideurs
+Moyenne
+29
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 50 ---
+Chapitre 3
+3.7 Cycle de surveillance visé
+3.7
+Cycle de surveillance visé
+Le besoin principal de la plateforme peut être résumé par le cycle de la ﬁgure 3.2. La
+logique est simple : recevoir une mesure, calculer l’état, publier un pronostic si le contexte
+le permet, historiser, puis alerter si nécessaire.
+30
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 51 ---
+Chapitre 3
+3.7 Cycle de surveillance visé
+Réception d’une
+mesure temps réel
+Validation de la machine,
+du jeton et de l’horodatage
+Construction des ca-
+ractéristiques à par-
+tir des signaux bruts
+Calcul de l’indice de santé
+et détermination de la zone
+Historique suﬃsant ?
+Référence stable ou
+phase d’initialisation
+Calcul du pronos-
+tic et de l’inter-
+valle de conﬁance
+Mise à jour de la machine
+et insertion des historiques
+Seuil de surveillance
+ou d’urgence atteint ?
+Surveillance
+normale
+Création d’alerte
+et notiﬁcation
+non
+oui
+non
+oui
+Figure 3.2 – Cycle de surveillance temps réel
+31
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 52 ---
+Chapitre 3
+3.8 Conclusion
+3.8
+Conclusion
+Cette analyse montre que PrediTeq doit assurer une chaîne complète, depuis la me-
+sure brute jusqu’à la décision de maintenance. Les acteurs sont identiﬁés, les fonctions
+principales sont déﬁnies, les user stories prioritaires traduisent les usages attendus et les
+contraintes du projet sont explicites. La valeur du système repose autant sur la supervi-
+sion et la traçabilité que sur le calcul prédictif lui-même. Le chapitre suivant présente la
+conception de l’architecture et des ﬂux qui rendent ces besoins réalisables.
+32
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 53 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 54 ---
+Chapitre 4
+4.3 Noyau runtime
+— l’interface web lit ensuite ces informations pour présenter l’état de la ﬂotte, les
+alertes, les tâches et les synthèses.
+Cette organisation respecte la logique du projet. Le backend n’entraîne pas les modèles.
+Il exploite des artefacts déjà exportés par la chaîne hors ligne.
+4.3
+Noyau runtime
+Tampon de caractéristiques
+– fenêtres glissantes
+– détection de montée
+– calcul des variables utiles
+Moteur de pronostic
+– normalisation
+– calcul du HI
+– zones d’état
+– préparation du RUL
+Gestionnaire d’exécution
+– un moteur par machine
+– cache des machines
+– historiques capteurs
+– résultats courants
+– surcharges du simulateur
+Ordonnanceur
+– cycle périodique
+– mise à jour base
+– alertes
+– envoi courriels
+1..*
+1..*
+lit l’état courant
+Figure 4.2 – Diagramme de classes simpliﬁé du noyau runtime
+Le noyau applicatif suit une logique simple. Le tampon transforme les mesures brutes
+en variables exploitables. Le moteur calcule ensuite l’indice de santé, la zone et le contexte
+de pronostic. Le gestionnaire coordonne une instance logique par machine. Enﬁn, l’ordon-
+nanceur persiste l’état du système et pilote les alertes.
+34
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 55 ---
+Chapitre 4
+4.4 Conception de la persistance
+4.4
+Conception de la persistance
+Table 4.1 – Structures principales de persistance
+Structure
+Rôle
+Information principale
+Vue courante des
+machines
+Image instantanée de
+la ﬂotte
+Code machine, statut, HI courant, RUL
+courant, localisation et dernière mise à
+jour
+Proﬁls utilisateurs
+Gouvernance des
+accès
+Utilisateur, rôle, statut d’approbation et
+machine aﬀectée
+Historique de
+santé
+Mémoire de l’état
+machine
+Valeur HI, score d’anomalie et statut
+daté
+Historique du
+pronostic
+Mémoire du RUL
+RUL en jours, bornes basse et haute, ho-
+rodatage
+Centre d’alertes
+Priorisation
+opérationnelle
+Type, sévérité, acquittement et date de
+création
+Tâches de
+maintenance
+Pilotage des
+interventions
+Titre, priorité, technicien, date planiﬁée
+et statut
+Suivi budgétaire
+Lecture économique
+Main-d’oeuvre, pièces et total mensuel
+Historique des
+synthèses
+Restitution métier
+Période, langue, titre et contenu généré
+Paramétrage
+terrain
+Réglage des seuils
+Frontières du HI et du RUL, destina-
+taires de notiﬁcation
+Journaux système
+Traçabilité
+Historique d’envoi et traces des actions
+sensibles
+La persistance sépare la vue instantanée de la mémoire longue du système. Cette
+répartition convient à une application de supervision. Elle permet de consulter rapidement
+l’état courant tout en conservant l’historique nécessaire au diagnostic, aux alertes et à
+l’audit.
+35
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 56 ---
+Chapitre 4
+4.5 Séquence de supervision temps réel
+4.5
+Séquence de supervision temps réel
+Source
+API
+Gestionnaire
+Moteur
+Ordonnanceur
+Supabase
+Frontend
+mesures horodatées
+validation et normalisation
+signaux bruts
+HI, zone, RUL
+ou attente
+lecture périodique
+machines, historiques, alertes
+tableau de bord et diagnostic
+synthèses et diagnostic avancé
+Figure 4.3 – Séquence simpliﬁée de la supervision temps réel
+La mesure ne va jamais directement vers l’interface. Elle est d’abord validée, transfor-
+mée et interprétée par le coeur runtime. L’ordonnanceur transforme ensuite cet état en
+historiques, en alertes et en données persistées.
+36
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 57 ---
+Chapitre 4
+4.6 Conception de l’interface et des droits
+4.6
+Conception de l’interface et des droits
+Table 4.2 – Organisation fonctionnelle de l’interface
+Espace
+Finalité
+Accès
+Tableau de bord
+Lecture globale de la ﬂotte, du HI, du RUL et
+des décisions courantes
+Administrateur
+et utilisateur
+Diagnostic
+avancé
+Lecture détaillée des signaux, des explications
+et des recommandations
+Administrateur
+et utilisateur
+Maintenance et
+calendrier
+Suivi des tâches, des dates planiﬁées et des fe-
+nêtres d’intervention
+Administrateur
+et utilisateur
+Alertes
+Consultation et acquittement des alertes ma-
+chine
+Administrateur
+et utilisateur
+Vue géographique
+et synthèses
+Restitution synthétique et lecture multi-site
+Administrateur
+et utilisateur
+Gestion des
+machines, coûts,
+seuils,
+simulateur,
+expérience et
+administration
+Paramétrage global, démonstration et gouver-
+nance de la plateforme
+Administrateur
+seulement
+Une seconde règle est importante. Lorsqu’un utilisateur n’est pas administrateur, ses
+données sont limitées à la machine qui lui est aﬀectée. Cette contrainte est cohérente avec
+l’usage métier et renforce la sécurité de lecture.
+4.7
+Conclusion
+La conception de PrediTeq repose sur une architecture modulaire et lisible. La chaîne
+hors ligne produit les artefacts, le backend les exploite en temps réel, la base conserve
+l’état et l’interface restitue la décision. Le coeur runtime est organisé autour d’un tam-
+pon de caractéristiques, d’un moteur de pronostic, d’un gestionnaire d’exécution et d’un
+ordonnanceur périodique. Le chapitre suivant présente la réalisation complète du projet,
+depuis le pipeline scientiﬁque jusqu’à la plateforme de supervision.
+37
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 58 ---
+Chapitre 5
+Chapitre 5
+Réalisation
+5.1
+Introduction
+Ce chapitre présente la réalisation de PrediTeq dans sa forme complète. Il rassemble
+le noyau scientiﬁque, le service de supervision, l’interface web, les essais fonctionnels et
+l’ouverture industrielle.
+La même logique doit convaincre deux lectures. Un non-spécialiste doit comprendre
+pourquoi chaque bloc existe. Un spécialiste doit retrouver des choix rigoureux, des mé-
+triques vériﬁées et des limites clairement formulées.
+5.2
+Environnement matériel et logiciel
+38
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 59 ---
+Chapitre 5
+5.2 Environnement matériel et logiciel
+5.2.1
+Environnement de réalisation
+Table 5.1 – Environnement de réalisation
+Bloc
+Technologies visibles
+Rôle principal
+Simulation et
+apprentissage
+NumPy, Pandas,
+Scikit-learn, Joblib,
+Matplotlib, Seaborn
+Générer
+les
+trajectoires,
+construire
+les
+variables,
+en-
+traîner
+les
+modèles,
+produire
+les
+métriques
+et
+exporter
+les
+artefacts
+Service applicatif
+temps réel
+FastAPI, Uvicorn,
+APScheduler, gmqtt,
+Pydantic, Supabase
+Charger les artefacts, recevoir les
+mesures, calculer l’état machine,
+persister les historiques et piloter
+les alertes
+Plateforme web
+React, Vite, React Router,
+React Query, Tailwind,
+Recharts
+Restituer l’état de la ﬂotte, le
+diagnostic, les alertes, la planiﬁ-
+cation et l’administration
+Acquisition
+expérimentale
+ESP32, capteur ACS712
+5A, capteur MPU6050,
+liaison USB série
+Montrer une acquisition courte et
+visible de courant et de vibration
+Messagerie et
+intégration
+Message Queuing Telemetry
+Transport (MQTT) et route
+Hypertext Transfer
+Protocol (HTTP) protégée
+par jeton
+Recevoir un ﬂux externe, le nor-
+maliser et l’injecter dans la chaîne
+temps réel
+Cet environnement traduit une idée simple. La valeur du projet ne vient pas d’un
+modèle isolé. Elle vient d’une chaîne complète qui passe de l’apprentissage hors ligne à
+un produit de supervision exploitable.
+39
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 60 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+5.3
+Réalisation du noyau scientiﬁque
+5.3.1
+Base physique et simulation
+Le projet prend pour référence un moteur SITI FC100L1-4 utilisé pour l’entraîne-
+ment d’un stockeur vertical rotatif. Les constantes retenues donnent un cadre industriel
+plausible [5]. Elles servent à relier la charge, l’eﬀort électrique, l’échauﬀement et la dégra-
+dation.
+Table 5.2 – Constantes de référence
+Paramètre
+Valeur
+Intérêt pour le projet
+Puissance nominale
+2,2 kW
+Cadre la lecture de la puissance et de
+l’eﬀort
+Vitesse nominale
+1410 tr/min
+Replace l’étude dans un contexte mo-
+teur industriel plausible
+Tension nominale
+400 V
+Stabilise la lecture du courant et du
+facteur de puissance
+Facteur de puissance
+0,80
+Intervient dans la logique de charge
+et d’eﬀort électrique
+Courant nominal
+4,85 A
+Fournit un repère de lecture pour la
+consommation du moteur
+Nombre de niveaux
+19
+Structure la logique de charge du sto-
+ckeur
+Charge maximale par
+niveau
+15 kg
+Sert à construire les cas de charge
+Charge totale maximale
+285 kg
+Déﬁnit la borne haute de la simula-
+tion
+La simulation a été retenue pour une raison pratique. Le projet ne disposait pas d’un
+historique long, annoté et instrumenté de défaillances réelles. Une base physiquement gui-
+dée permet donc de commencer l’apprentissage sans attendre plusieurs années de mesures.
+Plaque
+moteur
+SITI
+FC100L1-4
+Cas de charge
+du stockeur
+Variables
+observées
+courant,
+puissance et
+température
+Trajectoires
+de dégradation
+Figure 5.1 – Base physique de la simulation
+Le simulateur hors ligne génère actuellement 200 trajectoires. Ce point est impor-
+40
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 61 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+tant, car il correspond à l’état réel du pipeline vériﬁé dans les artefacts du projet.
+Table 5.3 – Paramètres de simulation
+Paramètre
+Valeur
+Pourquoi ce choix
+Nombre de trajectoires
+200
+Compromis entre diversité et coût de
+calcul
+Proﬁls de dégradation
+4
+Couvrir plusieurs formes de vieillisse-
+ment
+Longueur nominale
+800 min-sim
+Couvrir la dégradation et les zones
+critiques
+Cas de charge
+20
+Représenter toute la plage utile de 0
+à 285 kg
+Cycle de fonctionnement
+44 s
+Reprendre un rythme plausible pour
+le stockeur
+Fréquence
+d’échantillonnage
+1 Hz
+Assez ﬁne pour la dynamique, assez
+simple pour le pipeline
+Les quatre proﬁls couvrent une usure régulière, une usure accélérée en ﬁn de vie, une
+dégradation par paliers et une usure plus bruitée. Cette diversité évite qu’un modèle
+n’apprenne un seul scénario idéalisé.
+Proﬁls de dé-
+gradation
+usure régulière
+usure accélérée
+dégradation par
+paliers
+usure plus brui-
+tée
+Plages de
+charge
+20 cas de charge
+de 0 à 285 kg
+par pas de 15 kg
+Cadre tempo-
+rel
+cycle de 44 s
+fréquence 1 Hz
+longueur de 800
+min-sim
+Figure 5.2 – Proﬁls et charges
+41
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 62 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+5.3.2
+Ordre de la chaîne d’apprentissage
+La chaîne suit la séquence vériﬁée dans l’inventaire du projet [15]. Cet ordre est im-
+portant. Il sépare clairement la simulation, l’extraction des variables, le diagnostic, le
+pronostic, l’évaluation et l’export runtime.
+Table 5.4 – Étapes de la chaîne d’apprentissage
+ÉtapeBloc
+Rôle
+1
+Simulation de dégradation
+Générer les trajectoires synthétiques du moteur
+2
+Prétraitement des signaux
+Transformer les mesures en variables exploitables
+3
+Détection d’anomalies
+Produire un score d’écart au comportement sain
+4
+Construction du HI
+Calculer l’indice de santé à partir des signaux obser-
+vables
+5
+Modèle de RUL
+Entraîner le régresseur de durée de vie résiduelle
+6
+Évaluation interne
+Produire les métriques et les ﬁgures principales
+6B
+Validation externe
+Vériﬁer la logique sur le benchmark NASA CMAPSS
+6C
+Calibration
+Évaluer la conﬁance des intervalles
+7
+Export runtime
+Préparer les artefacts rechargés par le backend
+Les valeurs retenues dans ce mémoire proviennent des artefacts exportés les plus ré-
+cents [16, 17, 18, 19, 20]. Cette règle évite d’introduire des chiﬀres moins ﬁables que les
+sorties générées par la chaîne elle-même.
+5.3.3
+Prétraitement et variables
+Le prétraitement transforme les signaux bruts en variables plus stables. Cette étape
+est décisive, car un bon pronostic commence par une lecture cohérente du comportement
+de la machine.
+Le pipeline exploite plusieurs fenêtres glissantes, notamment 60 secondes, 300 secondes
+et 3600 secondes. La vibration réagit vite. La température et certaines corrélations utiles
+évoluent plus lentement. Il faut donc observer plusieurs échelles de temps à la fois.
+Table 5.5 – Variables principales extraites par le pipeline
+Famille
+Variable suivie
+Interprétation
+Vibration
+Niveau vibratoire
+courant
+Intensité mécanique observée à
+l’instant présent
+Vibration
+Vitesse de variation
+vibratoire
+Rapidité de montée ou de baisse de
+la vibration
+Vibration
+Variabilité vibratoire
+récente
+Stabilité ou instabilité de la vibration
+sur fenêtre courte
+42
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 63 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+Famille
+Variable suivie
+Interprétation
+Puissance
+Puissance moyenne
+récente
+Niveau moyen d’eﬀort électrique
+Puissance
+Puissance quadratique
+moyenne
+Intensité énergétique récente
+Puissance
+Vitesse de variation de
+la puissance
+Rapidité de changement de charge
+électrique
+Cycle
+Énergie consommée
+par cycle
+Dépense énergétique associée au
+fonctionnement
+Cycle
+Allongement du cycle
+Écart entre cycle normal et cycle
+ralenti
+Température
+Température moyenne
+récente
+Niveau thermique moyen observé
+Température
+Vitesse de variation
+thermique
+Rapidité de montée ou de baisse de
+la température
+Humidité
+Variabilité
+hygrométrique
+Stabilité ou variation de
+l’environnement
+Croisée
+Corrélation
+température-puissance
+Lien entre échauﬀement et eﬀort
+électrique sur fenêtre longue
+Le modèle de pronostic ne se limite pas à ces douze variables. L’artefact d’évaluation
+conﬁrme qu’il exploite au total 17 caractéristiques. Il combine ces variables capteurs
+avec des descripteurs de dérive de l’indice de santé [17].
+5.3.4
+Détection d’anomalies et indice de santé
+Le premier besoin est de dire si le comportement s’éloigne d’une zone saine. L’Isolation
+Forest répond à cette question en apprenant surtout la normalité, puis en signalant les
+écarts [2].
+Les métriques du détecteur seul sont les suivantes [16] :
+— précision : 0,521 ;
+— rappel : 1,000 ;
+— F1 : 0,685.
+Cette lecture est volontairement sensible. Elle repère bien les dérives, mais elle reste
+trop large si elle est utilisée seule.
+Le projet conserve donc un repère vibratoire direct. La combinaison du score multivarié
+et de ce repère produit les résultats suivants [16] :
+— lecture vibratoire seule : précision 0,852, rappel 1,000, F1 0,920 ;
+43
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 64 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+— ensemble hybride : précision 0,971, rappel 0,958, F1 0,964.
+Le score hybride donne ainsi le meilleur compromis entre rigueur et lisibilité. Il reste
+proche de la physique observée, tout en proﬁtant d’une lecture plus riche des signaux.
+Figure 5.3 – Chronologie des anomalies
+L’indice de santé, ou Health Index (HI), n’est pas une variable cachée livrée telle quelle
+au produit. Il est reconstruit à partir des signaux et du score d’anomalie, puis lissé dans
+le temps aﬁn qu’un point isolé ne provoque pas une lecture brutale.
+Trois seuils structurent ensuite l’interprétation :
+— 0,8 pour la zone saine ;
+44
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 65 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+— 0,6 pour la zone correcte à surveiller ;
+— 0,3 pour la zone critique.
+Le seuil de 0,3 joue un rôle central. Il marque la zone critique et sert aussi à construire
+la cible du pronostic.
+Figure 5.4 – Courbes d’indice de santé
+45
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 66 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+5.3.5
+Pronostic de durée de vie résiduelle
+Le pronostic doit rester utile en exploitation, et non seulement en laboratoire. La cible
+ﬁnale de durée de vie résiduelle, ou Remaining Useful Life (RUL), est donc construite à
+partir d’un signal de santé observable et lissé, puis d’un franchissement persistant du seuil
+critique sur trois points consécutifs.
+Ce choix a une conséquence importante. Le modèle n’apprend pas directement sur une
+vérité cachée inaccessible en exploitation. Il apprend sur ce que le futur service temps réel
+pourra réellement observer.
+Le modèle de RUL repose sur une forêt aléatoire de 300 arbres, avec une profondeur
+maximale de 16 et une taille minimale de feuille de 10 [7]. Le nombre d’arbres améliore
+la stabilité. La profondeur et la taille minimale de feuille limitent le sur-apprentissage.
+Table 5.6 – Paramétrage du pronostic
+Choix
+Valeur
+Rôle
+Historique HI requis
+60 points
+Une heure de contexte avant publication
+du RUL
+Variables d’entrée
+17
+12 caractéristiques capteurs et 5 descrip-
+teurs du HI
+Algorithme
+Forêt aléatoire
+Modèle non linéaire robuste pour le pro-
+nostic
+Nombre d’arbres
+300
+Compromis retenu après convergence de
+la courbe hors sac
+Profondeur maximale
+16
+Régularisation du modèle
+Feuille minimale
+10
+Limitation du sur-apprentissage
+Séparation des données
+80/20 par proﬁl
+160 trajectoires d’entraînement et 40 de
+test
+Validation croisée
+GroupKFold,
+k = 5
+Protection contre la fuite entre trajec-
+toires
+Les trajectoires d’entraînement et de test ont donc été séparées par machine. La vali-
+dation croisée par groupes (GroupKFold) évite ainsi qu’un modèle reconnaisse simplement
+une machine déjà vue [8]. Pour un spécialiste, c’est un garde-fou méthodologique. Pour
+l’exploitant, c’est une manière de dire que le modèle ne triche pas.
+46
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 67 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+Table 5.7 – Résultats principaux du pronostic
+Bloc
+R2
+Erreur
+Lecture
+Test séparé
+0,980
+RMSE 2,49
+jours ; MAE
+1,65 jour
+Le modèle suit fortement
+la variabilité du temps res-
+tant
+Validation croisée par
+groupes
+0,982
+RMSE moyen
+2,32 jours
+La
+performance
+reste
+stable d’un pli à l’autre
+Régression linéaire
+0,941
+RMSE 4,23
+jours
+La solution ﬁnale apporte
+un gain net
+Référence moyenne
+~0
+RMSE 17,43
+jours
+Une baseline naïve reste
+très éloignée
+Capteurs seuls
+0,967
+–
+Les signaux portent déjà
+une forte information pré-
+dictive
+Modèle complet
+0,980
+–
+L’indice de santé améliore
+encore la qualité du pro-
+nostic
+Le test séparé actuel exploite 160 trajectoires dans l’apprentissage et 40 trajectoires
+dans le test. L’artefact détaillé indique 85 140 échantillons d’apprentissage et 21 388 échan-
+tillons de test [17].
+L’étude d’ablation conﬁrme ensuite le rôle de l’indice de santé. Le modèle complet à
+17 variables atteint R2 = 0,980. La version limitée aux seules variables capteurs tombe
+à R2 = 0,967. Le HI n’est donc pas seulement un indicateur d’aﬃchage. Il apporte une
+information utile au pronostic.
+47
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 68 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+Figure 5.5 – RUL réelle et RUL prédite
+48
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 69 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+5.3.6
+Validation scientiﬁque complémentaire
+Un bon score ne suﬃt pas. Il faut aussi comprendre pourquoi le modèle réagit, tester
+sa stabilité et vériﬁer sa portée hors du cas interne.
+Le projet produit d’abord un résumé d’explications additives de Shapley (SHAP).
+Cette lecture montre quelles variables poussent le pronostic vers un temps restant plus
+court ou plus long. Elle aide donc à justiﬁer la décision, au lieu de seulement l’aﬃcher.
+Figure 5.6 – Résumé d’explicabilité
+Le projet ajoute aussi une carte de sensibilité des réglages du détecteur. Cette vue ne
+cherche pas à multiplier les ﬁgures. Elle vériﬁe que la qualité du diagnostic ne s’eﬀondre
+pas pour une petite variation des paramètres.
+49
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 70 ---
+Chapitre 5
+5.3 Réalisation du noyau scientiﬁque
+Figure 5.7 – Sensibilité des réglages
+La validation externe sur NASA CMAPSS, ou Commercial Modular Aero-Propulsion
+System Simulation (CMAPSS), ne dit pas que le stockeur et un moteur aéronautique sont
+identiques. Elle vériﬁe plus simplement que la logique du pipeline reste utile hors de la
+seule simulation interne [6].
+Les métriques exportées sont les suivantes [18] :
+— R2 : 0,886 ;
+— RMSE : 14,11 cycles ;
+— MAE : 9,64 cycles.
+Ces résultats dépassent les objectifs de référence associés à cette étape. Ils renforcent
+donc la crédibilité scientiﬁque du projet.
+Figure 5.8 – Validation NASA CMAPSS
+La calibration des intervalles répond à une autre question. Un intervalle utile n’est
+pas seulement un intervalle étroit. C’est un intervalle honnête, dont le niveau de conﬁance
+correspond à ce qu’il annonce.
+Les valeurs les plus utiles sont les suivantes [19, 20] :
+— couverture native de l’intervalle à 80 % : 0,872 ;
+— couverture empirique au niveau 80 % : 0,881 ;
+— erreur de calibration attendue : 0,088 ;
+50
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 71 ---
+Chapitre 5
+5.4 Réalisation de la plateforme de supervision
+— biais moyen : +1,05 jour ;
+— temps d’avance utile moyen : 564,9 minutes-simulation, calculé sur 194 trajectoires
+analysées sur 200.
+Ces chiﬀres traduisent un modèle légèrement prudent. Dans un contexte de mainte-
+nance, cette prudence reste acceptable, car elle laisse en moyenne une fenêtre d’action
+avant la zone critique.
+Figure 5.9 – Calibration des intervalles
+5.4
+Réalisation de la plateforme de supervision
+51
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 72 ---
+Chapitre 5
+5.4 Réalisation de la plateforme de supervision
+5.4.1
+Positionnement produit
+PrediTeq n’est pas une interface ajoutée autour d’un modèle. C’est une plateforme
+logicielle en mode service, ou Software as a Service (SaaS), qui relie le diagnostic, le
+pronostic, la restitution métier et la gouvernance applicative.
+La logique d’usage suit une séquence simple : observer, comprendre, décider, planiﬁer,
+puis agir. Cette progression donne au produit une lecture claire pour l’exploitant comme
+pour le responsable de maintenance.
+Table 5.8 – Parcours utilisateur principal
+Étape
+Question utilisateur
+Espaces support
+Voir
+Quelles machines
+demandent une
+attention immédiate ?
+Tableau de bord, vue ﬂotte, indicateurs ra-
+pides et centre d’alertes
+Comprendre
+Pourquoi cette machine
+est-elle en zone de
+risque ?
+Diagnostic avancé, historiques, lecture du HI,
+du stress et du RUL
+Décider
+Faut-il surveiller,
+intervenir ou
+reconﬁgurer ?
+Espaces d’analyse, synthèse assistée et gestion
+des seuils
+Planiﬁer
+Quand agir et avec quel
+impact ?
+Calendrier, tâches de maintenance, priorisa-
+tion et budget
+Agir
+Comment démontrer,
+conﬁgurer ou alimenter
+le système ?
+Simulateur, page Experiment, gestion des ma-
+chines et administration
+52
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 73 ---
+Chapitre 5
+5.4 Réalisation de la plateforme de supervision
+Table 5.9 – Pages principales de la plateforme
+Page
+Usage principal
+Tableau de bord
+Vue de ﬂotte, état machine, résumé rapide et priorités
+Diagnostic avancé
+Lecture détaillée des indicateurs et aide à l’interprétation
+Synthèse et
+planiﬁcation
+Recommandation, priorisation et préparation des actions
+Calendrier de
+maintenance
+Projection des interventions dans le temps
+Coûts et budget
+Lecture économique du risque et des actions prévues
+Centre d’alertes
+Regroupement et priorisation des alertes
+Gestion des machines
+Inventaire, aﬀectations et contexte ﬂotte
+Administration et
+seuils
+Comptes, droits, seuils et gouvernance
+Simulateur
+Pilotage de la démonstration à trois machines
+Experiment
+Acquisition live centrée sur vibration et courant
+53
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 74 ---
+Chapitre 5
+5.4 Réalisation de la plateforme de supervision
+Figure 5.10 – Tableau de bord PrediTeq
+Le tableau de bord joue le rôle de point d’entrée. Il permet de distinguer rapidement
+les machines saines, surveillées et critiques. Le diagnostic avancé complète ensuite cette
+vue par des indicateurs plus détaillés et par une lecture causale du risque.
+5.4.2
+Service applicatif temps réel
+Le service applicatif charge les artefacts au démarrage, crée un moteur d’inférence
+par machine, relit les machines depuis la base, tente une connexion MQTT, lit les seuils
+terrain et démarre l’ordonnanceur. Cette séquence montre que PrediTeq est conçu comme
+un service complet, et non comme un simple démonstrateur.
+L’acquisition live est prise en charge par deux canaux. Le premier est un canal MQTT.
+Le second est une route HTTP protégée par jeton d’ingestion. Dans les deux cas, les
+mesures sont ramenées à une forme commune, validées, puis injectées dans le gestionnaire
+runtime.
+Le coeur applicatif calcule ensuite le HI, la zone, le contexte de pronostic et les indica-
+teurs de diagnostic. L’ordonnanceur relit régulièrement l’état courant, met à jour la table
+des machines, insère les historiques, déclenche les alertes et envoie les notiﬁcations.
+Une nuance importante doit rester visible. Les seuils utilisés en exploitation ne sont
+pas toujours strictement ceux du pipeline hors ligne. Le service temps réel peut utiliser des
+valeurs paramétrables stockées dans la base. Cette souplesse permet d’ajuster la lecture
+opérationnelle sans réentraîner toute la chaîne scientiﬁque.
+Le service intègre aussi une couche de gouvernance cohérente avec l’usage métier. Il
+gère l’authentiﬁcation, les rôles, les aﬀectations par machine, les traces d’audit et une
+54
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 75 ---
+Chapitre 5
+5.4 Réalisation de la plateforme de supervision
+partie des notiﬁcations. La plateforme ne se contente donc pas d’aﬃcher un score. Elle
+encadre aussi son usage [9, 10].
+5.4.3
+Simulateur et démonstration guidée
+Le simulateur occupe une place centrale dans la démonstration produit. Il rejoue trois
+scénarios machine explicites, puis injecte ces signaux dans le moteur runtime [21]. La
+lecture publique reste ainsi simple, stable et cohérente.
+Table 5.10 – Scénarios machine de démonstration
+Machine
+État cible
+Charge et
+usage
+HI cible
+Lecture produit
+ASC-A1
+Opérationnelle
+Charges
+légères à
+moyennes,
+usage modéré
+0,96
+Machine
+saine,
+lec-
+ture calme et stable
+ASC-B2
+Sous
+surveillance
+Traﬁc mixte,
+demi-charges
+et pics
+modérés
+0,62
+Machine à suivre, dé-
+rive visible et action à
+préparer
+ASC-C3
+Critique
+Charges
+lourdes,
+ambiance
+sévère et
+forte intensité
+0,10
+Machine
+critique,
+alerte
+prioritaire
+et
+intervention
+rappro-
+chée
+Ces trois cas sont volontairement contrastés. Plus l’usage est sévère, plus la charge
+est forte et plus l’indice de santé visé est bas. La démonstration reste donc lisible sans
+devenir arbitraire.
+ASC-A1
+état sain
+charge légère à moyenne
+lecture calme
+ASC-B2
+état sous surveillance
+charge mixte
+dérive visible
+ASC-C3
+état critique
+charge lourde
+alerte prioritaire
+Figure 5.11 – Structure du simulateur
+Le simulateur ne doit toutefois pas être confondu avec un essai industriel long. Il injecte
+bien une télémétrie dans le moteur runtime, mais certaines valeurs d’aﬃchage peuvent
+55
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 76 ---
+Chapitre 5
+5.5 Validation fonctionnelle, discussion critique et ouverture industrielle
+être bornées ou ajustées pour garder une narration stable pendant la soutenance. Cette
+précision ne fragilise pas le projet. Elle clariﬁe simplement son niveau réel de maturité.
+5.5
+Validation fonctionnelle, discussion critique et
+ouverture industrielle
+5.5.1
+Banc d’essai expérimental
+Le projet comprend aussi une démonstration d’acquisition physique autour de deux
+capteurs simples : un capteur de courant ACS712 5A et un capteur inertiel MPU6050.
+Ce banc a un objectif clair. Il montre que l’application sait recevoir un ﬂux live court,
+aﬃcher des jauges cohérentes et relier le produit à un montage visible.
+Montage de dé-
+monstration
+petit moteur
+capteur ACS712 5A
+capteur MPU6050
+Acquisition
+ESP32 et liai-
+son USB série
+Page Ex-
+periment
+visualisation live
+Figure 5.12 – Banc d’essai expérimental
+5.5.2
+Page Experiment
+La page Experiment répond à une question concrète : l’application peut-elle aﬃcher
+un ﬂux live simple issu d’un montage physique visible [22] ? La réponse est oui, mais dans
+un cadre de démonstration fonctionnelle et non encore d’industrialisation complète.
+La démonstration suit cinq phases de 7 secondes :
+1. moteur arrêté ;
+2. moteur en marche sans charge ;
+3. moteur arrêté ;
+4. moteur en marche avec charge ;
+5. moteur arrêté.
+Les valeurs visibles ont été réglées pour rester cohérentes avec le petit moteur utilisé :
+— courant libre autour de 0,092 A ;
+— courant en charge autour de 0,225 A ;
+— vibration libre autour de 0,19 ;
+56
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 77 ---
+Chapitre 5
+5.5 Validation fonctionnelle, discussion critique et ouverture industrielle
+— vibration en charge autour de 0,39 ;
+— seuil courant visible à 0,16 A ;
+— seuil vibration visible à 0,34.
+Phase 1
+arrêt
+Phase 2
+marche libre
+Phase 3
+arrêt
+Phase 4
+marche en charge
+Phase 5
+arrêt
+7 s
+7 s
+7 s
+7 s
+I ~0,092 A
+Vib. ~0,19
+I ~0,225 A
+Vib. ~0,39
+Seuil courant : 0,16 A
+Seuil vibration : 0,34
+Figure 5.13 – Scénario Experiment
+Cette page constitue donc un test fonctionnel d’acquisition dans l’application. Elle
+montre que le produit sait recevoir, aﬃcher et synchroniser un ﬂux simple de courant
+et de vibration. Elle ne remplace pas encore le contrat live complet attendu pour une
+intégration industrielle durable.
+5.5.3
+Validation de bout en bout
+Une première chaîne produit de bout en bout est désormais déployée en version v1.
+Une source locale industrielle, ou un poste local, écrit un ﬁchier CSV. Un pont PrediTeq
+lit la dernière ligne utile, normalise les champs, publie vers un broker MQTT privé sécurisé
+en TLS sur le port 8883, puis le backend cloud consomme le message et le frontend public
+sur domaine propre restitue l’état machine.
+Les captures conservées à la ﬁgure 5.14 illustrent trois moments de cette chaîne :
+l’émission côté source, la réception côté backend et la restitution applicative pour la
+machine ARO-01. Elles doivent être lues comme une preuve de fonctionnement de la chaîne
+produit v1, et non comme une validation terrain ﬁnale.
+Cette étape ne remplace pas encore la qualiﬁcation sur données réelles directement
+issues de la machine industrielle. Elle conﬁrme en revanche que l’architecture de transport,
+d’ingestion et d’aﬃchage fonctionne déjà de bout en bout.
+(a) Poste source
+(b) Réception backend
+(c) Restitution applicative
+Figure 5.14 – Validation fonctionnelle de la chaîne produit v1
+57
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 78 ---
+Chapitre 5
+5.5 Validation fonctionnelle, discussion critique et ouverture industrielle
+5.5.4
+Maturité actuelle
+Table 5.11 – Maturité actuelle des briques PrediTeq
+Brique
+Statut
+Preuve
+principale
+Limite actuelle Étape suivante
+Simulation du
+moteur
+Validée
+200 trajectoires,
+cohérence
+physique et
+ﬁgures exportées
+Pas encore
+confrontée à un
+historique
+terrain long
+Comparer
+progressivement les
+hypothèses à des
+signaux réels
+instrumentés
+Pipeline HI et
+RUL
+Validé
+Test séparé,
+validation
+croisée,
+calibration et
+benchmark
+NASA
+Données
+d’apprentissage
+encore
+majoritairement
+synthétiques
+Raﬃner avec télémétrie
+réelle et cas labellisés
+Service
+applicatif
+temps réel
+Déployé
+Artefacts
+chargés, routes
+métier, runtime
+cloud et
+consommation
+MQTT
+Le contrat
+terrain de
+ARO-01 reste à
+stabiliser
+Qualiﬁer la chaîne sur
+CSV réel fourni par
+l’industriel
+Plateforme
+web
+Démontrée
+Tableau de bord,
+diagnostic,
+alertes,
+planiﬁcation et
+administration
+Certaines vues
+gardent une
+logique de
+démonstration
+guidée
+Consolider les parcours
+avec davantage d’usage
+terrain
+Simulateur à
+trois machines
+Démontré
+Scénarios
+contrastés et
+zones cohérentes
+Ne remplace pas
+l’observation
+continue d’une
+ﬂotte réelle
+Le conserver comme
+outil de démonstration
+et de vériﬁcation
+produit
+Page
+Experiment
+Démontrée
+Test live autour
+de deux capteurs
+simples
+Ne couvre pas
+encore tout le
+contrat live du
+backend
+Relier la page à une
+source télémétrique
+plus riche
+Intégration
+industrielle
+Déployée
+en v1
+CSV local, pont,
+broker privé,
+backend cloud et
+frontend public
+Validation
+terrain encore
+dépendante du
+CSV réel
+attendu
+Conﬁrmer chemin,
+en-tête, ligne type et
+mise à jour en marche
+58
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 79 ---
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 80 ---
+Chapitre 5
+5.6 Conclusion
+MQTT privé, backend cloud et frontend public. Une fois ce premier raccordement validé
+sur ARO-01, le même schéma pourra être reproduit sur d’autres équipements.
+Source
+industrielle
+LabVIEW,
+automate
+ou poste
+local
+CSV local
+et pont de
+normalisation
+Broker
+MQTT privé
+TLS 8883
+Backend
+cloud
+PrediTeq
+Frontend
+public
+domaine
+propre
+Figure 5.16 – Chaîne v1 d’intégration réelle
+5.6
+Conclusion
+La réalisation de PrediTeq relie donc un noyau scientiﬁque rigoureux, un service ap-
+plicatif temps réel et une plateforme web exploitable. Le pipeline reste solide parce qu’il
+s’appuie sur une simulation physiquement guidée, une validation par groupes, une valida-
+tion externe, une calibration des intervalles et une étude d’ablation explicite. Le produit
+reste lisible parce qu’il transforme ces sorties en diagnostic, en planiﬁcation, en alertes
+et en démonstration cohérente. La conclusion générale peut maintenant synthétiser les
+acquis du projet, ses limites et ses prolongements naturels.
+60
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 81 ---
+Conclusion générale et perspectives
+Conclusion générale et perspectives
+PrediTeq a été conçu comme une plateforme complète de maintenance prédictive, et
+non comme un simple modèle isolé. Le travail réalisé montre qu’il est possible, dans le
+cadre d’un PFE MIME, de relier une logique physique de dégradation, un pipeline de
+Machine Learning, un backend runtime, une interface de supervision et une trajectoire
+crédible vers la donnée réelle. Le moteur d’un stockeur vertical rotatif constitue ici le
+premier cas de référence. Il structure la simulation, le produit et la démonstration, sans
+enfermer l’ambition de la plateforme dans ce seul équipement.
+Sur le plan scientiﬁque, le projet atteint un niveau solide. Les artefacts vériﬁés
+conﬁrment une prédiction de durée de vie résiduelle robuste sur le protocole holdout, une
+validation croisée stable, une détection hybride performante et une validation externe
+convaincante sur NASA CMAPSS. Le point méthodologique le plus important reste la
+formulation du pronostic à partir d’un signal observable de santé. Cette construction rap-
+proche l’apprentissage de ce qui sera réellement disponible en exploitation. La validation
+NASA CMAPSS ne démontre pas encore PrediTeq sur toute machine industrielle, mais
+elle apporte déjà un indice sérieux de transférabilité au-delà du seul cas interne.
+Sur le plan produit, PrediTeq ne se limite pas à produire des métriques. La plateforme
+propose une lecture d’usage claire : suivre l’état d’une ﬂotte, comprendre le risque, pla-
+niﬁer l’action et aﬃcher des scénarios de démonstration. Cette logique est pensée pour
+plusieurs machines. Le service runtime accepte un contrat de données générique, et la
+chaîne d’apprentissage peut être réentraînée pour une autre famille d’équipements. Le
+simulateur à trois machines joue ici un rôle pédagogique. La page Experiment apporte
+une validation complémentaire en montrant que l’application sait recevoir et aﬃcher un
+ﬂux live simple de courant et de vibration.
+Le niveau de maturité doit toutefois être formulé avec précision. Le pipeline est validé
+scientiﬁquement. Le produit est démontré fonctionnellement. Une première chaîne produit
+v1 est désormais déployée de bout en bout, depuis une source locale et son pont CSV
+jusqu’au backend cloud et au frontend public. Le simulateur reste une démonstration
+guidée. La page Experiment constitue un test fonctionnel d’acquisition dans l’application.
+La validation terrain sur données réelles reste l’étape suivante.
+Le prochain jalon opérationnel n’est donc plus de concevoir cette chaîne, mais de la
+qualiﬁer sur ARO-01. Le raccordement réel attend encore, de la part de l’industriel, le
+61
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 82 ---
+Conclusion générale et perspectives
+chemin exact du CSV, son en-tête conﬁrmé, une ligne d’exemple et la conﬁrmation que le
+ﬁchier se met bien à jour lorsque la machine fonctionne. Une fois cette première qualiﬁ-
+cation stabilisée, le même schéma pourra être reproduit sur d’autres machines AROTEQ
+aﬁn d’obtenir une supervision centralisée de plusieurs équipements, puis une ouverture
+plus générale à d’autres usages industriels.
+Ces limites ne diminuent pas la valeur du projet. Elles en précisent simplement le
+statut. PrediTeq est aujourd’hui une base scientiﬁque solide, un produit logiciel cohérent,
+un support de démonstration lisible et un point de départ crédible pour une montée en
+réalisme industriel. La plateforme est conçue pour généraliser sa logique. Cette générali-
+sation est déjà partiellement étayée par sa conception et par la validation externe, mais
+elle devra encore être conﬁrmée famille de machines par famille de machines.
+62
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 83 ---
+Conclusion générale et perspectives
+Apports personnels majeurs
+Les contributions personnelles les plus structurantes peuvent être résumées ainsi :
+— la consolidation du pipeline autour d’une simulation physiquement guidée en 200
+trajectoires et d’une cible de pronostic construite sans fuite d’information ;
+— la clariﬁcation du lien entre apprentissage hors ligne, service runtime et comporte-
+ment applicatif ;
+— la reformulation de PrediTeq comme plateforme de supervision et non comme simple
+démonstrateur algorithmique ;
+— la structuration de trois scénarios machine lisibles pour le simulateur ;
+— la conception d’une page d’acquisition expérimentale centrée sur deux signaux vi-
+sibles, courant et vibration ;
+— la mise en oeuvre d’une première chaîne produit v1 et la clariﬁcation du contrat
+terrain restant à conﬁrmer pour ARO-01.
+Table 5.12 – Synthèse des apports personnels
+Brique
+Apport principal
+Eﬀet concret sur PrediTeq
+Pipeline
+scientiﬁque
+Passage à 200 trajectoires
+et cible de pronostic
+fondée sur un signal
+observable
+Base méthodologique plus solide pour
+le futur runtime
+Architecture
+produit
+Clariﬁcation des couches
+hors ligne, runtime et
+interface
+Lecture plus nette de la solution
+comme plateforme complète
+Démonstration
+fonctionnelle
+Structuration des trois
+scénarios et
+repositionnement de la
+page Experiment
+Démonstration plus lisible et plus
+honnête
+Ouverture
+industrielle
+Déploiement d’une chaîne
+produit v1 et clariﬁcation
+du contrat terrain
+Transition vers la donnée réelle sans
+réécriture de l’architecture
+Les perspectives les plus naturelles du projet sont les suivantes :
+1. raccorder eﬀectivement ARO-01 à la chaîne v1 déjà déployée via le CSV réel fourni
+par l’industriel ;
+2. stabiliser cette première chaîne live, depuis l’identiﬁcation machine jusqu’à la per-
+sistance cloud, sans modiﬁer l’architecture produit ;
+63
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 84 ---
+Conclusion générale et perspectives
+3. étendre ensuite le même schéma à d’autres machines ;
+4. constituer un historique croisé de télémétrie et d’interventions de maintenance ;
+5. recalibrer les seuils et réentraîner hors ligne les modèles lorsque les historiques an-
+notés seront suﬃsants ;
+6. mesurer enﬁn les gains d’exploitation en disponibilité, en planiﬁcation et en qualité
+des alertes.
+En déﬁnitive, PrediTeq montre qu’une approche de maintenance prédictive devient
+crédible lorsqu’elle relie la physique, l’apprentissage automatique, le logiciel et la démons-
+tration. Le projet ne cherche pas seulement à produire une prédiction. Il cherche aussi à
+la rendre intelligible, défendable et exploitable.
+64
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 85 ---
+Bibliographie et webographie
+Bibliographie et webographie
+[1] L. Breiman, Random Forests, Machine Learning, vol. 45, no. 1, pp. 5–32, 2001.
+[2] F. T. Liu, K. M. Ting, Z.-H. Zhou, Isolation Forest, Proceedings of the 8th IEEE
+International Conference on Data Mining, 2008.
+[3] IEEE, IEEE Std 1856-2017 : Framework for Prognostics and Health Management of
+Systems, IEEE Standards Association, 2017.
+[4] ISO, ISO 10816-3 :2009 Mechanical vibration — evaluation of machine vibration by
+measurements on non-rotating parts, International Organization for Standardization,
+2009.
+[5] IEC, IEC 60034-1 : Rotating electrical machines — Part 1 : Rating and performance,
+norme internationale mobilisée dans le projet pour le cadrage électrotechnique du
+moteur de référence.
+[6] A. Saxena, K. Goebel, Turbofan Engine Degradation Simulation Data Set, NASA
+Ames Prognostics Data Repository, 2008.
+[7] P. Probst, A.-L. Boulesteix, To tune or not to tune the number of trees in random
+forest, Journal of Machine Learning Research, 18(181), 1–18, 2018.
+[8] M. Kuhn, K. Johnson, Applied Predictive Modeling, Springer, 2013.
+[9] OWASP Foundation, OWASP Top 10 : The Ten Most Critical Web Application Se-
+curity Risks, edition 2021 du referentiel mobilise pour la conception sécurisée et la
+gouvernance applicative de la plateforme.
+[10] Union europeenne, Regulation (EU) 2016/679 — General Data Protection Regulation
+(GDPR), règlement européen de référence mobilisé ici pour la suppression déﬁnitive
+et la gouvernance des données de comptes.
+[11] K. Schwaber, J. Sutherland, The Scrum Guide : The Deﬁnitive Guide to Scrum,
+2020.
+[12] GitHub Docs, About large ﬁles on GitHub, documentation oﬃcielle mobilisée pour la
+limite de taille GitHub et le seuil de blocage au-delà de 100 MiB.
+[13] GitHub Docs, About Git Large File Storage, documentation oﬃcielle mobilisée pour
+le mécanisme de pointeur Git LFS et la gestion des gros artefacts hors blob Git
+classique.
+65
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 86 ---
+Bibliographie et webographie
+Bibliographie et webographie
+[14] Render, Deploying on Render, documentation oﬃcielle mobilisée pour la chaîne de
+build et de déploiement du backend à partir d’un dépôt Git lié.
+[15] Projet PrediTeq, INDEX_RESULTATS.md, document interne du dépôt PrediTeq
+utilisé pour l’inventaire du pipeline, l’ordre des étapes oﬄine et le repérage des arte-
+facts vériﬁés.
+[16] Projet PrediTeq, prediteq_ml/outputs/metrics.json, artefact exécuté de référence
+pour les métriques d’anomalies et la synthèse holdout du pipeline.
+[17] Projet PrediTeq, prediteq_ml/outputs/rul_cv_scores.json, artefact execute de-
+taillant holdout, GroupKFold, baselines et ablations du modele RUL.
+[18] Projet PrediTeq, prediteq_ml/outputs/cmapss_metrics.json, artefact exécuté de va-
+lidation externe sur NASA CMAPSS FD001.
+[19] Projet PrediTeq, prediteq_ml/outputs/calibration_metrics.json, artefact exécuté
+d’évaluation de la calibration empirique des intervalles de conﬁance.
+[20] Projet PrediTeq, prediteq_ml/outputs/lead_time.json, artefact exécuté sur le temps
+d’avance utile avant état critique.
+[21] Projet PrediTeq, prediteq_api/demo_scenarios.py, source interne déﬁnissant les trois
+scénarios machine utilisés par le simulateur.
+[22] Projet
+PrediTeq,
+prediteq_frontend/src/components/pages/ExperimentPage.tsx,
+source interne de la page live d’acquisition ACS712 5A + MPU6050.
+66
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 87 ---
+Chapitre 6
+Chapitre 6
+Annexes pratiques
+6.1
+Annexe A : cartographie résumée du dépôt
+Table 6.1 – Cartographie fonctionnelle du dépôt
+Dossier
+Rôle principal
+prediteq_ml/
+Simulation oﬄine, preprocessing, entraînement, évaluation, ex-
+port des artefacts.
+prediteq_api/
+Backend runtime, simulateur, scheduler, routes métier, gou-
+vernance.
+prediteq_frontend/
+Interface React, pages produit, vues de démonstration et d’ad-
+ministration.
+docs/
+Guides de lecture, déploiement, démo, reprise de code.
+final_report/
+Source du présent mémoire et livrable Overleaf.
+Pour une reprise technique du projet, les points d’entrée les plus utiles restent les
+ﬁchiers qui portent directement la logique : prediteq_ml/steps/ pour la chaîne oﬄine,
+prediteq_api/main.py et prediteq_api/ml/loader.py pour le runtime backend,
+prediteq_api/routers/mqtt.py pour l’ingestion live, prediteq_frontend/src/page
+s/Index.tsx pour la cartographie frontend, et render.yaml pour la conﬁguration de
+déploiement.
+67
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 88 ---
+Chapitre 6
+6.2 Annexe B : commandes utiles
+6.2
+Annexe B : commandes utiles
+6.2.1
+Lancement local
+cd prediteq_api
+pip
+install -r requirements.txt
+uvicorn
+main:app --reload
+cd prediteq_frontend
+npm
+install
+npm run dev
+6.2.2
+Vériﬁcation frontend
+cd prediteq_frontend
+npm run build
+npm run test
+npx
+playwright
+test
+6.2.3
+Séquence oﬄine du pipeline
+cd prediteq_ml
+python
+steps/ step1_simulate .py
+python
+steps/ step2_preprocess .py
+python
+steps/ step3_isolation_forest .py
+python
+steps/ step4_health_index .py
+python
+steps/ step5_rul_model .py
+python
+steps/ step6_evaluate .py
+python
+steps/step6b_cmapss .py
+python
+steps/ step6c_calibration .py
+python
+steps/step7_export.py
+68
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 89 ---
+Chapitre 6
+6.3 Annexe C : trois machines du simulateur
+6.3
+Annexe C : trois machines du simulateur
+Table 6.2 – Détails utiles des scénarios machine
+Code
+état
+Charge
+type
+Site
+Lecture démo
+ASC-A1
+Opérationnel
+Légère à
+moyenne
+Bizerte
+Machine calme, peu sur-
+chargée,
+HI
+cible
+très
+élevé.
+ASC-B2
+Sous
+surveillance
+Mixte /
+demi-charge
+Sfax
+Machine moyenne, dérive
+visible, RUL de référence
+non nulle.
+ASC-C3
+Critique
+Lourde /
+proche max
+Sousse
+Machine sévère, biais vi-
+bratoire fort, état cri-
+tique immédiatement li-
+sible.
+Cette annexe décrit uniquement les scénarios du simulateur. La première machine
+réelle visée pour l’intégration terrain reste, elle, la machine ARO-01 située à Ben Arous.
+6.4
+Annexe D : protocole de démonstration
+1. Ouvrir la page /experiment.
+2. Placer le téléphone de façon à voir simultanément le moteur et l’écran.
+3. Cliquer sur Connecter l’ESP32.
+4. Lancer un chrono.
+5. 0 à 7 secondes : moteur OFF.
+6. 7 à 14 secondes : moteur ON sans charge.
+7. 14 à 21 secondes : moteur OFF.
+8. 21 à 28 secondes : moteur ON avec roue ou charge.
+9. Après 28 secondes : moteur OFF et stabilisation ﬁnale.
+Conseil de démonstration : ﬁxer le MPU6050 sur le corps du moteur ou sur son
+support rigide, et garder le ACS712 5A en série avec l’alimentation du moteur. La
+disposition expérimentale reste ainsi physiquement crédible pour un observateur.
+69
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 90 ---
+Chapitre 6
+6.5 Annexe E : chaîne v1 d’intégration réelle
+6.5
+Annexe E : chaîne v1 d’intégration réelle
+6.5.1
+Chaîne déployée
+Source locale industrielle ou poste local -> CSV local -> pont de
+normalisation -> broker MQTT privé TLS 8883 -> backend cloud PrediTeq ->
+frontend public sur domaine propre
+Les paramètres d’accès au broker, les identiﬁants dédiés, les mots de passe et les
+éventuels certiﬁcats restent hors du mémoire et doivent être fournis par variables d’envi-
+ronnement ou champs à compléter.
+6.5.2
+Champs live minimaux actuellement attendus par le run-
+time
+— machine_id
+— observed_at ou timestamp
+— rms_mms
+— power_kw
+— temp_c
+— humidity_rh
+6.5.3
+Éléments restant à conﬁrmer pour ARO-01
+— le chemin exact du CSV écrit par la source industrielle ;
+— l’en-tête ﬁnal validé par l’industriel ;
+— une ligne d’exemple issue du ﬂux réel ;
+— la conﬁrmation que le ﬁchier se met bien à jour lorsque la machine fonctionne.
+6.5.4
+Exemple de source CSV puis de payload à compléter
+machine_id ,observed_at ,rms_mms ,power_kw ,temp_c ,humidity_rh ,current_a ,
+load_kg ,status
+ARO -01,< horodatage
+ISO 8601>,<rms_mms >,<power_kw >,<temp_c >,<humidity_rh
+>,<current_a >,<load_kg >,<status >
+Le bridge lit cette ligne source, normalise les champs utiles, puis publie un message
+du type :
+70
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 91 ---
+Chapitre 6
+6.5 Annexe E : chaîne v1 d’intégration réelle
+{
+"machine_id ": "ARO -01" ,
+"observed_at ": "<horodatage
+ISO 8601>",
+"rms_mms ": <rms_mms >,
+"power_kw ": <power_kw >,
+"temp_c ": <temp_c >,
+"humidity_rh ": <humidity_rh >,
+"current_a ": <current_a >,
+"load_kg ": <load_kg >,
+"status ": "<status >",
+"source ": "csv_bridge"
+}
+71
+Chapitre 2
+2.5 IoT, instrumentation et communication
+
+
+--- PAGE 92 ---
+Chapitre 6
+6.6 Annexe F : traçabilité user stories, pages et preuves de test
+6.6
+Annexe F : traçabilité user stories, pages et
+preuves de test
+Table 6.3 – Trace simple entre besoins, pages produit et preuves de validation
+User story / besoin
+Page ou brique
+associée
+Preuve ou test disponible
+Visualiser rapidement
+l’état de la ﬂotte
+Tableau de bord, centre
+d’alertes
+Captures frontend, build frontend,
+tests Vitest et cohérence des données
+de simulation runtime
+Comprendre pourquoi
+une machine est à risque
+Diagnostic avancé,
+backend runtime, routes
+métier
+Figures HI / RUL, routes de diag-
+nostic, artefacts holdout / GroupK-
+Fold / calibration
+Comparer trois situations
+machine lisibles
+Simulateur backend et
+page simulateur
+Scénarios ASC-A1 / ASC-B2 / ASC-
+C3, captures de démonstration et
+lecture de zones cohérente
+Observer un ﬂux live
+dans l’application
+Page Experiment,
+montage ACS712 5A +
+MPU6050
+Démonstration
+ﬁlmée,
+protocole
+chrono, page live à deux cartes et
+scénario OFF / ON / OFF / ON
+charge / OFF
+Conﬁgurer des seuils et
+gouverner la plateforme
+Administration, gestion
+des machines, seuils
+runtime
+Capture administration, routes ba-
+ckend associées et distinction claire
+entre seuils oﬄine et runtime
+Planiﬁer une action de
+maintenance
+Planner, calendrier,
+budget
+Parcours produit documenté, cap-
+tures de pages clés et liens entre
+risque, priorité et action
+Préparer une intégration
+terrain réelle
+Bridge MQTT, backend
+live, documentation
+LabVIEW / PLC
+Documentation
+de
+payload,
+test
+mock sur poste distant et chaîne
+cible documentée
+72
+Chapitre 2
+2.5 IoT, instrumentation et communication

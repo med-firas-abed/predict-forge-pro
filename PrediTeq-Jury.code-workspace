@@ -6,20 +6,47 @@
     { "name": "prediteq_frontend", "path": "prediteq_frontend" }
   ],
   "settings": {
+    "explorer.excludeGitIgnore": true,
     "files.exclude": {
+      "**/.env": true,
       "**/.runtime": true,
+      "**/.venv": true,
+      "**/venv": true,
       "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.mypy_cache": true,
+      "**/.ruff_cache": true,
       "**/node_modules": true,
       "**/dist": true,
       "**/test-results": true,
+      "**/playwright-report": true,
+      "**/coverage": true,
+      "**/htmlcov": true,
+      "**/logs": true,
+      "**/PrediTeq_Bridge_Kit": true,
+      "**/TRANSFER_TO_PC2": true,
+      "**/outputs/plots": true,
+      "**/*.zip": true,
       "**/*.log": true
     },
     "search.exclude": {
       "**/.runtime": true,
+      "**/.venv": true,
+      "**/venv": true,
       "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.mypy_cache": true,
+      "**/.ruff_cache": true,
       "**/node_modules": true,
       "**/dist": true,
-      "**/test-results": true
+      "**/test-results": true,
+      "**/playwright-report": true,
+      "**/coverage": true,
+      "**/htmlcov": true,
+      "**/logs": true,
+      "**/PrediTeq_Bridge_Kit": true,
+      "**/TRANSFER_TO_PC2": true,
+      "**/outputs/plots": true
     }
   }
 }

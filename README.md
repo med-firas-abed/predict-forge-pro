@@ -27,20 +27,34 @@ These folders are useful project assets, but not where the running product logic
 - `rapport_firas/`
 - `rapport_firas_v2/`
 - `final_report/`
-- `references/`
+- `references/` archival phrasing, deploy, and report-writing guides
 - `external-skills/`
 - `project context/`
+- `prediteq_pipeline_docs/` oral-support notes and code-tour helper documents
+- `hardware/`
+- `logs/`
 
 ## Repo map
 
 ```text
-docs/               Navigation guides for jury, future maintenance and deploys
+docs/               Navigation guides for jury, maintenance and grouped reference material
+hardware/           Standalone ESP bench sketches and wiring/debug notes
 prediteq_ml/        Offline pipeline, diagnostics, exported models and outputs
 prediteq_api/       Runtime backend, scheduler, simulator, alerts and auth
 prediteq_frontend/  React UI, pages, hooks and presentation logic
+logs/               Local run logs and smoke-test traces (ignored by git)
 render.yaml         Render deployment config for the backend
 INDEX_RESULTATS.md  Exact pipeline order, generated artifacts and the human-readable metric summary
 ```
+
+Archived and reference-only files that do not affect runtime behavior now live under:
+
+- `docs/reference_materials/`
+
+Reference-only folders kept at the repo root for link stability:
+
+- `references/`
+- `prediteq_pipeline_docs/`
 
 ## Best first files to open
 

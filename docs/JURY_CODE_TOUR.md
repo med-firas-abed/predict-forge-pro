@@ -126,8 +126,11 @@ Do not start with these folders if the goal is product understanding:
 - `rapport_firas/`
 - `rapport_firas_v2/`
 - `final_report/`
-- `references/`
+- `references/` archival wording/deploy/report guides
 - `external-skills/`
 - `project context/`
+- `prediteq_pipeline_docs/` oral notes and helper path maps
+- `hardware/`
+- `logs/`
 
 These are useful project assets, but not the fastest path to explain the running product.

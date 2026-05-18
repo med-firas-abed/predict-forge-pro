@@ -56,6 +56,10 @@ rapport_firas_v2__1_.pdf
 external-skills/
 .opencode/
 references/
+!references/
+references/*
+!references/README.md
+docs/reference_materials/legacy_archives/old_pfe_reports/
 
 # Local transfer/runtime artifacts
 prediteq_api/TRANSFER_TO_PC2/scripts/.env.bridge
