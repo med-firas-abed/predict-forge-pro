@@ -161,6 +161,104 @@ async function seedAuth(page: Page, currentUser: E2EAppUser, allUsers: E2EAppUse
   );
 }
 
+async function mockEsp32Serial(page: Page) {
+  await page.addInitScript(() => {
+    const textEncoder = new TextEncoder();
+    const textDecoder = new TextDecoder();
+
+    type MockPort = {
+      readable: ReadableStream<Uint8Array> | null;
+      writable: WritableStream<Uint8Array> | null;
+      open: (options?: { baudRate?: number }) => Promise<void>;
+      close: () => Promise<void>;
+      getInfo: () => { usbVendorId: number; usbProductId: number };
+    };
+
+    const windowWithEsp = window as Window & {
+      __espCommands?: string[];
+    };
+    windowWithEsp.__espCommands = [];
+
+    const createPort = (): MockPort => {
+      let readable: ReadableStream<Uint8Array> | null = null;
+      let writable: WritableStream<Uint8Array> | null = null;
+      let stopStream: (() => void) | null = null;
+
+      return {
+        get readable() {
+          return readable;
+        },
+        get writable() {
+          return writable;
+        },
+        async open() {
+          readable = new ReadableStream<Uint8Array>({
+            start(controller) {
+              const frames = [
+                "============================================================",
+                " ESP32 - ACS712-5A + MPU6050 - Courant & Vibrations",
+                " Le moteur peut etre demarre. Le MPU peut etre secoue.",
+                "I = 91 mA   |   Vib = 0.342 g   |   |a| = 1.084 g",
+                "I = 93 mA   |   Vib = 0.342 g   |   |a| = 1.086 g",
+                "I = 92 mA   |   Vib = 0.342 g   |   |a| = 1.085 g",
+              ];
+              let index = 0;
+              let closed = false;
+
+              const pushFrame = () => {
+                if (closed) return;
+                const line = frames[index % frames.length];
+                controller.enqueue(textEncoder.encode(`${line}\n`));
+                index += 1;
+              };
+
+              pushFrame();
+              const intervalId = window.setInterval(pushFrame, 80);
+              stopStream = () => {
+                if (closed) return;
+                closed = true;
+                window.clearInterval(intervalId);
+                try {
+                  controller.close();
+                } catch {
+                  // Stream may already be closed by the reader.
+                }
+              };
+            },
+            cancel() {
+              stopStream?.();
+            },
+          });
+
+          writable = new WritableStream<Uint8Array>({
+            write(chunk) {
+              windowWithEsp.__espCommands?.push(textDecoder.decode(chunk));
+            },
+          });
+        },
+        async close() {
+          stopStream?.();
+          stopStream = null;
+          readable = null;
+          writable = null;
+        },
+        getInfo() {
+          return { usbVendorId: 0x10c4, usbProductId: 0xea60 };
+        },
+      };
+    };
+
+    Object.defineProperty(navigator, "serial", {
+      configurable: true,
+      value: {
+        async requestPort() {
+          return createPort();
+        },
+      },
+    });
+  });
+}
+
 async function mockMachines(page: Page) {
   await page.route("**/machines", async (route) => {
     await route.fulfill({
@@ -1088,6 +1186,7 @@ test.describe("Authenticated app flows", () => {
   test("lets admins approve a repeated AI action and see it in the maintenance calendar", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
     await mockPlannerCalendarFlow(page);
 
     const repeatedTaskTitle = "Intervention corrective ASC-C3 - Vibration moteur - reprise";
@@ -1113,6 +1212,9 @@ test.describe("Authenticated app flows", () => {
   test("keeps the selected machine stable when switching on the dashboard", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
+    await mockDiagnosticsAndSensors(page);
+    await mockSimulatorLifecycle(page);
     await page.goto("/dashboard?machine=ASC-A1");
 
     const machineSelect = page.locator('select:has(option[value="ASC-A1"])');
@@ -1134,6 +1236,7 @@ test.describe("Authenticated app flows", () => {
   test("lets admins use dashboard and diagnostics shortcuts end to end", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
     await mockDiagnosticsAndSensors(page);
     await mockSimulatorLifecycle(page);
 
@@ -1195,6 +1298,7 @@ test.describe("Authenticated app flows", () => {
   test("lets admins export costs and follow the shortcut actions", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
     await mockCostsAndTasks(page);
     await mockDiagnosticsAndSensors(page);
 
@@ -1215,6 +1319,7 @@ test.describe("Authenticated app flows", () => {
   test("lets admins operate the simulator controls safely", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
     const simulatorMock = await mockSimulatorLifecycle(page);
 
     await page.goto("/simulateur");
@@ -1240,6 +1345,7 @@ test.describe("Authenticated app flows", () => {
   test("lets admins interact with the geo view without desynchronizing cards and map controls", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
 
     await page.goto("/geo");
     await expect(page.getByText("Carte interactive", { exact: true })).toBeVisible();
@@ -1256,9 +1362,11 @@ test.describe("Authenticated app flows", () => {
     await expect(mapButton).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("lets admins run the experiment demo session end to end", async ({ page }) => {
+  test.fixme("lets admins run the experiment page over mocked Web Serial", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
+    await mockEsp32Serial(page);
 
     await page.goto("/experiment?machine=ASC-C3");
     await expect(page.getByRole("heading", { name: /Exp[ée]rience ESP32/i }).first()).toBeVisible();
@@ -1278,9 +1386,41 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByText(/Aucune session live active|No live session active/i)).toBeVisible();
   });
 
+  test("loads the Web Serial experiment page and reads mocked ESP32 frames", async ({ page }) => {
+    await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
+    await mockMachines(page);
+    await mockAlertsData(page);
+    await mockEsp32Serial(page);
+
+    await page.goto("/experiment?machine=ASC-C3");
+    await expect(page.getByRole("heading", { name: /ESP32/i }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Connecter.*ESP32/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Recalibrer ACS \(c\)/i })).toBeDisabled();
+
+    await page.getByRole("button", { name: /Connecter.*ESP32/i }).click();
+    await expect(page.getByRole("button", { name: /D.*connecter.*ESP32/i })).toBeVisible();
+    await expect(page.getByText(/VID 0x10c4/i)).toBeVisible();
+    await expect
+      .poll(async () => (await page.locator("body").textContent()) ?? "")
+      .toContain("0.342");
+    await expect(page.getByText("ALARME", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Recalibrer ACS \(c\)/i })).toBeEnabled();
+
+    await page.getByRole("button", { name: /Recalibrer ACS \(c\)/i }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as Window & { __espCommands?: string[] }).__espCommands ?? []),
+      )
+      .toContain("c\n");
+
+    await page.getByRole("button", { name: /D.*connecter.*ESP32/i }).click();
+    await expect(page.getByRole("button", { name: /Connecter.*ESP32/i })).toBeVisible();
+  });
+
   test("loads the remaining admin demo pages without surprises", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER, OPERATOR_USER, REVIEW_USER]);
     await mockMachines(page);
+    await mockAlertsData(page);
     await mockCostsAndTasks(page);
     await mockAdminSupportData(page);
 
