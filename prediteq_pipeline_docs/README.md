@@ -1,5 +1,22 @@
 # Pipeline Notes Archive
 
+## Jury warning
+
+This folder is an **archive of support notes**, not the canonical jury pack.
+
+If you are preparing the soutenance, use:
+
+- `guides_soutenance/`
+- `prediteq_ml/config.py`
+- `prediteq_ml/steps/step1_simulate.py`
+- `prediteq_api/demo_scenarios.py`
+- `prediteq_api/routers/simulator.py`
+- `prediteq_api/routers/live_ingest.py`
+
+Some files here are still useful for explanation, but they can lag behind the
+current demo-machine wording, the current jury structure, or the most recent
+simulation / runtime phrasing.
+
 This folder groups presentation support notes around the ML pipeline and the
 project walkthrough. It is useful for speaking, orientation, and quick code
 navigation, but it is not part of the active runtime code.

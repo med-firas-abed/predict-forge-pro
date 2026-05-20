@@ -6,11 +6,12 @@ Prediction-first maintenance platform for the ISAMM PFE and the Aroteq demo cont
 
 If you want to understand the project quickly, open these files first:
 
+- `WORKSPACE_USE_THESE_FILES.md`
 - `docs/JURY_CODE_TOUR.md`
 - `docs/DEPLOYMENT_MAP.md`
 - `docs/HANDOFF_RUNBOOK.md`
 - `docs/FINAL_RELEASE_CHECKLIST.md`
-- `INDEX_RESULTATS.md`
+- `prediteq_ml/steps/README.md`
 
 ## Product code only
 
@@ -44,7 +45,7 @@ prediteq_api/       Runtime backend, scheduler, simulator, alerts and auth
 prediteq_frontend/  React UI, pages, hooks and presentation logic
 logs/               Local run logs and smoke-test traces (ignored by git)
 render.yaml         Render deployment config for the backend
-INDEX_RESULTATS.md  Exact pipeline order, generated artifacts and the human-readable metric summary
+prediteq_ml/steps/README.md  Current offline step order and best file sequence to explain the ML pipeline
 ```
 
 Archived and reference-only files that do not affect runtime behavior now live under:
@@ -113,16 +114,18 @@ See `docs/DEPLOYMENT_MAP.md` for the full deploy picture.
 
 For the final delivery and demo package, use:
 
+- `guides_soutenance/README.md`
+- `guides_soutenance/jury_demo_cheat_sheet.md`
 - `docs/HANDOFF_RUNBOOK.md`
 - `docs/FINAL_RELEASE_CHECKLIST.md`
 - `DEPLOYMENT_FREEZE.md`
-- `final_report/jury_demo_cheat_sheet.md`
+- `WORKSPACE_USE_THESE_FILES.md`
 
 ## Source of truth
 
 Use these files when you need the current truth:
 
-- `INDEX_RESULTATS.md` for pipeline order, outputs, timings and the human-readable metric summary
+- `prediteq_ml/steps/README.md` for the current offline step order
 - `prediteq_ml/outputs/*.json` for the exported metric values used by the report and jury package
 - `prediteq_ml/config.py` for ML/runtime defaults
 - `prediteq_api/` for live behavior

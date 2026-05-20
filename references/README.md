@@ -1,5 +1,21 @@
 # References Archive
 
+## Jury warning
+
+This folder is a **historical reference bank**, not the canonical jury pack.
+
+For the current soutenance story, prefer:
+
+- `guides_soutenance/`
+- `prediteq_ml/config.py`
+- `prediteq_ml/outputs/*.json`
+- `prediteq_api/demo_scenarios.py`
+- `prediteq_api/routers/simulator.py`
+- `prediteq_api/routers/live_ingest.py`
+
+Do not use this folder alone to state current metrics, the current simulation
+story, or the live integration contract.
+
 This folder is kept as a reference bank, not as an active source of truth for
 the running product.
 

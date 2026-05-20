@@ -63,8 +63,15 @@ function getMachineSourceMeta(machine: Machine) {
 function getTelemetrySourceLabel(source?: string | null) {
   const normalized = (source ?? "").trim().toLowerCase();
   if (!normalized) return null;
-  if (normalized.includes("labview")) return "Bridge LabVIEW / boss PC";
-  if (normalized.includes("boss_pc")) return "Bridge boss PC";
+  if (normalized.includes("labview")) return "Bridge LabVIEW / PC relais";
+  if (
+    normalized.includes("site_bridge_pc") ||
+    normalized.includes("bridge_pc") ||
+    normalized.includes("relay") ||
+    normalized.includes("boss_pc")
+  ) {
+    return "Bridge PC relais";
+  }
   if (normalized.includes("simulator")) return "Replay demo";
   if (normalized.includes("runtime")) return "Pipeline live";
   return source?.replace(/_/g, " ") ?? null;
@@ -125,7 +132,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
       return;
     }
     if (!MACHINE_CODE_RE.test(normalizedId)) {
-      setError("Le code doit suivre le format ASC-A1.");
+      setError("Le code doit suivre un format comme ARO-01 ou ASC-A1.");
       return;
     }
     if (isNew && normalizedExistingIds.has(normalizedId)) {

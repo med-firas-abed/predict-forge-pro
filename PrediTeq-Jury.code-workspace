@@ -1,5 +1,6 @@
 {
   "folders": [
+    { "name": "guides_soutenance", "path": "guides_soutenance" },
     { "name": "docs", "path": "docs" },
     { "name": "prediteq_ml", "path": "prediteq_ml" },
     { "name": "prediteq_api", "path": "prediteq_api" },

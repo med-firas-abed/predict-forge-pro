@@ -3,7 +3,7 @@ One-shot utility to create or update a real machine row for live MQTT ingestion.
 
 Usage:
     cd prediteq_api
-    python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Boss PC"
+    python scripts/register_machine.py ARO-01 --name "Machine reelle" --region "Ben Arous"
 
 Why this exists:
     The MQTT listener ignores unknown machine codes. This script makes sure the
@@ -131,8 +131,9 @@ def main() -> int:
     print(f"  status: {row.get('statut')}")
     print("")
     print("Next step:")
-    print("  Start the live sender with this same machine code.")
-    print("  If the backend is already running, the first MQTT payload will refresh the machine cache automatically.")
+    print("  Start the backend, then warm the live runtime for this same machine code.")
+    print("  Example: python scripts/setup_real_machine_demo.py --machine-id ARO-01 --scenario surveillance")
+    print("  After that, start the relay-PC sender or the LabVIEW demo CSV replay.")
     return 0
 
 

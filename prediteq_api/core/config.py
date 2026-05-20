@@ -43,11 +43,11 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
     ADMIN_EMAIL: str = ""
-    DASHBOARD_URL: str = "https://prediteq-saas.vercel.app"
+    DASHBOARD_URL: str = "https://prediteq.aro-teq.com"
     SURFACE_DEMO_METADATA: bool | None = None
     SURFACE_DEMO_REFERENCE: bool | None = None
 
-    CORS_ORIGINS: str = "https://prediteq-saas.vercel.app"
+    CORS_ORIGINS: str = "https://prediteq.aro-teq.com,https://prediteq-saas.vercel.app"
 
     ML_DIR: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "prediteq_ml")

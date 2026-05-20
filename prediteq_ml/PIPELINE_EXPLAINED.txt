@@ -445,8 +445,8 @@ Technical:
 
   Why 4 profiles and why these? Because the ML model must generalize — if we
   only trained on linear degradation, it would fail to predict exponential or
-  stepwise failures. These 4 cover the most common patterns in industrial
-  reliability literature (Weibull, Paris' Law, discrete-event).
+  stepwise failures. These 4 cover the most common families of degradation
+  shapes encountered in industrial run-to-failure reasoning.
 
   SENSOR GENERATION FROM HI:
 
@@ -732,9 +732,9 @@ Non-technical:
 
   1. HI (Health Index): current health, between 0 and 1.
      - HI answers: "How healthy is the machine now?"
-  2. FPT (First Predicting Time): the moment when a numerical prognosis
+  2. Numerical-RUL display gate: the moment when a numerical prognosis
      becomes legitimate.
-     - In PrediTeq, FPT starts when HI drops below 0.80.
+     - In PrediTeq, this starts when HI drops below 0.80.
   3. RUL (Remaining Useful Life): predicted remaining life, once a precursor
      is present and enough history is available.
      - RUL answers: "If degradation continues like this, how much time is left?"
@@ -826,8 +826,8 @@ Technical:
   between CI_low and CI_high." Wide CI = high uncertainty (e.g. noisy profile D).
   Narrow CI = high confidence (e.g. linear profile A).
 
-  FPT GATE VS FAILURE THRESHOLD — DO NOT CONFUSE THEM:
-  - HI = 0.80 is the FPT gate:
+  DISPLAY GATE VS FAILURE THRESHOLD — DO NOT CONFUSE THEM:
+  - HI = 0.80 is the numerical-RUL display gate:
       above this threshold, no numerical RUL is shown to the operator.
   - HI = 0.30 is the critical threshold used to define the end-of-life target.
   - The 3-point persistence is a noise-robust confirmation rule.

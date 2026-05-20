@@ -19,6 +19,8 @@ Expected build behavior:
 - build: `npm run build`
 - output: `dist`
 - required production env: `VITE_API_URL=https://prediteq-saas.onrender.com`
+- public frontend preferred: `https://prediteq.aro-teq.com`
+- public frontend fallback: `https://prediteq-saas.vercel.app`
 
 ## Backend
 
@@ -31,8 +33,8 @@ Expected Render behavior from `render.yaml`:
 
 - build: `pip install -r prediteq_api/requirements.txt`
 - start: `cd prediteq_api && uvicorn main:app --host 0.0.0.0 --port $PORT`
-- required live alignment: `CORS_ORIGINS=https://prediteq-saas.vercel.app`
-- required live alignment: `DASHBOARD_URL=https://prediteq-saas.vercel.app`
+- required live alignment: `CORS_ORIGINS=https://prediteq.aro-teq.com,https://prediteq-saas.vercel.app`
+- required live alignment: `DASHBOARD_URL=https://prediteq.aro-teq.com`
 
 Important detail:
 

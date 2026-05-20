@@ -1,5 +1,5 @@
 """
-Boss-PC side sender for PrediTeq live ingestion.
+Relay-PC side sender for PrediTeq live ingestion.
 
 What it does:
     - reads sensor data from a simple local source
@@ -14,6 +14,7 @@ Source modes included:
 
 Example:
     cd prediteq_api
+    python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine reelle" --scenario surveillance
     python scripts/mqtt_bridge_sender.py --mode mock --machine-id ARO-01
 """
 
@@ -140,7 +141,7 @@ def _parse_args() -> argparse.Namespace:
     _load_env(_default_env_path())
 
     parser = argparse.ArgumentParser(
-        description="Send live sensor data from a boss PC to PrediTeq through MQTT or HTTP."
+        description="Send live sensor data from a client-side relay PC to PrediTeq through MQTT or HTTP."
     )
     parser.add_argument(
         "--mode",
@@ -225,7 +226,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-label",
-        default=os.environ.get("SOURCE_LABEL", "boss_pc_bridge"),
+        default=os.environ.get("SOURCE_LABEL", "site_bridge_pc"),
         help="Value stored in payload.source",
     )
     parser.add_argument(
@@ -258,7 +259,7 @@ def _read_csv_last_row(path: Path) -> dict:
 
 def read_from_custom_source() -> dict:
     """
-    Replace this function with the boss-PC real data reader.
+    Replace this function with the site relay-PC real data reader.
 
     Examples:
         - OPC UA read here

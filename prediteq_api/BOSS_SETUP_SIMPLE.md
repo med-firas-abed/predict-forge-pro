@@ -1,20 +1,23 @@
 # Simple Boss Setup
 
+Even if this filename says `BOSS`, the real architecture target is broader:
+this role can be played by any client-side relay PC chosen on site.
+
 This is the simple version of the real-data connection plan.
 
 Goal:
 
-- your boss laptop receives real values from LabVIEW / PLC
+- a client-side relay PC receives real values from LabVIEW / PLC
 - those values are sent to PrediTeq
 - PrediTeq calculates HI, machine state, diagnosis, alerts, and later RUL
 
 The path is:
 
-`LabVIEW / PLC -> boss laptop -> MQTT or HTTP -> PrediTeq backend -> frontend`
+`LabVIEW / PLC -> relay PC -> MQTT or HTTP -> PrediTeq backend -> frontend`
 
 ---
 
-## 1. What your boss must provide
+## 1. What the site team must provide
 
 PrediTeq needs these 4 live values at minimum:
 
@@ -41,7 +44,7 @@ Important:
 - if there is no `power_kw`, the current backend will not work correctly
 - if there is no `humidity_rh`, the current backend will not work correctly
 
-So the first question for your boss is:
+So the first question for the site team is:
 
 Can LabVIEW or the PLC export these 4 values every second?
 
@@ -51,7 +54,7 @@ Can LabVIEW or the PLC export these 4 values every second?
 
 The easiest method is this:
 
-1. LabVIEW writes the latest values into one file on the boss laptop
+1. LabVIEW writes the latest values into one file on the relay PC
 2. a small PrediTeq sender script reads that file
 3. the sender script sends the values to MQTT
 4. your backend receives them and calculates everything
@@ -75,7 +78,7 @@ Open terminal:
 
 ```powershell
 cd prediteq_api
-python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Boss Site"
+python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Bridge Site"
 ```
 
 You can replace `ARO-01` with the real machine code you want.
@@ -107,8 +110,8 @@ LIVE_INGEST_TOKEN=choose-a-long-random-token
 Important:
 
 - use a private MQTT broker
-- both laptops must be able to reach this broker
-- if you prefer HTTP instead of MQTT from the boss laptop, keep `LIVE_INGEST_TOKEN` and use `POST /ingest/live`
+- the backend host and the relay PC must both be able to reach this broker
+- if you prefer HTTP instead of MQTT from the relay PC, keep `LIVE_INGEST_TOKEN` and use `POST /ingest/live`
 
 ---
 
@@ -120,9 +123,29 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+### Step 4: prepare the real machine in the app before the live relay starts
+
+This is the smooth path for demos and first site tests:
+
+```powershell
+cd prediteq_api
+python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine reelle" --scenario surveillance
+```
+
+This helper:
+
+- creates or updates `ARO-01`
+- seeds one recent hour of realistic runtime history
+- makes HI, zone, calendar context and often RUL available sooner
+
+Important:
+
+- `ARO-01` still remains a real live-runtime machine
+- this bootstrap does not turn it into a simulator machine
+
 ---
 
-## 4. What your boss does on his laptop
+## 4. What the site relay PC does
 
 ### Step 1: install the small sender dependencies
 
@@ -190,7 +213,7 @@ SOURCE_JSON_PATH=C:\labview\prediteq_latest.json
 
 ### Step 3: first test without real PLC or LabVIEW
 
-Before using the real data, test the full path with fake data:
+Before using the real data, test the full path with demo data:
 
 ```powershell
 cd prediteq_api
@@ -200,6 +223,18 @@ python scripts/mqtt_bridge_sender.py --mode mock --machine-id ARO-01
 If this works, the network and MQTT path are okay.
 
 Only then switch to real data.
+
+If you want an intermediate LabVIEW-demo stage that already looks like the future
+LabVIEW / PLC CSV path, use the dedicated plan here:
+
+- `prediteq_api/LABVIEW_CSV_BRIDGE_DEMO.md`
+
+That staged demo path is:
+
+`template CSV -> LabVIEW demo writer -> mqtt_bridge_sender.py --mode csv-last-row -> PrediTeq`
+
+This is more realistic than plain `mock` mode because it already exercises the
+relay-PC CSV bridge.
 
 HTTP test version:
 
@@ -211,6 +246,19 @@ python scripts/mqtt_bridge_sender.py --transport http --http-url https://your-ba
 ---
 
 ### Step 4: run with the real file
+
+Temporary LabVIEW-demo option before the real file exists:
+
+```powershell
+cd prediteq_api
+python scripts/generate_labview_demo_csv.py --machine-id ARO-01 --scenario surveillance
+python scripts/replay_labview_demo_csv.py --input scripts/sample_data/ARO-01_labview_demo_template.csv --output C:\labview\prediteq_log.csv --interval 1.0
+python scripts/mqtt_bridge_sender.py --mode csv-last-row --machine-id ARO-01 --csv-path C:\labview\prediteq_log.csv
+```
+
+This uses a realistic LabVIEW demo CSV template, then replays it row by row into the
+same `csv-last-row` bridge path that the future real LabVIEW / PLC setup will
+use.
 
 If LabVIEW writes JSON:
 
@@ -335,7 +383,7 @@ That is normal.
 
 ## 8. Very important point about RUL
 
-Do not tell your boss:
+Do not tell the site team:
 
 - "RUL appears immediately"
 
@@ -345,28 +393,29 @@ Better wording:
 
 - live HI and machine state appear quickly
 - diagnosis and stress appear quickly
-- numerical RUL needs enough history first
+- raw live ingestion still needs history for a stable numerical RUL
 
-For the current backend, that means about:
+For a raw first connection, that means about:
 
 - 60 minutes of HI history
 
-So for the first real test, success means:
+For demos and rehearsals, [scripts/setup_real_machine_demo.py](./scripts/setup_real_machine_demo.py) preloads that recent history first.
 
-- live values arrive
-- HI starts changing
-- zone starts updating
+So for the smooth demo path, success means:
 
-If RUL is not shown in the first minutes, that is not a failure.
+- `ARO-01` exists in the app
+- HI and zone are already visible
+- the CSV relay continues on the same machine
+- calendar and RUL can appear much faster than with a cold start
 
 ---
 
-## 9. The exact simple discussion to have with your boss
+## 9. The exact simple discussion to have with the site team
 
 You can say:
 
 "We already have the backend side ready for live ingestion. The easiest way is:
-your laptop receives the real PLC/LabVIEW values, writes them to a JSON file
+one relay PC on your site receives the real PLC/LabVIEW values, writes them to a JSON file
 every second, and our small sender script sends them to PrediTeq through MQTT.
 For the current backend, I need these minimum live values: vibration RMS,
 power, temperature, and humidity. If you also have current, load, and status,
@@ -378,17 +427,17 @@ Then ask:
 2. If not, can it write a CSV row every second?
 3. Do you have these values:
    vibration RMS, power, temperature, humidity?
-4. Can your laptop connect to a private MQTT broker?
+4. Can the relay PC connect to a private MQTT broker?
 
 ---
 
-## 10. If your boss says "we only have PLC tags"
+## 10. If the site says "we only have PLC tags"
 
 That is okay.
 
 Then the next question is:
 
-- how can the boss laptop read those PLC tags?
+- how can the relay PC read those PLC tags?
 
 Possible answers:
 
@@ -444,7 +493,7 @@ Machine not created first in PrediTeq
 
 ### Blocker D
 
-MQTT broker not reachable from one of the laptops
+MQTT broker not reachable from the backend host or from the relay PC
 
 ### Blocker E
 

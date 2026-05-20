@@ -63,7 +63,7 @@ def _audience_label(audience: ReportAudience) -> str:
 
 
 class ReportRequest(BaseModel):
-    machine_id: str  # machine code (e.g. ASC-A1)
+    machine_id: str  # machine code (e.g. ARO-01 or ASC-A1)
     audience: ReportAudience = "dual"
 
 

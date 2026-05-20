@@ -79,14 +79,14 @@ TOOLS = [
             "description": (
                 "Récupère l'état actuel d'une machine: HI (indice de santé), RUL (durée de vie restante), "
                 "capteurs live, nombre d'alertes 24h, statut. "
-                "Utilise le code machine (ASC-A1, ASC-B2, ASC-C3)."
+                "Utilise le code machine (ex: ARO-01, ASC-A1, ASC-B2, ASC-C3)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "machine_code": {
                         "type": "string",
-                        "description": "Code machine (ex: ASC-A1, ASC-B2, ASC-C3)",
+                        "description": "Code machine (ex: ARO-01, ASC-A1, ASC-B2, ASC-C3)",
                     },
                 },
                 "required": ["machine_code"],
@@ -135,7 +135,7 @@ TOOLS = [
                 "properties": {
                     "machine_code": {
                         "type": "string",
-                        "description": "Code machine (ex: ASC-A1)",
+                        "description": "Code machine (ex: ARO-01 ou ASC-A1)",
                     },
                 },
                 "required": ["machine_code"],

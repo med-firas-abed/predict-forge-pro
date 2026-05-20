@@ -1,52 +1,69 @@
 PrediTeq Bridge Kit
 
 What this folder is:
-- a small clean bundle to copy by USB to a MacBook
+- a small clean bundle to copy by USB to any client-side relay PC
 - only the files needed to rehearse or send one CSV file to PrediTeq
 - it does NOT include prediteq_api/.env or backend secrets
 
-What the MacBook does:
+What the relay PC does:
 - reads a local CSV file
 - sends machine ARO-01 to MQTT
-- behaves like the final boss-side sender for v1
+- behaves like the final client-side bridge sender for v1
 
 What the PrediTeq platform does:
 - in local rehearsal, your Windows PC runs the backend and frontend
 - in production, Render and Vercel receive and display the data
 - in both cases, ARO-01 updates Machine reelle
 
+Public URLs to remember:
+- frontend preferred: https://prediteq.aro-teq.com
+- frontend fallback: https://prediteq-saas.vercel.app
+- backend public: https://prediteq-saas.onrender.com
+
 Files you should care about:
-- run_mac_fake_csv_rehearsal.sh
-- run_mac_real_csv.sh
+- run_windows_labview_demo.ps1
+- run_windows_real_csv.ps1
 - PREFERRED_LABVIEW_CSV_TEMPLATE.csv
 - BRIDGE_CONFIG_EXAMPLE.txt
+- optional compatibility wrappers:
+  run_mac_labview_demo.sh
+  run_mac_fake_csv_rehearsal.sh
+  run_mac_real_csv.sh
 
 Recommended production use:
 - copy BRIDGE_CONFIG_EXAMPLE.txt to BRIDGE_CONFIG.txt
 - fill BRIDGE_CONFIG.txt with your private MQTT broker values
-- the shell scripts will read BRIDGE_CONFIG.txt automatically
+- the Windows and shell scripts will read BRIDGE_CONFIG.txt automatically
 - for a low-cost continuous setup, start with PUBLISH_INTERVAL_S=5.0
-- then the MacBook only needs the real CSV command
+- then the relay PC only needs the real CSV command
 
-Typical use on the MacBook:
+Typical use on a Windows relay PC:
 
 1. Copy this whole folder to the Desktop
 
-2. Open Terminal in this folder
+2. Open PowerShell in this folder
 
-3. Make the two shell scripts executable:
+3. Start the LabVIEW demo CSV bridge:
 
-   chmod +x run_mac_fake_csv_rehearsal.sh run_mac_real_csv.sh
+   powershell -ExecutionPolicy Bypass -File .\run_windows_labview_demo.ps1
 
-4. Rehearsal with fake CSV:
+4. Real CSV mode later:
 
-   bash ./run_mac_fake_csv_rehearsal.sh
+   powershell -ExecutionPolicy Bypass -File .\run_windows_real_csv.ps1 "C:\absolute\path\to\real_labview_output.csv" -MachineId ARO-01
 
-   This starts:
-   - a fake CSV writer
-   - the MQTT sender
+Optional compatibility use on macOS or Linux remains available too:
 
-5. Real CSV mode:
+1. Open Terminal in this folder
+
+2. Make the shell scripts executable:
+
+   chmod +x run_mac_labview_demo.sh run_mac_real_csv.sh
+
+3. Run the LabVIEW demo CSV bridge:
+
+   bash ./run_mac_labview_demo.sh
+
+4. Real CSV mode:
 
    bash ./run_mac_real_csv.sh "/absolute/path/to/real_labview_output.csv" ARO-01
 
@@ -67,7 +84,7 @@ Example BRIDGE_CONFIG.txt:
    MQTT_USE_SSL=true
    MQTT_TOPIC=prediteq/{machine_id}/sensors
    PUBLISH_INTERVAL_S=5.0
-   SOURCE_LABEL=boss_macbook_csv
+   SOURCE_LABEL=site_bridge_pc
 
 Manual override example:
 
@@ -75,11 +92,11 @@ Manual override example:
    MQTT_PORT=8883 \
    MQTT_USER=your-user \
    MQTT_PASSWORD=your-password \
-   bash ./run_mac_fake_csv_rehearsal.sh
+   powershell -ExecutionPolicy Bypass -File .\run_windows_labview_demo.ps1
 
 Real CSV example:
 
-   bash ./run_mac_real_csv.sh "/absolute/path/to/real_labview_output.csv" ARO-01
+   powershell -ExecutionPolicy Bypass -File .\run_windows_real_csv.ps1 "C:\absolute\path\to\real_labview_output.csv" -MachineId ARO-01
 
 The real CSV script uses PUBLISH_INTERVAL_S from BRIDGE_CONFIG.txt.
 If you do not set it, the default real-data interval is 5 seconds.
@@ -87,14 +104,20 @@ If you do not set it, the default real-data interval is 5 seconds.
 Important:
 - use ARO-01 as the machine code
 - in the app, ARO-01 appears as Machine reelle
-- use fake data only with the public test broker
+- in real life, this role can be hosted on any relay PC chosen on the client site
+- the default real-world target is a standard site PC dedicated to receiving the LabVIEW / PLC CSV and forwarding it to PrediTeq
+- for the jury demo, the bridge simulates a client-side LabVIEW CSV source
+- use public-test/demo data only with the approved rehearsal broker
 - for local rehearsal, keep the backend and frontend running on your own PC
 - for production, point the bridge to your private broker and let Render/Vercel handle the app side
-- do NOT copy prediteq_api/.env to the MacBook
-- do NOT copy Supabase or backend secrets to the MacBook
+- do NOT copy prediteq_api/.env to the relay PC
+- do NOT copy Supabase or backend secrets to the relay PC
 
 If you want to review the expected CSV format:
 - open PREFERRED_LABVIEW_CSV_TEMPLATE.csv
+
+If you want the canonical repo CSV source too:
+- prediteq_api/scripts/sample_data/ARO-01_labview_demo_template.csv
 
 If you want to understand the bridge config:
 - open BRIDGE_CONFIG_EXAMPLE.txt

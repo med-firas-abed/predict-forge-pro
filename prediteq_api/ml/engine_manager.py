@@ -358,7 +358,7 @@ class EngineManager:
             self._sensor_counter[code] += 1
             if self._sensor_counter[code] % 300 == 0:
                 self._cycles_history[code].append((
-                    datetime.now(timezone.utc),
+                    observed_dt,
                     self._cycle_counts.get(code, 0),
                 ))
 
@@ -528,7 +528,9 @@ class EngineManager:
              accumulate in a 2-min run.
           2. Wall-clock 7-day rolling average from _cycles_history snapshots.
              Computed as (count_now - count_oldest_in_window) / days_elapsed.
-          3. None — when neither is available (machine just connected, < 1
+          3. Persisted cache fallback (cycles_avg_7j) loaded from Supabase
+             by startup/scheduler/bootstrap helpers.
+          4. None — when neither is available (machine just connected, < 1
              snapshot collected). The downstream rul_calibration layer will
              still publish the global synthetic timeline factor.
 
@@ -540,17 +542,20 @@ class EngineManager:
 
         # Path 2: wall-clock observation
         history = self._cycles_history.get(code)
-        if not history or len(history) < 2:
-            return None
+        if history and len(history) >= 2:
+            ts_old, count_old = history[0]
+            ts_new, count_new = history[-1]
+            elapsed = (ts_new - ts_old).total_seconds()
+            if elapsed >= 60.0:  # less than a minute of history → unreliable
+                delta_cycles = count_new - count_old
+                return float(delta_cycles) * 86400.0 / elapsed
 
-        ts_old, count_old = history[0]
-        ts_new, count_new = history[-1]
-        elapsed = (ts_new - ts_old).total_seconds()
-        if elapsed < 60.0:  # less than a minute of history → unreliable
+        # Path 3: persisted cache fallback (scheduler/bootstrap already loaded it)
+        m = self.machine_cache.get(code)
+        if not m:
             return None
-        delta_cycles = count_new - count_old
-        # Project to per-day rate (86 400 sec/day)
-        return float(delta_cycles) * 86400.0 / elapsed
+        v = m.get('cycles_avg_7j')
+        return float(v) if v is not None else None
 
     def get_power_avg_30j(self, code: str) -> float | None:
         """Reads 30-day average ascent power from machine_cache (kW).

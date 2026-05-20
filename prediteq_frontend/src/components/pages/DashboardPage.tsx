@@ -73,6 +73,7 @@ import {
   formatAudienceFeatureLabel,
   shortenAudienceAction,
 } from "@/lib/juryNarrative";
+import { getDefaultDashboardMachineId } from "@/lib/dashboardSelection";
 import { repairText } from "@/lib/repairText";
 import { buildRulDisplay } from "@/lib/rulDisplay";
 import { SIMULATOR_ROUTE } from "@/lib/simulator";
@@ -189,8 +190,12 @@ export function DashboardPage() {
   const machineCodes = useMemo(() => machines.map((machine) => machine.id), [machines]);
   const machineCodesKey = useMemo(() => machineCodes.join("|"), [machineCodes]);
   const requestedMachineId = searchParams.get("machine");
-  const defaultSelectedId =
-    rankedInsights[0]?.machine.id || machines[0]?.id || "";
+  const defaultSelectedId = useMemo(() => {
+    return getDefaultDashboardMachineId(
+      machines,
+      rankedInsights.map((insight) => insight.machine.id),
+    );
+  }, [machines, rankedInsights]);
   const selectedId =
     requestedMachineId && machines.some((machine) => machine.id === requestedMachineId)
       ? requestedMachineId

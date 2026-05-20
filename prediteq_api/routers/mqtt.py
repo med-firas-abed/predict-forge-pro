@@ -25,6 +25,23 @@ _connected = False
 _disconnecting = False
 
 
+def _allow_extreme_source(source: str | None) -> bool:
+    normalized = str(source or "").strip().lower()
+    if not normalized:
+        return False
+    return any(
+        hint in normalized
+        for hint in (
+            "labview",
+            "bridge_pc",
+            "site_bridge_pc",
+            "relay_pc",
+            "relay",
+            "plc_bridge",
+        )
+    )
+
+
 def _sanitize_client_id_fragment(value: str) -> str:
     collapsed = re.sub(r"[^a-zA-Z0-9_-]+", "-", value.strip()).strip("-_")
     return (collapsed or "host").lower()[:24]
@@ -116,7 +133,11 @@ async def _on_message(client, topic, payload, qos, properties):
                 machine_code,
             )
 
-        manager.ingest(machine_code, data)
+        manager.ingest(
+            machine_code,
+            data,
+            allow_extreme=_allow_extreme_source(data.get("source")),
+        )
     except json.JSONDecodeError:
         logger.warning("MQTT: invalid JSON payload on %s", topic)
     except Exception as exc:

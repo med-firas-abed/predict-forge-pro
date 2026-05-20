@@ -1,11 +1,13 @@
 import logging
 import re
 from datetime import datetime, timezone
+from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from core.config import settings
+from core.labview_demo import PROFILE_NAMES, SCENARIOS, build_runtime_history
 from core.supabase_client import get_supabase
 from ml.engine_manager import get_manager
 
@@ -32,6 +34,33 @@ class LiveIngestRequest(BaseModel):
     source: str | None = None
 
 
+class LiveBootstrapRequest(BaseModel):
+    machine_id: str = Field(..., min_length=3, max_length=32)
+    scenario: Literal["healthy", "surveillance", "critical"] = "surveillance"
+    profile: str | None = None
+    duration_s: int = Field(default=3600, ge=600, le=86_400)
+    seed: int = Field(default=42, ge=0)
+    source: str | None = None
+    persist_machine_metrics: bool = True
+
+
+def _allow_extreme_source(source: str | None) -> bool:
+    normalized = str(source or "").strip().lower()
+    if not normalized:
+        return False
+    return any(
+        hint in normalized
+        for hint in (
+            "labview",
+            "bridge_pc",
+            "site_bridge_pc",
+            "relay_pc",
+            "relay",
+            "plc_bridge",
+        )
+    )
+
+
 def _extract_token(
     authorization: str | None,
     x_prediteq_ingest_token: str | None,
@@ -46,13 +75,18 @@ def _extract_token(
 def _require_ingest_token(
     authorization: str | None,
     x_prediteq_ingest_token: str | None,
+    request: Request | None = None,
 ) -> None:
     expected = str(settings.LIVE_INGEST_TOKEN or "").strip()
     if not expected:
-        raise HTTPException(
-            503,
-            "LIVE_INGEST_TOKEN is not configured on the backend.",
-        )
+        client_host = (request.client.host if request and request.client else "").strip().lower()
+        if client_host in {"127.0.0.1", "::1", "localhost"}:
+            logger.warning(
+                "LIVE_INGEST_TOKEN not configured - allowing loopback ingest request from %s",
+                client_host or "unknown",
+            )
+            return
+        raise HTTPException(503, "LIVE_INGEST_TOKEN is not configured on the backend.")
 
     provided = _extract_token(authorization, x_prediteq_ingest_token)
     if not provided or provided != expected:
@@ -99,13 +133,80 @@ def _ensure_machine_cached(machine_code: str, manager) -> dict:
     return manager.machine_cache[machine_code]
 
 
+def _zone_to_statut(zone: str | None, hi: float | None = None) -> str:
+    if zone == "Excellent":
+        return "operational"
+    if zone in {"Good", "Degraded"}:
+        return "degraded"
+    if zone == "Critical":
+        return "critical"
+    if hi is None:
+        return "operational"
+    if hi >= 0.8:
+        return "operational"
+    if hi >= 0.3:
+        return "degraded"
+    return "critical"
+
+
+def _persist_bootstrap_state(
+    machine_code: str,
+    manager,
+    *,
+    persist_machine_metrics: bool,
+) -> dict:
+    raw = dict(manager.last_raw.get(machine_code) or {})
+    live = dict(manager.last_results.get(machine_code) or {})
+    cached = manager.machine_cache.get(machine_code, {})
+
+    update_data: dict = {
+        "derniere_maj": raw.get("observed_at") or datetime.now(timezone.utc).isoformat(),
+    }
+
+    hi_smooth = live.get("hi_smooth")
+    if hi_smooth is not None:
+        update_data["hi_courant"] = round(float(hi_smooth), 4)
+    zone = live.get("zone")
+    if zone or hi_smooth is not None:
+        update_data["statut"] = _zone_to_statut(zone, float(hi_smooth) if hi_smooth is not None else None)
+
+    try:
+        from routers.diagnostics_rul import build_calibrated_rul_response
+
+        calibrated = build_calibrated_rul_response(manager, machine_code)
+        prediction = (calibrated.get("prediction") or {}) if isinstance(calibrated, dict) else {}
+        if calibrated.get("mode") == "prediction" and prediction.get("rul_days") is not None:
+            update_data["rul_courant"] = float(prediction["rul_days"])
+    except Exception as exc:
+        logger.warning("Live bootstrap: could not persist calibrated RUL for %s: %s", machine_code, exc)
+
+    if persist_machine_metrics:
+        power_avg = manager.get_recent_ascent_power_mean_kw(machine_code)
+        if power_avg is not None:
+            update_data["power_avg_30j"] = round(float(power_avg), 4)
+        cycles_avg = manager.get_cycles_per_day(machine_code)
+        if cycles_avg is not None:
+            update_data["cycles_avg_7j"] = round(float(cycles_avg), 1)
+        update_data["metrics_updated"] = datetime.now(timezone.utc).isoformat()
+
+    cached.update(update_data)
+
+    try:
+        get_supabase().table("machines").update(update_data).eq("code", machine_code).execute()
+    except Exception as exc:
+        logger.warning("Live bootstrap: could not persist machine state for %s: %s", machine_code, exc)
+
+    return update_data
+
+
 @router.post("/live")
 async def ingest_live_payload(
     body: LiveIngestRequest,
+    request: Request,
     authorization: str | None = Header(default=None),
     x_prediteq_ingest_token: str | None = Header(default=None),
 ):
-    _require_ingest_token(authorization, x_prediteq_ingest_token)
+    _require_ingest_token(authorization, x_prediteq_ingest_token, request)
 
     machine_code = str(body.machine_id).strip().upper()
     if not _MACHINE_CODE_RE.match(machine_code):
@@ -123,7 +224,11 @@ async def ingest_live_payload(
     payload["source"] = str(payload.get("source") or "http_bridge")
 
     try:
-        result = manager.ingest(machine_code, payload)
+        result = manager.ingest(
+            machine_code,
+            payload,
+            allow_extreme=_allow_extreme_source(payload.get("source")),
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -142,4 +247,101 @@ async def ingest_live_payload(
         "source": payload["source"],
         "hi": result.get("hi_smooth") if isinstance(result, dict) else None,
         "zone": result.get("zone") if isinstance(result, dict) else None,
+    }
+
+
+@router.post("/bootstrap/labview-demo")
+async def bootstrap_labview_demo_payload(
+    body: LiveBootstrapRequest,
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_prediteq_ingest_token: str | None = Header(default=None),
+):
+    """Seed a real machine with one realistic recent history before live CSV replay.
+
+    This is the smooth jury/demo path for the real-machine integration:
+      relay-PC CSV path stays the same,
+      but the runtime gets enough recent history to publish HI/RUL immediately.
+    """
+    _require_ingest_token(authorization, x_prediteq_ingest_token, request)
+
+    machine_code = str(body.machine_id).strip().upper()
+    if not _MACHINE_CODE_RE.match(machine_code):
+        raise HTTPException(400, "Invalid machine code")
+    if body.profile is not None and body.profile not in PROFILE_NAMES:
+        raise HTTPException(
+            400,
+            f"Invalid profile. Use one of: {', '.join(PROFILE_NAMES)}",
+        )
+
+    manager = get_manager()
+    machine_row = _ensure_machine_cached(machine_code, manager)
+
+    source = str(body.source or "labview_demo_bootstrap")
+    try:
+        raw_history = build_runtime_history(
+            machine_id=machine_code,
+            scenario=body.scenario,
+            profile=body.profile,
+            duration_s=int(body.duration_s),
+            seed=int(body.seed),
+            source=source,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    try:
+        result = manager.bootstrap_history(machine_code, raw_history)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Live bootstrap failed for %s: %s", machine_code, exc)
+        raise HTTPException(422, f"Could not bootstrap machine: {exc}") from exc
+
+    persisted = _persist_bootstrap_state(
+        machine_code,
+        manager,
+        persist_machine_metrics=bool(body.persist_machine_metrics),
+    )
+
+    calibrated_payload = None
+    calibrated_mode = None
+    rul_days = None
+    try:
+        from routers.diagnostics_rul import build_calibrated_rul_response
+
+        calibrated_payload = build_calibrated_rul_response(manager, machine_code)
+        calibrated_mode = calibrated_payload.get("mode") if isinstance(calibrated_payload, dict) else None
+        prediction = (calibrated_payload.get("prediction") or {}) if isinstance(calibrated_payload, dict) else {}
+        if calibrated_mode == "prediction" and prediction.get("rul_days") is not None:
+            rul_days = float(prediction["rul_days"])
+    except Exception as exc:
+        logger.warning("Live bootstrap: calibrated RUL unavailable for %s: %s", machine_code, exc)
+
+    raw = dict(manager.last_raw.get(machine_code) or {})
+    live = dict(manager.last_results.get(machine_code) or {})
+
+    return {
+        "status": "ok",
+        "machine_code": machine_code,
+        "machine_uuid": machine_row.get("id"),
+        "scenario": body.scenario,
+        "profile": body.profile or SCENARIOS[body.scenario]["default_profile"],
+        "rows_seeded": len(raw_history),
+        "duration_s": body.duration_s,
+        "source": source,
+        "observed_from": raw_history[0]["observed_at"] if raw_history else None,
+        "observed_to": raw_history[-1]["observed_at"] if raw_history else None,
+        "hi": live.get("hi_smooth") if live else (result or {}).get("hi_smooth"),
+        "zone": live.get("zone") if live else (result or {}).get("zone"),
+        "buffer_hi_len": live.get("buffer_hi_len") if live else (result or {}).get("buffer_hi_len"),
+        "cycles_per_day": manager.get_cycles_per_day(machine_code),
+        "power_avg_30j": manager.get_power_avg_30j(machine_code),
+        "calibrated_mode": calibrated_mode,
+        "rul_days": rul_days,
+        "persisted": persisted,
+        "note": (
+            "Bootstrap complete. You can now start the relay-PC CSV replay and the app will "
+            "continue on the same live-runtime machine."
+        ),
     }

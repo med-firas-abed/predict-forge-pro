@@ -1,11 +1,11 @@
 # LabVIEW / PLC Real Data Integration
 
-This note is the practical handoff for connecting a boss-side LabVIEW/PLC setup
+This note is the practical handoff for connecting a client-side relay-PC LabVIEW/PLC setup
 to the current PrediTeq backend.
 
 ## Goal
 
-Send real telemetry from the boss laptop into PrediTeq so the backend can
+Send real telemetry from a client-side relay PC into PrediTeq so the backend can
 compute:
 
 - live HI
@@ -18,7 +18,7 @@ compute:
 
 The current live ingestion path is:
 
-`LabVIEW / PLC -> boss laptop bridge -> MQTT broker or HTTPS -> PrediTeq backend -> frontend`
+`LabVIEW / PLC -> relay PC bridge -> MQTT broker or HTTPS -> PrediTeq backend -> frontend`
 
 Important:
 
@@ -76,14 +76,14 @@ Right now, the live feature builder in `ml/engine_manager.py` uses:
 - temperature
 - humidity
 
-So if the boss setup cannot provide `power_kw` or `humidity_rh`, we have a real
+So if the client-side setup cannot provide `power_kw` or `humidity_rh`, we have a real
 integration gap to solve before production use.
 
 ## Recommended integration path
 
 ### Fastest path
 
-Use the boss laptop as the bridge machine:
+Use a relay PC as the bridge machine:
 
 1. LabVIEW or PLC writes the latest measurements locally
 2. `mqtt_bridge_sender.py` reads them
@@ -109,7 +109,7 @@ For a real site, the easiest options are:
 
 ## Recommended meeting decision
 
-Ask the boss to choose one of these three source shapes:
+Ask the client or site team to choose one of these three source shapes:
 
 1. `JSON file every second`
    Best if LabVIEW can overwrite one file with the latest values.
@@ -118,7 +118,7 @@ Ask the boss to choose one of these three source shapes:
    Best if LabVIEW naturally logs rows to disk.
 
 3. `Custom bridge read`
-   Best if the laptop exposes PLC values through OPC UA, Modbus TCP, SQL, or another local API.
+   Best if the relay PC exposes PLC values through OPC UA, Modbus TCP, SQL, or another local API.
 
 For a first real test, `JSON file every second` is usually the fastest.
 
@@ -132,7 +132,7 @@ Example:
 
 ```powershell
 cd prediteq_api
-python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Boss Site"
+python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Bridge Site"
 ```
 
 Rules:
@@ -158,7 +158,7 @@ Important:
 
 - use a private broker
 - do not leave the public demo broker setting
-- both laptops must be able to reach the same broker
+- the backend host and the relay PC must both be able to reach the same broker
 - firewall and network policy must allow this
 
 ### 3. Start or restart the backend
@@ -179,7 +179,7 @@ Check:
 - `/machines/ARO-01/sensors`
 - `/diagnostics/ARO-01/calibrated-rul`
 
-## What must be done on the boss laptop
+## What must be done on the relay PC
 
 ### 1. Install bridge dependencies
 
@@ -205,7 +205,7 @@ MQTT_USE_SSL=true
 MQTT_TOPIC=prediteq/{machine_id}/sensors
 PUBLISH_INTERVAL_S=1.0
 SOURCE_MODE=json-file
-SOURCE_LABEL=boss_pc_bridge
+SOURCE_LABEL=site_bridge_pc
 SOURCE_JSON_PATH=C:\\labview\\prediteq_latest.json
 ```
 
@@ -218,7 +218,7 @@ HTTP_INGEST_URL=https://your-backend/ingest/live
 HTTP_INGEST_TOKEN=choose-a-long-random-token
 PUBLISH_INTERVAL_S=1.0
 SOURCE_MODE=json-file
-SOURCE_LABEL=boss_pc_bridge
+SOURCE_LABEL=site_bridge_pc
 SOURCE_JSON_PATH=C:\\labview\\prediteq_latest.json
 ```
 
@@ -299,7 +299,7 @@ Current code behavior is closer to:
 - "HI and diagnostics appear quickly"
 - "numerical RUL appears after enough live history is accumulated"
 
-## Questions to ask the boss clearly
+## Questions to ask the site team clearly
 
 These are the most important questions.
 
@@ -326,8 +326,8 @@ These are the most important questions.
 
 ### Network questions
 
-- Can the boss laptop reach the MQTT broker?
-- Can your backend laptop reach the same broker?
+- Can the relay PC reach the MQTT broker?
+- Can the backend host reach the same broker?
 - Are ports like `8883` allowed by firewall or company IT?
 
 ## Real blockers you should mention early
@@ -376,7 +376,7 @@ The first real test is successful if all of these are true:
 
 ## Practical recommendation
 
-For the boss discussion, propose this exact sequence:
+For the site discussion, propose this exact sequence:
 
 1. agree on one real machine code
 2. agree on one bridge format: JSON file is preferred
@@ -385,7 +385,7 @@ For the boss discussion, propose this exact sequence:
 5. switch the sender to the real source
 6. only after live HI is stable, discuss any backend adaptation still needed
 
-## If the boss only has PLC tags and no easy export
+## If the site only has PLC tags and no easy export
 
 Then the next coding task should be:
 
@@ -399,5 +399,5 @@ and wire it to whichever local interface they actually expose:
 - local REST endpoint
 - LabVIEW shared file
 
-That is the right place to adapt to the boss environment without changing the
+That is the right place to adapt to the relay-PC environment without changing the
 core backend prediction path.

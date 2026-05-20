@@ -12,7 +12,7 @@ Contient les cinq briques d'amélioration documentées dans
     4. diagnose.diagnose                     — règles expertes (item 4)
     5. explain.explain_prediction            — attribution SHAP (item 5)
     6. stress.compute_stress_index           — index de stress composite
-    7. rul_calibration                       — couche FPT + rythme + L10 (v2)
+    7. rul_calibration                       — seuil d'affichage RUL + rythme + L10 (v2)
 
 Chaque sous-module est autonome : aucune modification des fichiers existants
 (step1…step7, config.py, prediteq_api/*, prediteq_frontend/*). L'intégration
@@ -65,7 +65,7 @@ from .rul_calibration import (
     CYCLES_PER_SIM_MIN,
     P_NOMINAL_KW,
     L10_NOMINAL_YEARS,
-    FPT_HI_THRESHOLD,
+    RUL_DISPLAY_HI_THRESHOLD,
     MAINTENANCE_WINDOW,
 )
 from . import disclaimers
@@ -85,9 +85,9 @@ __all__ = [
     "StressIndex",
     "StressBand",
     "StressComponents",
-    # RUL v2 calibration layer (FPT + observed rate + ISO 281)
+    # RUL v2 calibration layer (display gate + observed rate + ISO 281)
     # Note : INDUSTRY_TIME_MULTIPLIER retiré (v2.1) — incompatible avec le
-    # principe FPT « ne prédire que ce que le modèle a vu » (IEEE 1856-2017).
+    # principe « ne prédire que ce que le modèle a vu » (IEEE 1856-2017).
     "should_show_rul",
     "observed_factor",
     "convert_min_to_days",
@@ -104,7 +104,7 @@ __all__ = [
     "CYCLES_PER_SIM_MIN",
     "P_NOMINAL_KW",
     "L10_NOMINAL_YEARS",
-    "FPT_HI_THRESHOLD",
+    "RUL_DISPLAY_HI_THRESHOLD",
     "MAINTENANCE_WINDOW",
     "disclaimers",
 ]

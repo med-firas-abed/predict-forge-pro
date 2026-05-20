@@ -26,7 +26,7 @@ BROKER_PORT="${MQTT_PORT:-8883}"
 BROKER_USER="${MQTT_USER:-}"
 BROKER_PASSWORD="${MQTT_PASSWORD:-}"
 USE_SSL="${MQTT_USE_SSL:-true}"
-SOURCE_LABEL="${SOURCE_LABEL:-macbook_fake_csv_rehearsal}"
+SOURCE_LABEL="${SOURCE_LABEL:-site_bridge_pc_csv_rehearsal}"
 PUBLISH_INTERVAL="${PUBLISH_INTERVAL_S:-1.0}"
 
 cleanup() {

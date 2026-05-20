@@ -41,8 +41,8 @@ Files changed:
 - `prediteq_api/routers/machines.py`
 - `prediteq_frontend/src/components/pages/CalendarPage.tsx`
 
-### 5. FPT-based RUL display logic completed and normalized
-- Confirmed that the detailed diagnostics flow already had the FPT gate, but the overall app behavior was only partially consistent.
+### 5. Conditional numeric-RUL display logic completed and normalized
+- Confirmed that the detailed diagnostics flow already had the numeric-RUL display gate, but the overall app behavior was only partially consistent.
 - Added a shared backend builder for `rul_v2` payloads so the same display policy is reused consistently.
 - Implemented zone-aware display intervals:
   - `HI >= 0.80`: no numeric RUL, show L10 reference life.

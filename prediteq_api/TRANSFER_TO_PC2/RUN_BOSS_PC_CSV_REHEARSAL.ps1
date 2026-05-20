@@ -1,6 +1,6 @@
 param(
     [string]$MachineId = "ARO-01",
-    [string]$SourceLabel = "boss_pc_csv_rehearsal",
+    [string]$SourceLabel = "site_bridge_pc_csv_rehearsal",
     [string]$BrokerHost = "broker.emqx.io",
     [int]$BrokerPort = 8883,
     [bool]$UseSsl = $true,
@@ -112,8 +112,8 @@ if (-not $Once) {
 }
 
 Write-Host ""
-Write-Host "Starting boss-PC CSV rehearsal..."
-Write-Host "This simulates the future LabVIEW CSV path on this same PC."
+Write-Host "Starting relay-PC CSV rehearsal..."
+Write-Host "This simulates the future LabVIEW / PLC CSV path on this same relay PC."
 Write-Host "CSV file: $csvPath"
 Write-Host "Watch the PrediTeq app on PC1 for machine $MachineId."
 Write-Host ""

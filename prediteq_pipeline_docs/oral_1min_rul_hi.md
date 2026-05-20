@@ -40,7 +40,6 @@ reste sur une référence composant ou un état d'initialisation."
   Parce qu'avant la prédiction personnalisée, l'interface garde une référence
   statistique de durée de vie composant.
 
-- Et le terme FPT ?
-  C'est un ancien vocabulaire méthodologique pour désigner le moment où le
-  pronostic devient légitime. Dans l'application, on parle surtout des états
+- Et ce vocabulaire du moment où le pronostic devient légitime ?
+  Dans l'application, on parle surtout des états
   `reference_only`, `initializing` et `prediction`.

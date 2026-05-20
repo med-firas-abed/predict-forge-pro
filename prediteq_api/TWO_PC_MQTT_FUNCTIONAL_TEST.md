@@ -3,7 +3,7 @@
 This is the clean end-to-end functional test for PrediTeq using:
 
 - `PC1` = PrediTeq backend + frontend
-- `PC2` = external fake-data sender
+- `PC2` = external sender / future client-side relay PC
 
 Use this test when you want a proper proof that:
 
@@ -12,13 +12,14 @@ Use this test when you want a proper proof that:
 works correctly.
 
 This test is intentionally simple and uses fake data only.
+In the real deployment path, the `PC2` role can be played by any relay PC chosen by the client site team.
 
 ## What this test proves
 
 - an external computer can send telemetry to PrediTeq
 - the backend can ingest live MQTT messages
 - the app can display the target machine with live values
-- the MQTT architecture works before touching the boss PC
+- the MQTT architecture works before moving to the client relay PC
 
 ## What this test does NOT prove
 
@@ -256,8 +257,8 @@ Add this honest limit:
 
 The next clean order is:
 
-1. repeat the same test on the boss PC in `mock` mode
-2. confirm the boss PC can reach the same path
+1. repeat the same test on the client relay PC in `mock` mode
+2. confirm the client relay PC can reach the same path
 3. replace mock mode with the real CSV source
 4. validate:
 

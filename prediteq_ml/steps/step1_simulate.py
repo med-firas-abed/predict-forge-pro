@@ -211,8 +211,8 @@ def simulate_trajectory(traj_id, profile, load_kg):
     # ── Tirage du temps de défaillance avec variabilité ───────────────────
     # On tire un coefficient ∈ [0.75, 0.95] pour introduire une variabilité
     # inter-spécimens réaliste (machines identiques tombent en panne à des
-    # moments légèrement différents — analogue à la dispersion de Weibull
-    # observée en CMAPSS, β ∈ [0.6, 1.0] selon Saxena & Goebel 2008 §4).
+    # moments légèrement différents — même idée de dispersion que dans les
+    # benchmarks run-to-failure publics de type CMAPSS).
     # Bornes choisies pour que :
     #   - 0.95 max → toujours une marge de 5% pour observer la zone D
     #   - 0.75 min → trajectoires assez longues pour éviter les artefacts

@@ -1,16 +1,16 @@
 # Live MQTT Bridge
 
-This guide is the practical split between your work and your boss's work for
-real sensor ingestion into PrediTeq.
+This guide is the practical split between your work and the client-site relay
+PC work for real sensor ingestion into PrediTeq.
 
 ## Goal
 
-Send real sensor data from the boss PC to the PrediTeq backend so the backend
+Send real sensor data from a client-side relay PC to the PrediTeq backend so the backend
 computes live HI, diagnosis, stress, and RUL.
 
 Target flow:
 
-`boss PC -> MQTT broker or HTTPS -> PrediTeq backend -> frontend`
+`relay PC -> MQTT broker or HTTPS -> PrediTeq backend -> frontend`
 
 ## Files added for this
 
@@ -30,7 +30,7 @@ Example:
 
 ```powershell
 cd prediteq_api
-python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Boss Site"
+python scripts/register_machine.py ARO-01 --name "ARO Real Machine" --region "Bridge Site"
 ```
 
 Use a real code such as `ARO-01`. Do not reuse the demo codes.
@@ -71,7 +71,7 @@ Check:
 - `/machines` or `/machines/ARO-01` for `last_sensors`, `hi_courant`, and `rul_live`
 - `/machines/ARO-01/sensors` for sensor history
 
-## Boss part
+## Relay-PC part
 
 ### 1. Install the sender dependencies
 
@@ -95,10 +95,10 @@ MQTT_USE_SSL=true
 MQTT_TOPIC=prediteq/{machine_id}/sensors
 PUBLISH_INTERVAL_S=1.0
 SOURCE_MODE=mock
-SOURCE_LABEL=boss_pc_bridge
+SOURCE_LABEL=site_bridge_pc
 ```
 
-If the boss laptop should post directly to the backend instead of MQTT:
+If the relay PC should post directly to the backend instead of MQTT:
 
 ```env
 MACHINE_ID=ARO-01
@@ -107,7 +107,7 @@ HTTP_INGEST_URL=https://your-backend/ingest/live
 HTTP_INGEST_TOKEN=choose-a-long-random-token
 PUBLISH_INTERVAL_S=1.0
 SOURCE_MODE=mock
-SOURCE_LABEL=boss_pc_bridge
+SOURCE_LABEL=site_bridge_pc
 ```
 
 ### 3. First test without the real source
@@ -121,6 +121,15 @@ python scripts/mqtt_bridge_sender.py --mode mock --machine-id ARO-01
 
 This sends one message every second with test values so you can verify the full
 PrediTeq live path first.
+
+If you want a LabVIEW-demo stage that is already closer to the future LabVIEW / PLC
+architecture, use:
+
+- `prediteq_api/LABVIEW_CSV_BRIDGE_DEMO.md`
+
+That path keeps the real bridge shape:
+
+`template CSV -> LabVIEW demo writer -> csv-last-row sender -> MQTT / HTTP -> PrediTeq`
 
 HTTP version:
 
@@ -145,6 +154,15 @@ There are 3 simple options:
    Edit `read_from_custom_source()` in `scripts/mqtt_bridge_sender.py` for
    OPC UA, Modbus, SQL, or another local API.
 
+For the current LabVIEW demo path, the repo now also includes:
+
+- `scripts/generate_labview_demo_csv.py`
+- `scripts/replay_labview_demo_csv.py`
+- `scripts/sample_data/ARO-01_labview_demo_template.csv`
+
+These files let you rehearse the future relay-PC CSV path before the real
+LabVIEW / PLC writer is available.
+
 ## Expected payload
 
 Required fields:
@@ -168,7 +186,7 @@ Optional but useful:
 1. You create `ARO-01`
 2. You configure backend MQTT
 3. You restart the backend only if the MQTT config changed
-4. Your boss runs the sender in `mock` mode
+4. The relay PC runs the sender in `mock` mode
 5. You check `/health/detail`
 6. You check `/machines/ARO-01`
 7. You confirm `last_sensors` and live HI appear
@@ -176,7 +194,7 @@ Optional but useful:
 
 ## Real-source integration point
 
-If the boss PC already receives the real values in another app, the easiest
+If the relay PC already receives the real values in another app, the easiest
 integration is:
 
 - that app writes a JSON file or CSV file once per second

@@ -15,12 +15,12 @@ d'AFFICHER ou non un chiffre.
 TROIS TRANSFORMATIONS APPLIQUÉES (et SEULEMENT ces trois)
 ────────────────────────────────────────────────────────────────────────────
 
-1. **FPT gate** (`should_show_rul`)
+1. **Seuil d'affichage du RUL** (`should_show_rul`)
    Référence : IEEE Std 1856-2017 § 6.2 « Prognostics for Systems »,
                Lei et al. 2018 « Machinery health prognostics: a systematic
                review », Mech. Syst. Signal Process. 104:799-834.
    Principe : un pronostic chiffré n'est calculé QUE lorsqu'un précurseur
-   de défaillance est détecté. Avant ce point (FPT = First Predicting Time),
+   de défaillance est détecté. Avant ce point,
    on affiche la durée de vie statistique du composant (L10 — voir item 3).
    Notre seuil : HI ≥ 0.80 → pas de pronostic chiffré (zone Excellent
    ISO 10816-3 « neuf/remis à neuf »).
@@ -200,7 +200,7 @@ charge saine (= P_ASCENT_NOM_KW de config.py, 285 kg, HI=1.0).
 Sert de référence pour la cube law sur la puissance MOYENNE mesurée
 sur 30 j (proxy linéaire de la charge bearing équivalente)."""
 
-FPT_HI_THRESHOLD: float = 0.80
+RUL_DISPLAY_HI_THRESHOLD: float = 0.80
 """Seuil HI au-dessus duquel on ne publie PAS de pronostic chiffré.
 
 Aligné sur la frontière A/B d'ISO 10816-3 zone A (« neuf / remis à
@@ -208,7 +208,7 @@ neuf », v_RMS < 1.5 mm/s). La fonction `hi_to_rms` du simulateur
 (step1) mappe HI ≥ 0.8 → RMS [0.8, 1.5] mm/s ⇔ exactement zone A.
 Le seuil HI=0.80 est donc l'image directe de la frontière vibratoire.
 
-Référence: IEEE Std 1856-2017 § 6.2 (FPT-conditional prognosis)."""
+Référence: IEEE Std 1856-2017 § 6.2 (publication conditionnelle du pronostic)."""
 
 MIN_CYCLES_FOR_OBSERVED_RATE: float = 100.0
 """Constante conservée pour compatibilité d'appel avec l'ancienne API."""
@@ -292,8 +292,8 @@ class L10Result(TypedDict):
 # ─── Fonctions ──────────────────────────────────────────────────────────────
 
 def should_show_rul(hi: Optional[float],
-                    threshold: float = FPT_HI_THRESHOLD) -> bool:
-    """First Predicting Time — décide si un pronostic chiffré doit être affiché.
+                    threshold: float = RUL_DISPLAY_HI_THRESHOLD) -> bool:
+    """Décide si un pronostic chiffré doit être affiché.
 
     Args:
         hi: Health Index courant ∈ [0, 1], ou None si indisponible.
@@ -448,7 +448,7 @@ def _self_test() -> None:
     """Vérifications de cohérence sur les 3 scénarios machines de démo +
     cas limites. Lève AssertionError si une logique est cassée."""
 
-    # 1. FPT gate
+    # 1. Seuil d'affichage du RUL
     assert should_show_rul(0.92) is False, "ASC-A1 healthy → hide RUL"
     assert should_show_rul(0.68) is True,  "ASC-B2 onset → show RUL"
     assert should_show_rul(0.22) is True,  "ASC-C3 critical → show RUL"

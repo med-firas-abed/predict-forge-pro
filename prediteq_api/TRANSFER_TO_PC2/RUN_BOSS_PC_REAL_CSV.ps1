@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CsvPath,
     [string]$MachineId = "ARO-01",
-    [string]$SourceLabel = "boss_pc_csv",
+    [string]$SourceLabel = "site_bridge_pc_real_csv",
     [string]$BrokerHost = "broker.emqx.io",
     [int]$BrokerPort = 8883,
     [string]$BrokerUser = "",
