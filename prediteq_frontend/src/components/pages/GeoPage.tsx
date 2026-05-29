@@ -38,7 +38,7 @@ export function GeoPage() {
     const ranking = [...insights].sort((left, right) => right.urgencyScore - left.urgencyScore);
 
     return {
-      ranking: ranking.slice(0, 3),
+      ranking,
     };
   }, [insights]);
 
@@ -116,7 +116,7 @@ export function GeoPage() {
         onMachineSelect={setFocusedMachineId}
       />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {predictiveStats.ranking.map((insight, index) => (
           <button
             key={insight.machine.id}

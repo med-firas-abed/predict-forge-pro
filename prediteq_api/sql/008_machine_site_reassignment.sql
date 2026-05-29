@@ -25,10 +25,10 @@ INSERT INTO machines (
 )
 VALUES (
   'ARO-01',
-  'Machine reelle',
+  'Machine AroTeq',
   'Ben Arous',
-  36.7538,
-  10.2271,
+  36.7537,
+  10.2189,
   'Usine Aroteq - Ben Arous',
   'operational',
   1.0,

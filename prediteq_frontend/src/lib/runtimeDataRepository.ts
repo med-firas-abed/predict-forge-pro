@@ -2,6 +2,20 @@ import type { Machine } from "@/data/machines";
 import { apiFetch } from "@/lib/api";
 import { shouldAllowSupabaseFallback } from "@/lib/appMode";
 import { repairText } from "@/lib/repairText";
+import {
+  flushPendingTaskQueue as flushPendingTaskQueueInternal,
+  getPendingTaskQueueCount as getPendingTaskQueueCountInternal,
+  hasLocallyQueuedTask,
+  mergeQueuedTasks,
+  queueCreateTask,
+  queueDeleteTask,
+  queueUpdateTask,
+  queueUpdateTaskStatus,
+  readTaskCache,
+  TASK_QUEUE_EVENT_NAME as TASK_QUEUE_EVENT_NAME_INTERNAL,
+  writeTaskCache,
+} from "@/lib/runtimeTaskQueue";
+import type { TaskMutationResult } from "@/lib/runtimeTaskQueue";
 import { supabase } from "@/lib/supabase";
 
 export interface Alerte {
@@ -98,12 +112,93 @@ const REVERSE_STATUT: Record<string, string> = {
   maintenance: "maintenance",
 };
 
+export { TASK_QUEUE_EVENT_NAME_INTERNAL as TASK_QUEUE_EVENT_NAME };
+export type {
+  TaskMutationResult,
+  TaskQueueFlushResult,
+} from "@/lib/runtimeTaskQueue";
+
 function warnApiFallback(scope: string, error: unknown) {
   console.warn(`[runtimeDataRepository] ${scope} API failed, falling back to Supabase`, error);
 }
 
 function shouldFallbackToSupabase() {
   return shouldAllowSupabaseFallback();
+}
+
+function filterTasks(tasks: GmaoTache[], machineId?: string) {
+  if (!machineId) return tasks;
+  return tasks.filter((task) => task.machineId === machineId);
+}
+
+async function runTaskMutationWithFallback(
+  scope: string,
+  apiAction: () => Promise<void>,
+  supabaseAction: () => Promise<void>,
+): Promise<TaskMutationResult> {
+  try {
+    await apiAction();
+    return { mode: "api" };
+  } catch (error) {
+    if (!shouldFallbackToSupabase()) {
+      throw error;
+    }
+
+    warnApiFallback(scope, error);
+    await supabaseAction();
+    return { mode: "supabase" };
+  }
+}
+
+async function createGmaoTacheDirect(input: GmaoTacheCreateInput) {
+  return runTaskMutationWithFallback(
+    "createGmaoTache",
+    async () => {
+      await apiFetch("/runtime-data/tasks", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async () => {
+      const { error } = await supabase.from("gmao_taches").insert(input);
+      if (error) throw error;
+    },
+  );
+}
+
+async function updateGmaoTacheDirect(
+  input: GmaoTacheUpdateInput,
+): Promise<TaskMutationResult> {
+  const { id, ...fields } = input;
+
+  return runTaskMutationWithFallback(
+    "updateGmaoTache",
+    async () => {
+      await apiFetch(`/runtime-data/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(fields),
+      });
+    },
+    async () => {
+      const { error } = await supabase.from("gmao_taches").update(fields).eq("id", id);
+      if (error) throw error;
+    },
+  );
+}
+
+async function deleteGmaoTacheDirect(
+  id: string,
+): Promise<TaskMutationResult> {
+  return runTaskMutationWithFallback(
+    "deleteGmaoTache",
+    async () => {
+      await apiFetch(`/runtime-data/tasks/${id}`, { method: "DELETE" });
+    },
+    async () => {
+      const { error } = await supabase.from("gmao_taches").delete().eq("id", id);
+      if (error) throw error;
+    },
+  );
 }
 
 function mapAlerte(row: Record<string, unknown>): Alerte {
@@ -338,84 +433,116 @@ export async function listGmaoTaches(machineId?: string): Promise<GmaoTache[]> {
     if (machineId) params.set("machine_id", machineId);
     const path = params.size > 0 ? `/runtime-data/tasks?${params.toString()}` : "/runtime-data/tasks";
     const data = await apiFetch<Record<string, unknown>[]>(path);
-    return (data ?? []).map(mapTache);
+    const tasks = (data ?? []).map(mapTache);
+    writeTaskCache(tasks, machineId);
+    return mergeQueuedTasks(tasks, machineId);
   } catch (error) {
-    if (!shouldFallbackToSupabase()) throw error;
-    warnApiFallback("listGmaoTaches", error);
+    if (shouldFallbackToSupabase()) {
+      warnApiFallback("listGmaoTaches", error);
 
-    let query = supabase
-      .from("gmao_taches")
-      .select("*, machines(code)")
-      .order("created_at", { ascending: false });
+      try {
+        let query = supabase
+          .from("gmao_taches")
+          .select("*, machines(code)")
+          .order("created_at", { ascending: false });
 
-    if (machineId) {
-      query = query.eq("machine_id", machineId);
+        if (machineId) {
+          query = query.eq("machine_id", machineId);
+        }
+
+        const { data, error: fallbackError } = await query;
+        if (fallbackError) throw fallbackError;
+        const tasks = (data ?? []).map((row) => mapTache(row as Record<string, unknown>));
+        writeTaskCache(tasks, machineId);
+        return mergeQueuedTasks(tasks, machineId);
+      } catch (fallbackError) {
+        console.warn("[runtimeDataRepository] listGmaoTaches Supabase fallback failed:", fallbackError);
+      }
     }
 
-    const { data, error: fallbackError } = await query;
-    if (fallbackError) throw fallbackError;
-    return (data ?? []).map((row) => mapTache(row as Record<string, unknown>));
+    const cached = filterTasks(readTaskCache(machineId), machineId);
+    const merged = mergeQueuedTasks(cached, machineId);
+    if (merged.length > 0 || getPendingTaskQueueCountInternal() > 0) {
+      return merged;
+    }
+
+    throw error;
   }
 }
 
-export async function createGmaoTache(input: GmaoTacheCreateInput): Promise<void> {
+export async function createGmaoTache(
+  input: GmaoTacheCreateInput,
+): Promise<TaskMutationResult> {
   try {
-    await apiFetch("/runtime-data/tasks", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+    return await createGmaoTacheDirect(input);
   } catch (error) {
-    if (!shouldFallbackToSupabase()) throw error;
-    warnApiFallback("createGmaoTache", error);
-    const { error: fallbackError } = await supabase.from("gmao_taches").insert(input);
-    if (fallbackError) throw fallbackError;
+    console.warn("[runtimeDataRepository] createGmaoTache queued locally:", error);
+    return queueCreateTask(input);
   }
 }
 
 export async function updateGmaoTacheStatut(
   id: string,
   statut: TacheStatut,
-): Promise<void> {
+): Promise<TaskMutationResult> {
+  if (hasLocallyQueuedTask(id)) {
+    return queueUpdateTaskStatus(id, statut);
+  }
+
   try {
-    await apiFetch(`/runtime-data/tasks/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ statut }),
-    });
+    return await updateGmaoTacheDirect({ id, statut });
   } catch (error) {
-    if (!shouldFallbackToSupabase()) throw error;
-    warnApiFallback("updateGmaoTacheStatut", error);
-    const { error: fallbackError } = await supabase
-      .from("gmao_taches")
-      .update({ statut })
-      .eq("id", id);
-    if (fallbackError) throw fallbackError;
+    console.warn("[runtimeDataRepository] updateGmaoTacheStatut queued locally:", error);
+    return queueUpdateTaskStatus(id, statut);
   }
 }
 
-export async function updateGmaoTache(input: GmaoTacheUpdateInput): Promise<void> {
-  const { id, ...fields } = input;
+export async function updateGmaoTache(
+  input: GmaoTacheUpdateInput,
+): Promise<TaskMutationResult> {
+  if (hasLocallyQueuedTask(input.id)) {
+    return queueUpdateTask(input);
+  }
+
   try {
-    await apiFetch(`/runtime-data/tasks/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(fields),
-    });
+    return await updateGmaoTacheDirect(input);
   } catch (error) {
-    if (!shouldFallbackToSupabase()) throw error;
-    warnApiFallback("updateGmaoTache", error);
-    const { error: fallbackError } = await supabase.from("gmao_taches").update(fields).eq("id", id);
-    if (fallbackError) throw fallbackError;
+    console.warn("[runtimeDataRepository] updateGmaoTache queued locally:", error);
+    return queueUpdateTask(input);
   }
 }
 
-export async function deleteGmaoTache(id: string): Promise<void> {
-  try {
-    await apiFetch(`/runtime-data/tasks/${id}`, { method: "DELETE" });
-  } catch (error) {
-    if (!shouldFallbackToSupabase()) throw error;
-    warnApiFallback("deleteGmaoTache", error);
-    const { error: fallbackError } = await supabase.from("gmao_taches").delete().eq("id", id);
-    if (fallbackError) throw fallbackError;
+export async function deleteGmaoTache(
+  id: string,
+): Promise<TaskMutationResult> {
+  if (hasLocallyQueuedTask(id)) {
+    return queueDeleteTask(id);
   }
+
+  try {
+    return await deleteGmaoTacheDirect(id);
+  } catch (error) {
+    console.warn("[runtimeDataRepository] deleteGmaoTache queued locally:", error);
+    return queueDeleteTask(id);
+  }
+}
+
+export function getPendingTaskQueueCount() {
+  return getPendingTaskQueueCountInternal();
+}
+
+export async function flushPendingTaskQueue() {
+  return flushPendingTaskQueueInternal({
+    create: async (input) => {
+      await createGmaoTacheDirect(input);
+    },
+    update: async (input) => {
+      await updateGmaoTacheDirect(input);
+    },
+    delete: async (id) => {
+      await deleteGmaoTacheDirect(id);
+    },
+  });
 }
 
 export function subscribeToMachineChanges(onChange: () => void): () => void {

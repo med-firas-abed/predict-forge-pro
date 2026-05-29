@@ -1,8 +1,4 @@
 import type { Machine } from "@/data/machines";
-import {
-  getMachineDemoReferenceDays,
-  shouldSurfaceDemoReference,
-} from "@/lib/demoScenario";
 
 type Localize = (fr: string, en: string, ar: string) => string;
 
@@ -21,9 +17,9 @@ export interface RulDisplayState {
   sub: string;
   source:
     | "prediction"
+    | "reference_projection"
     | "reference_lifetime"
     | "cached_prediction"
-    | "demo_reference"
     | "initializing";
   isReference: boolean;
 }
@@ -36,15 +32,6 @@ function formatDays(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function getDemoReferenceDays(
-  machine?: Machine | null,
-  allowDemoReference = shouldSurfaceDemoReference(),
-) {
-  if (!allowDemoReference) return null;
-  const referenceDays = getMachineDemoReferenceDays(machine);
-  return isFiniteNumber(referenceDays) ? referenceDays : null;
-}
-
 export function buildRulDisplay({
   machine,
   predictionMode,
@@ -52,7 +39,6 @@ export function buildRulDisplay({
   referenceLifetimeYears,
   referenceDays,
   localize,
-  allowDemoReference = shouldSurfaceDemoReference(),
 }: {
   machine?: Machine | null;
   predictionMode?: Machine["rulMode"] | null;
@@ -60,9 +46,15 @@ export function buildRulDisplay({
   referenceLifetimeYears?: number | null;
   referenceDays?: number | null;
   localize: Localize;
-  allowDemoReference?: boolean;
 }): RulDisplayState {
   const dayUnit = localize("j", "d", "ي");
+  const pipelineReferenceDays =
+    isFiniteNumber(referenceDays)
+      ? referenceDays
+      : isFiniteNumber(machine?.rulReferenceDays)
+        ? machine.rulReferenceDays
+        : null;
+  const hasLastValidReference = machine?.rulReferenceKind === "last_valid";
 
   if (predictionMode === "prediction" && isFiniteNumber(prediction?.rul_days)) {
     const intervalLow = prediction?.rul_days_display_low ?? prediction?.rul_days_p10;
@@ -75,39 +67,55 @@ export function buildRulDisplay({
         isFiniteNumber(intervalLow) && isFiniteNumber(intervalHigh)
           ? `${intervalLabel}: ${formatDays(intervalLow)}-${formatDays(intervalHigh)} ${dayUnit}${
               prediction?.stop_recommended
-                ? ` - ${localize("Arrêt recommandé", "Recommended stop", "يوصى بالتوقف")}`
+                ? ` - ${localize("Arrêt recommandé", "Recommended stop", "يُوصى بالتوقف")}`
                 : ""
             }`
           : localize(
-              "Prédiction live issue du modèle ML",
-              "Live ML prediction",
-              "تنبؤ حي صادر عن نموذج التعلم الآلي",
+              "Prédiction live issue du modèle ML.",
+              "Live ML prediction.",
+              "تنبؤ حي صادر عن نموذج التعلم الآلي.",
             ),
       source: "prediction",
       isReference: false,
     };
   }
 
-  if (predictionMode === "reference_only") {
-    const referenceYears =
-      referenceLifetimeYears ?? machine?.referenceLifetimeYears;
+  if (predictionMode === "reference_only" && isFiniteNumber(pipelineReferenceDays)) {
     return {
-      value:
-        isFiniteNumber(referenceYears)
-          ? `${formatDays(referenceYears)} ${localize("a", "y", "س")}`
-          : localize("Ref. stable", "Stable ref.", "Stable ref."),
-      sub:
-        isFiniteNumber(referenceYears)
-          ? localize(
-              `Référence stable de durée de vie : ${formatDays(referenceYears)} ans`,
-              `Stable lifetime reference: ${formatDays(referenceYears)} years`,
-              `Stable lifetime reference: ${formatDays(referenceYears)} years`,
-            )
-          : localize(
-              "Référence stable de durée de vie",
-              "Stable lifetime reference",
-              "Stable lifetime reference",
-            ),
+      value: `~${formatDays(pipelineReferenceDays)} ${dayUnit}`,
+      sub: hasLastValidReference
+        ? localize(
+            "Dernière prédiction valide en attente du flux live.",
+            "Last valid prediction while the live stream resumes.",
+            "آخر تنبؤ صالح بانتظار عودة التدفق الحي.",
+          )
+        : localize(
+            "Repère ML conservé en attendant un RUL live fiable.",
+            "ML reference kept while waiting for a reliable live RUL.",
+            "تم الاحتفاظ بمرجع النموذج إلى حين توفر RUL حي موثوق.",
+          ),
+      source: "reference_projection",
+      isReference: true,
+    };
+  }
+
+  if (predictionMode === "reference_only") {
+    const referenceYears = referenceLifetimeYears ?? machine?.referenceLifetimeYears;
+    return {
+      value: isFiniteNumber(referenceYears)
+        ? `${formatDays(referenceYears)} ${localize("a", "y", "س")}`
+        : localize("Réf. stable", "Stable ref.", "مرجع ثابت"),
+      sub: isFiniteNumber(referenceYears)
+        ? localize(
+            `Référence stable de durée de vie : ${formatDays(referenceYears)} ans.`,
+            `Stable lifetime reference: ${formatDays(referenceYears)} years.`,
+            `مرجع ثابت لعمر الخدمة: ${formatDays(referenceYears)} سنة.`,
+          )
+        : localize(
+            "Référence stable de durée de vie.",
+            "Stable lifetime reference.",
+            "مرجع ثابت لعمر الخدمة.",
+          ),
       source: "reference_lifetime",
       isReference: true,
     };
@@ -116,34 +124,31 @@ export function buildRulDisplay({
   if (isFiniteNumber(machine?.rul)) {
     return {
       value: `${formatDays(machine.rul)} ${dayUnit}`,
-      sub:
-        isFiniteNumber(machine?.rulci)
-          ? localize(
-              `Dernière prédiction valide +/- ${formatDays(machine.rulci)} ${dayUnit}`,
-              `Last valid prediction +/- ${formatDays(machine.rulci)} ${dayUnit}`,
-              `اخر تنبؤ صالح +/- ${formatDays(machine.rulci)} ${dayUnit}`,
-            )
-          : localize(
-              "Dernière prédiction valide - actualisation en cours",
-              "Last valid prediction - refresh in progress",
-              "اخر تنبؤ صالح - التحديث جار",
-            ),
+      sub: isFiniteNumber(machine?.rulci)
+        ? localize(
+            `Dernière prédiction valide +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
+            `Last valid prediction +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
+            `آخر تنبؤ صالح +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
+          )
+        : localize(
+            "Dernière prédiction valide - actualisation en cours.",
+            "Last valid prediction - refresh in progress.",
+            "آخر تنبؤ صالح - التحديث جار.",
+          ),
       source: "cached_prediction",
       isReference: true,
     };
   }
 
-  const demoReferenceDays =
-    referenceDays ?? getDemoReferenceDays(machine, allowDemoReference);
-  if (isFiniteNumber(demoReferenceDays)) {
+  if (isFiniteNumber(pipelineReferenceDays)) {
     return {
-      value: `${formatDays(demoReferenceDays)} ${dayUnit}`,
+      value: `~${formatDays(pipelineReferenceDays)} ${dayUnit}`,
       sub: localize(
-        "Référence démo en attente du RUL live",
-        "Demo reference while the live RUL initializes",
-        "مرجع العرض في انتظار جاهزية العمر المتبقي الحي",
+        "Repère ML provisoire en attendant une lecture live exploitable.",
+        "Temporary ML reference while waiting for a usable live reading.",
+        "مرجع مؤقت من النموذج بانتظار قراءة حية قابلة للاستخدام.",
       ),
-      source: "demo_reference",
+      source: "reference_projection",
       isReference: true,
     };
   }
@@ -153,7 +158,7 @@ export function buildRulDisplay({
     sub: localize(
       "Le pipeline collecte encore assez d'historique pour publier un RUL live fiable.",
       "The pipeline is still collecting enough history before publishing a reliable live RUL.",
-      "لا يزال المسار يجمع ما يكفي من السجل قبل نشر عمر متبق حي موثوق",
+      "لا يزال المسار يجمع ما يكفي من السجل قبل نشر عمر متبقٍ حي موثوق.",
     ),
     source: "initializing",
     isReference: true,

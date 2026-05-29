@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { BellRing, Plus, ChevronRight, Globe, Palette, Trash2, UserCheck, UserX, Users } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,7 @@ export function AdminPage() {
     refreshUsers,
   } = useAuth();
   const navigate = useNavigate();
+  const dateLocale = lang === "en" ? "en-US" : "fr-FR";
 
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
@@ -62,46 +63,46 @@ export function AdminPage() {
     });
   };
 
-  // Combien d'admins approuvés restent ? Sert à griser le bouton "Supprimer"
-  // pour le DERNIER admin restant (impossible de tout supprimer côté UI, et
-  // côté backend l'endpoint répondrait 409 de toute façon — voir auth.py).
+  // Combien d'admins approuvÃ©s restent ? Sert Ã  griser le bouton "Supprimer"
+  // pour le DERNIER admin restant (impossible de tout supprimer cÃ´tÃ© UI, et
+  // cÃ´tÃ© backend l'endpoint rÃ©pondrait 409 de toute faÃ§on â€” voir auth.py).
   const approvedAdminCount = allUsers.filter(
     u => u.role === "admin" && u.status === "approved",
   ).length;
 
-  // Wrapper avec confirmation native — évite les suppressions accidentelles.
-  // (Pas de modal personnalisée pour rester simple ; la confirm() est suffisante
-  // pour une action peu fréquente et critique.)
+  // Wrapper avec confirmation native â€” Ã©vite les suppressions accidentelles.
+  // (Pas de modal personnalisÃ©e pour rester simple ; la confirm() est suffisante
+  // pour une action peu frÃ©quente et critique.)
   const handleDelete = async (userId: string, userName: string, userRole: string, userStatus: string) => {
     const isLastAdmin = userRole === "admin" && userStatus === "approved" && approvedAdminCount <= 1;
     if (isLastAdmin) {
       toast.error(l(
         "Impossible de supprimer le dernier administrateur.",
         "Cannot delete the last administrator.",
-        "لا يمكن حذف آخر مسؤول.",
+        "Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø­Ø°Ù Ø¢Ø®Ø± Ù…Ø³Ø¤ÙˆÙ„.",
       ));
       return;
     }
     const confirmed = window.confirm(
       l(
-        `Supprimer définitivement ${userName} ? Cette action est irréversible.`,
+        `Supprimer dÃ©finitivement ${userName} ? Cette action est irrÃ©versible.`,
         `Permanently delete ${userName}? This action cannot be undone.`,
-        `حذف ${userName} نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.`,
+        `Ø­Ø°Ù ${userName} Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ØŸ Ù‡Ø°Ø§ Ø§Ù„Ø¥Ø¬Ø±Ø§Ø¡ Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„ØªØ±Ø§Ø¬Ø¹ Ø¹Ù†Ù‡.`,
       ),
     );
     if (!confirmed) return;
     try {
       await deleteUser(userId);
       await loadAdminContext();
-      toast.success(l("Compte supprimé", "Account deleted", "تم حذف الحساب"));
+      toast.success(l("Compte supprimÃ©", "Account deleted", "ØªÙ… Ø­Ø°Ù Ø§Ù„Ø­Ø³Ø§Ø¨"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : l("Erreur lors de la suppression", "Error during deletion", "خطأ أثناء الحذف"));
+      toast.error(err instanceof Error ? err.message : l("Erreur lors de la suppression", "Error during deletion", "Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„Ø­Ø°Ù"));
     }
   };
 
   const ADMIN_TABS = [
-    { id: "comptes", label: l("Gestion des comptes", "Account Management", "إدارة الحسابات") },
-    { id: "parametres", label: l("Paramètres", "Settings", "الإعدادات") },
+    { id: "comptes", label: l("Gestion des comptes", "Account Management", "Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª") },
+    { id: "parametres", label: l("ParamÃ¨tres", "Settings", "Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª") },
   ];
 
   const [activeTab, setActiveTab] = useState("comptes");
@@ -128,10 +129,10 @@ export function AdminPage() {
       toast.error(
         repairText(
           lang === "fr"
-            ? "Impossible de charger le rattachement machine et l'aperçu des destinataires."
+            ? "Impossible de charger le rattachement machine et l'aperÃ§u des destinataires."
             : lang === "en"
               ? "Could not load machine assignment and recipient preview."
-              : "تعذر تحميل ربط الآلات ومعاينة المستلمين.",
+              : "ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø±Ø¨Ø· Ø§Ù„Ø¢Ù„Ø§Øª ÙˆÙ…Ø¹Ø§ÙŠÙ†Ø© Ø§Ù„Ù…Ø³ØªÙ„Ù…ÙŠÙ†.",
         ),
       );
     }
@@ -150,16 +151,16 @@ export function AdminPage() {
       toast.error(l(
         "Choisissez d'abord une machine.",
         "Choose a machine first.",
-        "اختر آلة أولاً.",
+        "Ø§Ø®ØªØ± Ø¢Ù„Ø© Ø£ÙˆÙ„Ø§Ù‹.",
       ));
       return;
     }
 
     if (nextMachineId === currentMachineId) {
       toast.message(l(
-        "Cette machine est déjà affectée à cet utilisateur.",
+        "Cette machine est dÃ©jÃ  affectÃ©e Ã  cet utilisateur.",
         "This machine is already assigned to this user.",
-        "هذه الآلة مرتبطة بالفعل بهذا المستخدم.",
+        "Ù‡Ø°Ù‡ Ø§Ù„Ø¢Ù„Ø© Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ø§Ù„ÙØ¹Ù„ Ø¨Ù‡Ø°Ø§ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù….",
       ));
       return;
     }
@@ -169,15 +170,15 @@ export function AdminPage() {
       await reassignUserMachine(userId, nextMachineId);
       await loadAdminContext();
       toast.success(l(
-        `Machine mise à jour pour ${userName}.`,
+        `Machine mise Ã  jour pour ${userName}.`,
         `Machine updated for ${userName}.`,
-        `تم تحديث الآلة للمستخدم ${userName}.`,
+        `ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¢Ù„Ø© Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù… ${userName}.`,
       ));
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : l("Erreur lors du changement de machine.", "Error while updating machine.", "حدث خطأ أثناء تحديث الآلة."),
+          : l("Erreur lors du changement de machine.", "Error while updating machine.", "Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¢Ù„Ø©."),
       );
     } finally {
       setUpdatingUserId(null);
@@ -195,16 +196,16 @@ export function AdminPage() {
       await loadAdminContext();
       toast.success(
         action === "approve"
-          ? l("Compte approuvé", "Account approved", "تمت الموافقة على الحساب")
-          : l("Compte refusé", "Account rejected", "تم رفض الحساب"),
+          ? l("Compte approuvÃ©", "Account approved", "ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø­Ø³Ø§Ø¨")
+          : l("Compte refusÃ©", "Account rejected", "ØªÙ… Ø±ÙØ¶ Ø§Ù„Ø­Ø³Ø§Ø¨"),
       );
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
           : action === "approve"
-            ? l("Erreur lors de l'approbation", "Approval failed", "حدث خطأ أثناء الموافقة.")
-            : l("Erreur lors du refus", "Rejection failed", "حدث خطأ أثناء الرفض."),
+            ? l("Erreur lors de l'approbation", "Approval failed", "Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø©.")
+            : l("Erreur lors du refus", "Rejection failed", "Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„Ø±ÙØ¶."),
       );
     } finally {
       setReviewingUserId(null);
@@ -212,20 +213,20 @@ export function AdminPage() {
   };
 
   const SETTINGS = [
-    { icon: <Globe className="w-5 h-5" />, title: t("settings.language"), sub: `${t("settings.french")} / ${t("settings.english")} / ${t("settings.arabic")}`, action: "lang" },
+    { icon: <Globe className="w-5 h-5" />, title: t("settings.language"), sub: `${t("settings.french")} / ${t("settings.english")}`, action: "lang" },
     { icon: <Palette className="w-5 h-5" />, title: t("settings.theme"), sub: `${t("settings.dark")} / ${t("settings.light")}`, action: "theme" },
   ];
 
   const sourceLabel = (source: string) => {
     switch (source) {
       case "admin":
-        return l("Admin", "Admin", "مدير");
+        return l("Admin", "Admin", "Ù…Ø¯ÙŠØ±");
       case "machine_user":
-        return l("Utilisateur machine", "Machine user", "مستخدم الآلة");
+        return l("Utilisateur machine", "Machine user", "Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¢Ù„Ø©");
       case "manager_email":
-        return l("Responsable seuils", "Configured manager", "مسؤول العتبات");
+        return l("Responsable seuils", "Configured manager", "Ù…Ø³Ø¤ÙˆÙ„ Ø§Ù„Ø¹ØªØ¨Ø§Øª");
       case "technician_email":
-        return l("Technicien seuils", "Configured technician", "فني العتبات");
+        return l("Technicien seuils", "Configured technician", "ÙÙ†ÙŠ Ø§Ù„Ø¹ØªØ¨Ø§Øª");
       default:
         return source;
     }
@@ -257,11 +258,11 @@ export function AdminPage() {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <Users className="w-5 h-5 text-primary" />
-              <h2 className="section-title">{l("Comptes en attente", "Pending Accounts", "حسابات معلقة")}</h2>
+              <h2 className="section-title">{l("Comptes en attente", "Pending Accounts", "Ø­Ø³Ø§Ø¨Ø§Øª Ù…Ø¹Ù„Ù‚Ø©")}</h2>
             </div>
             {allUsers.filter(u => u.status === "pending").length === 0 ? (
               <div className="bg-card border border-border rounded-2xl p-8 text-center">
-                <p className="text-sm text-muted-foreground">{l("Aucune demande en attente.", "No pending requests.", "لا توجد طلبات معلقة.")}</p>
+                <p className="text-sm text-muted-foreground">{l("Aucune demande en attente.", "No pending requests.", "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø·Ù„Ø¨Ø§Øª Ù…Ø¹Ù„Ù‚Ø©.")}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -273,16 +274,16 @@ export function AdminPage() {
                         <div className="flex items-center gap-3 mb-1">
                           <span className="text-sm font-semibold text-foreground">{user.fullName}</span>
                           <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
-                            {user.role === "admin" ? l("Administrateur", "Administrator", "مدير") : l("Utilisateur", "User", "مستخدم")}
+                            {user.role === "admin" ? l("Administrateur", "Administrator", "Ù…Ø¯ÙŠØ±") : l("Utilisateur", "User", "Ù…Ø³ØªØ®Ø¯Ù…")}
                           </span>
                         </div>
                         <div className="text-xs text-muted-foreground space-x-4">
                           <span>{user.email}</span>
-                          <span>{formatAssignedMachine(user, l("Toutes les machines", "All machines", "Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø¢Ù„Ø§Øª"))}</span>
-                          <span>{new Date(user.createdAt).toLocaleDateString("fr-FR")}</span>
+                          <span>{formatAssignedMachine(user, l("Toutes les machines", "All machines", "Ã˜Â¬Ã™â€¦Ã™Å Ã˜Â¹ Ã˜Â§Ã™â€žÃ˜Â¢Ã™â€žÃ˜Â§Ã˜Âª"))}</span>
+                          <span>{new Date(user.createdAt).toLocaleDateString(dateLocale)}</span>
                         </div>
                         {isSelf && (
-                          <p className="text-xs text-warning mt-1 font-medium">{l("Votre propre compte — ne peut pas être auto-approuvé", "Your own account — cannot self-approve", "حسابك الخاص — لا يمكن الموافقة الذاتية")}</p>
+                          <p className="text-xs text-warning mt-1 font-medium">{l("Votre propre compte â€” ne peut pas Ãªtre auto-approuvÃ©", "Your own account â€” cannot self-approve", "Ø­Ø³Ø§Ø¨Ùƒ Ø§Ù„Ø®Ø§Øµ â€” Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø°Ø§ØªÙŠØ©")}</p>
                         )}
                       </div>
                       {!isSelf && (
@@ -293,7 +294,7 @@ export function AdminPage() {
                             className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-success/10 text-success border border-success/20 text-xs font-semibold hover:bg-success/20 transition-colors"
                           >
                             <UserCheck className="w-3.5 h-3.5" />
-                            {reviewingUserId === user.id ? l("Traitement...", "Working...", "جارٍ التنفيذ...") : l("Approuver", "Approve", "موافقة")}
+                            {reviewingUserId === user.id ? l("Traitement...", "Working...", "Ø¬Ø§Ø±Ù Ø§Ù„ØªÙ†ÙÙŠØ°...") : l("Approuver", "Approve", "Ù…ÙˆØ§ÙÙ‚Ø©")}
                           </button>
                           <button
                             onClick={() => void handleReviewUser(user.id, "reject")}
@@ -301,17 +302,17 @@ export function AdminPage() {
                             className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-destructive/10 text-destructive border border-destructive/20 text-xs font-semibold hover:bg-destructive/20 transition-colors"
                           >
                             <UserX className="w-3.5 h-3.5" />
-                            {reviewingUserId === user.id ? l("Traitement...", "Working...", "جارٍ التنفيذ...") : l("Rejeter", "Reject", "رفض")}
+                            {reviewingUserId === user.id ? l("Traitement...", "Working...", "Ø¬Ø§Ø±Ù Ø§Ù„ØªÙ†ÙÙŠØ°...") : l("Rejeter", "Reject", "Ø±ÙØ¶")}
                           </button>
-                          {/* Suppression définitive d'une demande en attente —
+                          {/* Suppression dÃ©finitive d'une demande en attente â€”
                               parfois utile pour purger un compte de test. */}
                           <button
                             onClick={() => handleDelete(user.id, user.fullName, user.role, user.status)}
-                            title={l("Supprimer définitivement", "Delete permanently", "حذف نهائي")}
+                            title={l("Supprimer dÃ©finitivement", "Delete permanently", "Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ")}
                             className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-destructive/15 text-destructive border border-destructive/30 text-xs font-semibold hover:bg-destructive/25 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                            {l("Supprimer", "Delete", "حذف")}
+                            {l("Supprimer", "Delete", "Ø­Ø°Ù")}
                           </button>
                         </div>
                       )}
@@ -327,10 +328,10 @@ export function AdminPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-success" />
-                <h2 className="section-title">{l("Comptes actifs", "Active Accounts", "الحسابات النشطة")}</h2>
+                <h2 className="section-title">{l("Comptes actifs", "Active Accounts", "Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ù†Ø´Ø·Ø©")}</h2>
               </div>
               <button onClick={() => navigate("/signup?mode=admin-create")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-primary-foreground">
-                <Plus className="w-3.5 h-3.5" /> {l("Ajouter utilisateur", "Add User", "إضافة مستخدم")}
+                <Plus className="w-3.5 h-3.5" /> {l("Ajouter utilisateur", "Add User", "Ø¥Ø¶Ø§ÙØ© Ù…Ø³ØªØ®Ø¯Ù…")}
               </button>
             </div>
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -341,36 +342,36 @@ export function AdminPage() {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("table.email")}</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("table.role")}</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Machine</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{l("Approuvé le", "Approved on", "تاريخ الموافقة")}</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{l("Actions", "Actions", "إجراءات")}</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{l("ApprouvÃ© le", "Approved on", "ØªØ§Ø±ÙŠØ® Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø©")}</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{l("Actions", "Actions", "Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {allUsers.filter(u => u.status === "approved").map(user => {
                     const isSelf = currentUser?.id === user.id;
-                    // Désactivé si :
+                    // DÃ©sactivÃ© si :
                     //   (a) c'est le compte courant (anti-self-delete) ;
-                    //   (b) c'est le dernier admin approuvé (anti-last-admin) — la
-                    //       suppression serait également bloquée côté backend (409).
+                    //   (b) c'est le dernier admin approuvÃ© (anti-last-admin) â€” la
+                    //       suppression serait Ã©galement bloquÃ©e cÃ´tÃ© backend (409).
                     const isLastAdmin = user.role === "admin" && approvedAdminCount <= 1;
                     const disableDelete = isSelf || isLastAdmin;
                     const disabledReason = isSelf
-                      ? l("Vous ne pouvez pas supprimer votre propre compte.", "You cannot delete your own account.", "لا يمكنك حذف حسابك الخاص.")
+                      ? l("Vous ne pouvez pas supprimer votre propre compte.", "You cannot delete your own account.", "Ù„Ø§ ÙŠÙ…ÙƒÙ†Ùƒ Ø­Ø°Ù Ø­Ø³Ø§Ø¨Ùƒ Ø§Ù„Ø®Ø§Øµ.")
                       : isLastAdmin
-                        ? l("Dernier administrateur — promouvez un autre admin avant.", "Last administrator — promote another admin first.", "آخر مسؤول — قم بترقية مسؤول آخر أولاً.")
-                        : l("Supprimer définitivement", "Delete permanently", "حذف نهائي");
+                        ? l("Dernier administrateur â€” promouvez un autre admin avant.", "Last administrator â€” promote another admin first.", "Ø¢Ø®Ø± Ù…Ø³Ø¤ÙˆÙ„ â€” Ù‚Ù… Ø¨ØªØ±Ù‚ÙŠØ© Ù…Ø³Ø¤ÙˆÙ„ Ø¢Ø®Ø± Ø£ÙˆÙ„Ø§Ù‹.")
+                        : l("Supprimer dÃ©finitivement", "Delete permanently", "Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ");
                     return (
                       <tr key={user.id} className="border-b border-border last:border-0">
                         <td className="px-5 py-3 text-foreground font-medium">{user.fullName}</td>
                         <td className="px-5 py-3 text-muted-foreground">{user.email}</td>
                         <td className="px-5 py-3">
                           <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
-                            {user.role === "admin" ? "Admin" : l("Utilisateur", "User", "مستخدم")}
+                            {user.role === "admin" ? "Admin" : l("Utilisateur", "User", "Ù…Ø³ØªØ®Ø¯Ù…")}
                           </span>
                         </td>
                         <td className="px-5 py-3 text-muted-foreground">
                           <div className="space-y-2">
-                            <div>{formatAssignedMachine(user, l("Toutes", "All", "الكل"))}</div>
+                            <div>{formatAssignedMachine(user, l("Toutes", "All", "Ø§Ù„ÙƒÙ„"))}</div>
                             {user.role === "user" ? (
                               <div className="flex flex-wrap items-center gap-2">
                                 <select
@@ -383,7 +384,7 @@ export function AdminPage() {
                                   }
                                   className="h-8 min-w-[190px] rounded-md border border-border bg-surface-3 px-2.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/30"
                                 >
-                                  <option value="">{l("Choisir une machine", "Choose a machine", "اختر آلة")}</option>
+                                  <option value="">{l("Choisir une machine", "Choose a machine", "Ø§Ø®ØªØ± Ø¢Ù„Ø©")}</option>
                                   {machineOptions.map((machine) => (
                                     <option key={machine.id} value={machine.id}>
                                       {getMachinePublicLabel({ code: machine.code, name: machine.nom })}
@@ -407,14 +408,14 @@ export function AdminPage() {
                                   }`}
                                 >
                                   {updatingUserId === user.id
-                                    ? l("Mise à jour...", "Updating...", "جارٍ التحديث...")
-                                    : l("Affecter", "Assign", "ربط")}
+                                    ? l("Mise Ã  jour...", "Updating...", "Ø¬Ø§Ø±Ù Ø§Ù„ØªØ­Ø¯ÙŠØ«...")
+                                    : l("Affecter", "Assign", "Ø±Ø¨Ø·")}
                                 </button>
                               </div>
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-muted-foreground">{user.approvedAt ? new Date(user.approvedAt).toLocaleDateString("fr-FR") : "—"}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{user.approvedAt ? new Date(user.approvedAt).toLocaleDateString(dateLocale) : "â€”"}</td>
                         <td className="px-5 py-3 text-right">
                           <button
                             disabled={disableDelete}
@@ -427,7 +428,7 @@ export function AdminPage() {
                             }`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                            {l("Supprimer", "Delete", "حذف")}
+                            {l("Supprimer", "Delete", "Ø­Ø°Ù")}
                           </button>
                         </td>
                       </tr>
@@ -441,12 +442,12 @@ export function AdminPage() {
             <div className="flex items-center gap-2 mb-4">
               <BellRing className="w-5 h-5 text-primary" />
               <div>
-                <h2 className="section-title">{l("Destinataires des alertes critiques", "Critical alert recipients", "مستلمو التنبيهات الحرجة")}</h2>
+                <h2 className="section-title">{l("Destinataires des alertes critiques", "Critical alert recipients", "Ù…Ø³ØªÙ„Ù…Ùˆ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª Ø§Ù„Ø­Ø±Ø¬Ø©")}</h2>
                 <p className="text-sm text-muted-foreground">
                   {l(
-                    "Aperçu machine par machine des emails notifiés au prochain replay critique ou à la prochaine alerte live.",
+                    "AperÃ§u machine par machine des emails notifiÃ©s au prochain replay critique ou Ã  la prochaine alerte live.",
                     "Machine-by-machine preview of the emails notified on the next critical replay or live alert.",
-                    "معاينة حسب كل آلة لرسائل البريد التي ستتلقى الإشعار عند إعادة التشغيل الحرجة التالية أو التنبيه الحي التالي.",
+                    "Ù…Ø¹Ø§ÙŠÙ†Ø© Ø­Ø³Ø¨ ÙƒÙ„ Ø¢Ù„Ø© Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„ØªÙŠ Ø³ØªØªÙ„Ù‚Ù‰ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø± Ø¹Ù†Ø¯ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªØ´ØºÙŠÙ„ Ø§Ù„Ø­Ø±Ø¬Ø© Ø§Ù„ØªØ§Ù„ÙŠØ© Ø£Ùˆ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡ Ø§Ù„Ø­ÙŠ Ø§Ù„ØªØ§Ù„ÙŠ.",
                   )}
                 </p>
               </div>
@@ -462,7 +463,7 @@ export function AdminPage() {
                       </div>
                     </div>
                     <span className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.68rem] font-semibold text-foreground">
-                      {machine.recipients.length} {l("destinataire(s)", "recipient(s)", "مستلم/مستلمون")}
+                      {machine.recipients.length} {l("destinataire(s)", "recipient(s)", "Ù…Ø³ØªÙ„Ù…/Ù…Ø³ØªÙ„Ù…ÙˆÙ†")}
                     </span>
                   </div>
 
@@ -488,7 +489,7 @@ export function AdminPage() {
                         {l(
                           "Aucun destinataire valide pour cette machine.",
                           "No valid recipient for this machine.",
-                          "لا يوجد مستلم صالح لهذه الآلة.",
+                          "Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ù…Ø³ØªÙ„Ù… ØµØ§Ù„Ø­ Ù„Ù‡Ø°Ù‡ Ø§Ù„Ø¢Ù„Ø©.",
                         )}
                       </div>
                     )}
@@ -499,12 +500,12 @@ export function AdminPage() {
                       ? l(
                           `Utilisateur(s) machine : ${machine.machine_users.map((user) => user.full_name || user.email).join(", ")}`,
                           `Machine user(s): ${machine.machine_users.map((user) => user.full_name || user.email).join(", ")}`,
-                          `مستخدمو الآلة: ${machine.machine_users.map((user) => user.full_name || user.email).join(", ")}`,
+                          `Ù…Ø³ØªØ®Ø¯Ù…Ùˆ Ø§Ù„Ø¢Ù„Ø©: ${machine.machine_users.map((user) => user.full_name || user.email).join(", ")}`,
                         )
                       : l(
-                          "Aucun utilisateur approuvé n'est rattaché à cette machine : seuls les admins et emails configurés seront notifiés.",
+                          "Aucun utilisateur approuvÃ© n'est rattachÃ© Ã  cette machine : seuls les admins et emails configurÃ©s seront notifiÃ©s.",
                           "No approved user is linked to this machine: only admins and configured emails will be notified.",
-                          "لا يوجد مستخدم معتمد مرتبط بهذه الآلة: سيتم إشعار المدراء وعناوين البريد المهيأة فقط.",
+                          "Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ù…Ø³ØªØ®Ø¯Ù… Ù…Ø¹ØªÙ…Ø¯ Ù…Ø±ØªØ¨Ø· Ø¨Ù‡Ø°Ù‡ Ø§Ù„Ø¢Ù„Ø©: Ø³ÙŠØªÙ… Ø¥Ø´Ø¹Ø§Ø± Ø§Ù„Ù…Ø¯Ø±Ø§Ø¡ ÙˆØ¹Ù†Ø§ÙˆÙŠÙ† Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ù…Ù‡ÙŠØ£Ø© ÙÙ‚Ø·.",
                         )}
                   </div>
                 </div>
@@ -522,7 +523,7 @@ export function AdminPage() {
               key={s.title}
               className="flex items-center bg-card border border-border rounded-lg px-5 py-4 cursor-pointer hover:border-primary/30 transition-colors group"
               onClick={() => {
-                if (s.action === "lang") setLang(lang === "fr" ? "en" : lang === "en" ? "ar" : "fr");
+                if (s.action === "lang") setLang(lang === "fr" ? "en" : "fr");
                 if (s.action === "theme") setTheme(theme === "dark" ? "light" : "dark");
               }}
             >
@@ -533,7 +534,7 @@ export function AdminPage() {
                 <div className="text-sm font-semibold text-foreground">{s.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">{s.sub}</div>
               </div>
-              {s.action === "lang" && <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-md mr-3">{lang === "fr" ? "Français" : lang === "en" ? "English" : "العربية"}</span>}
+              {s.action === "lang" && <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-md mr-3">{lang === "fr" ? t("settings.french") : t("settings.english")}</span>}
               {s.action === "theme" && <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-md mr-3">{theme === "dark" ? t("settings.dark") : t("settings.light")}</span>}
               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
             </div>
@@ -543,3 +544,4 @@ export function AdminPage() {
     </div>
   );
 }
+

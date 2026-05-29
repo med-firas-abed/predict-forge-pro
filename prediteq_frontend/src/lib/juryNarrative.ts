@@ -105,7 +105,7 @@ export function formatAudienceConfidenceLabel(
   }
 
   if (token === "medium" || token === "moyenne" || token === "moderate" || token === "modere") {
-    return localize("Lecture utilisable", "Usable reading", "Usable reading");
+    return localize("Lecture exploitable", "Usable reading", "Usable reading");
   }
 
   if (token === "low" || token === "faible") {
@@ -210,6 +210,22 @@ export function shortenAudienceWindow(
 ) {
   const token = normalizeAudienceToken(value);
 
+  if (token.includes("24 h") || token.includes("24h")) {
+    return localize("Sous 24 h", "Within 24 h", "Within 24 h");
+  }
+
+  if (token.includes("48 h") || token.includes("48h")) {
+    return localize("Sous 48 h", "Within 48 h", "Within 48 h");
+  }
+
+  if (token.includes("72 h") || token.includes("72h")) {
+    return localize("Sous 72 h", "Within 72 h", "Within 72 h");
+  }
+
+  if (token.includes("7 j") || token.includes("7j")) {
+    return localize("Sous 7 j", "Within 7 d", "Within 7 d");
+  }
+
   if (token.includes("1-4 semaines")) {
     return localize("Sous 1-4 semaines", "Within 1-4 weeks", "Within 1-4 weeks");
   }
@@ -218,13 +234,18 @@ export function shortenAudienceWindow(
     return localize("Sous 2-6 semaines", "Within 2-6 weeks", "Within 2-6 weeks");
   }
 
-  if (token.includes("prioritaire")) {
+  if (
+    token.includes("prioritaire") ||
+    token.includes("urgent") ||
+    token.includes("immediat") ||
+    token.includes("immédiat")
+  ) {
     return localize("Priorité terrain", "Field priority", "Field priority");
   }
 
   const statusToken = normalizeAudienceToken(status);
   if (statusToken === "critical" || statusToken === "critique") {
-    return localize("Sous 1-4 semaines", "Within 1-4 weeks", "Within 1-4 weeks");
+    return localize("Priorité terrain", "Field priority", "Field priority");
   }
   if (statusToken === "degraded" || statusToken === "surveillance") {
     return localize("À planifier", "To plan", "To plan");

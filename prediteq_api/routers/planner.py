@@ -237,7 +237,10 @@ def _summarize_task_history(machine_tasks: list[dict[str, Any]], task_type: str)
     }
 
 
-def _build_task_history_note(history_summary: dict[str, Any]) -> str | None:
+def _build_task_history_note(
+    history_summary: dict[str, Any],
+    repeat_guard: dict[str, Any] | None = None,
+) -> str | None:
     task_label = TASK_TYPE_LABELS.get(
         str(history_summary.get("task_type") or ""),
         str(history_summary.get("task_type") or "action"),
@@ -250,7 +253,20 @@ def _build_task_history_note(history_summary: dict[str, Any]) -> str | None:
     if open_same_type > 0:
         return (
             f"Contexte calendrier: {open_same_type} tache(s) de {task_label} sont deja ouvertes sur cette machine; "
-            "la relance reste volontairement autorisee si un nouveau passage ou un renfort est necessaire."
+            "aucune nouvelle suggestion calendrier n'est emise tant qu'elles ne sont pas cloturees."
+        )
+
+    if repeat_guard and bool(repeat_guard.get("blocked")):
+        latest_completed_at = repeat_guard.get("latest_completed_at")
+        latest = (
+            latest_completed_at.strftime("%d/%m/%Y")
+            if isinstance(latest_completed_at, datetime)
+            else "date recente"
+        )
+        remaining_days = max(int(repeat_guard.get("remaining_days") or 0), 0)
+        return (
+            f"Historique planner: une action similaire a ete cloturee le {latest}; "
+            f"le planner attend encore {remaining_days} j ou une escalation nette avant de reproposer la meme intervention."
         )
 
     if recent_completed_same_type > 0:
@@ -270,6 +286,96 @@ def _build_task_history_note(history_summary: dict[str, Any]) -> str | None:
         )
 
     return None
+
+
+def _build_policy_note(decision: dict[str, Any]) -> str | None:
+    policy_context = decision.get("policy_context") or {}
+    machine_policy = policy_context.get("machine") or {}
+    scenario_policy = policy_context.get("scenario") or {}
+    telemetry_policy = policy_context.get("telemetry") or {}
+
+    machine_label = _clean_task_fragment(machine_policy.get("label"), max_length=42)
+    scenario_label = _clean_task_fragment(scenario_policy.get("label"), max_length=24)
+    scenario_summary = _clean_task_fragment(scenario_policy.get("summary"), max_length=88)
+    telemetry_level = _clean_task_fragment(telemetry_policy.get("trust_level"), max_length=24)
+    telemetry_trust = _safe_float(telemetry_policy.get("trust_score"))
+
+    parts: list[str] = []
+    if machine_label:
+        parts.append(f"profil {machine_label.lower()}")
+    if scenario_label:
+        parts.append(f"scenario {scenario_label}")
+    if telemetry_level:
+        if telemetry_trust is not None:
+            parts.append(f"telemetrie {telemetry_level} ({int(round(telemetry_trust))}/100)")
+        else:
+            parts.append(f"telemetrie {telemetry_level}")
+    elif scenario_summary:
+        parts.append(scenario_summary)
+
+    if not parts:
+        return None
+    return f"Cadre planner: {'; '.join(parts[:3])}."
+
+
+def _evaluate_repeat_guard(
+    history_summary: dict[str, Any],
+    decision: dict[str, Any],
+    task_template: dict[str, Any],
+) -> dict[str, Any]:
+    latest_completed_at = history_summary.get("latest_completed_at")
+    cooldown_days = int(task_template.get("cooldown_days") or 0)
+    if cooldown_days <= 0 or not isinstance(latest_completed_at, datetime):
+        return {
+            "blocked": False,
+            "cooldown_days": cooldown_days,
+            "remaining_days": 0,
+            "latest_completed_at": latest_completed_at,
+        }
+
+    expires_at = latest_completed_at + timedelta(days=cooldown_days)
+    now = datetime.now(timezone.utc)
+    if expires_at <= now:
+        return {
+            "blocked": False,
+            "cooldown_days": cooldown_days,
+            "remaining_days": 0,
+            "latest_completed_at": latest_completed_at,
+        }
+
+    urgency_band = str(decision.get("urgency_band") or "")
+    urgency_score = int(round(float(decision.get("urgency_score") or 0)))
+    alerts_24h = int(decision.get("alerts_24h") or 0)
+    stop_recommended = bool(decision.get("stop_recommended"))
+    policy_context = decision.get("policy_context") or {}
+    scenario_policy = policy_context.get("scenario") or {}
+    telemetry_policy = policy_context.get("telemetry") or {}
+    scenario_pressure = _safe_float(scenario_policy.get("pressure")) or 0.0
+    telemetry_trust = _safe_float(telemetry_policy.get("trust_score")) or 0.0
+
+    escalated = (
+        urgency_band == "critical"
+        or stop_recommended
+        or alerts_24h >= 6
+        or urgency_score >= 82
+        or (urgency_band == "priority" and telemetry_trust >= 72 and scenario_pressure >= 0.65)
+    )
+    if escalated:
+        return {
+            "blocked": False,
+            "cooldown_days": cooldown_days,
+            "remaining_days": 0,
+            "latest_completed_at": latest_completed_at,
+        }
+
+    remaining_seconds = max((expires_at - now).total_seconds(), 0.0)
+    remaining_days = max(1, int((remaining_seconds + 86_399) // 86_400))
+    return {
+        "blocked": True,
+        "cooldown_days": cooldown_days,
+        "remaining_days": remaining_days,
+        "latest_completed_at": latest_completed_at,
+    }
 
 
 def _build_task_title(
@@ -322,12 +428,14 @@ def _build_task_title(
 def _build_task_description(
     decision: dict[str, Any],
     history_summary: dict[str, Any],
+    repeat_guard: dict[str, Any] | None = None,
 ) -> str:
     parts: list[str] = []
     recommended_action = _clean_task_fragment(decision.get("recommended_action"), max_length=260)
     plain_reason = _clean_task_fragment(decision.get("plain_reason"), max_length=320)
     impact = _clean_task_fragment(decision.get("impact"), max_length=220)
     maintenance_window = _clean_task_fragment(decision.get("maintenance_window"), max_length=120)
+    policy_note = _build_policy_note(decision)
 
     evidence = [
         item
@@ -372,12 +480,14 @@ def _build_task_description(
         parts.append(f"Fenetre: {maintenance_window}.")
     if impact:
         parts.append(f"Impact: {impact}.")
+    if policy_note:
+        parts.append(policy_note)
     if evidence:
         parts.append(f"Preuves: {' | '.join(evidence)}.")
     if field_check:
         parts.append(f"Controle terrain: {field_check}.")
 
-    history_note = _build_task_history_note(history_summary)
+    history_note = _build_task_history_note(history_summary, repeat_guard)
     if history_note:
         parts.append(history_note)
 
@@ -387,47 +497,62 @@ def _build_task_description(
 def _build_approval_repeat_note(
     existing_tasks: list[dict[str, Any]],
     *,
-    title: str,
     task_type: str,
 ) -> str | None:
-    same_title_open = 0
-    same_type_open = 0
     same_type_completed = 0
     latest_same_type_at: datetime | None = None
-    normalized_title = title.strip().lower()
 
     for task in existing_tasks:
         status = str(task.get("statut") or "")
         same_type = str(task.get("type") or "") == task_type
-        same_title = str(task.get("titre") or "").strip().lower() == normalized_title
         when = _parse_task_datetime(task.get("date_planifiee") or task.get("created_at"))
-
-        if same_title and status in OPEN_TASK_STATUSES:
-            same_title_open += 1
-        if same_type and status in OPEN_TASK_STATUSES:
-            same_type_open += 1
         if same_type and status == "terminee":
             same_type_completed += 1
             if when and (latest_same_type_at is None or when > latest_same_type_at):
                 latest_same_type_at = when
-
-    if same_title_open > 0:
-        return (
-            f"Relance planner autorisee: {same_title_open} tache(s) au meme titre sont deja ouvertes; "
-            "la nouvelle insertion reste permise si une reprise ou un second passage est necessaire."
-        )
-
-    if same_type_open > 0:
-        task_label = TASK_TYPE_LABELS.get(task_type, task_type)
-        return (
-            f"Coordination calendrier: {same_type_open} tache(s) de {task_label} sont deja ouvertes sur cette machine."
-        )
 
     if same_type_completed > 0 and latest_same_type_at is not None:
         task_label = TASK_TYPE_LABELS.get(task_type, task_type)
         return (
             f"Historique planner: {same_type_completed} action(s) de {task_label} ont deja ete realisees, "
             f"derniere le {latest_same_type_at.strftime('%d/%m/%Y')}."
+        )
+
+    return None
+
+
+def _find_open_duplicate_message(
+    existing_tasks: list[dict[str, Any]],
+    *,
+    machine_code: str,
+    title: str,
+    task_type: str,
+) -> str | None:
+    same_title_open = 0
+    same_type_open = 0
+    normalized_title = title.strip().lower()
+
+    for task in existing_tasks:
+        status = str(task.get("statut") or "")
+        if status not in OPEN_TASK_STATUSES:
+            continue
+
+        if str(task.get("titre") or "").strip().lower() == normalized_title:
+            same_title_open += 1
+        if str(task.get("type") or "") == task_type:
+            same_type_open += 1
+
+    if same_title_open > 0:
+        return (
+            f'Une tache ouverte avec le titre "{title}" existe deja dans le calendrier pour {machine_code}. '
+            "Fermez ou modifiez la tache existante avant d'en creer une nouvelle."
+        )
+
+    if same_type_open > 0:
+        task_label = TASK_TYPE_LABELS.get(task_type, task_type)
+        return (
+            f"Une tache ouverte de {task_label} existe deja dans le calendrier pour {machine_code}. "
+            "Fermez ou modifiez la tache existante avant d'en creer une nouvelle."
         )
 
     return None
@@ -456,9 +581,25 @@ def _build_planner_rows(machines: list[dict[str, Any]]) -> list[dict[str, Any]]:
         avg_cost = float(avg_costs.get(machine_id, 0.0))
         projected_cost, delayed_cost = _projected_cost(avg_cost, decision, task_type)
         history_summary = _summarize_task_history(task_history.get(machine_id, []), task_type)
-        task_context = _build_task_history_note(history_summary)
-        task_title = _build_task_title(machine, decision, task_template, history_summary)
-        task_description = _build_task_description(decision, history_summary)
+        repeat_guard = _evaluate_repeat_guard(history_summary, decision, task_template)
+        task_context = _build_task_history_note(history_summary, repeat_guard)
+        can_create_task = int(history_summary.get("open_same_type") or 0) <= 0 and not bool(
+            repeat_guard.get("blocked")
+        )
+        task_suggestion = None
+        if can_create_task:
+            task_title = _build_task_title(machine, decision, task_template, history_summary)
+            task_description = _build_task_description(decision, history_summary, repeat_guard)
+            task_suggestion = {
+                "machine_code": machine["code"],
+                "titre": task_title,
+                "type": task_type,
+                "priorite": _priority_from_band(str(decision.get("urgency_band") or "watch")),
+                "date_planifiee": _suggested_date(int(task_template.get("lead_days") or 0)),
+                "cout_estime": projected_cost,
+                "description": task_description,
+                "technicien": "",
+            }
 
         rows.append(
             {
@@ -497,17 +638,10 @@ def _build_planner_rows(machines: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "task_context": task_context,
                 "similar_open_tasks": history_summary["open_same_type"],
                 "recent_completed_tasks": history_summary["recent_completed_same_type"],
+                "repeat_cooldown_active": bool(repeat_guard.get("blocked")),
+                "policy_context": decision.get("policy_context"),
                 "task_template": task_template,
-                "task_suggestion": {
-                    "machine_code": machine["code"],
-                    "titre": task_title,
-                    "type": task_type,
-                    "priorite": _priority_from_band(str(decision.get("urgency_band") or "watch")),
-                    "date_planifiee": _suggested_date(int(task_template.get("lead_days") or 0)),
-                    "cout_estime": projected_cost,
-                    "description": task_description,
-                    "technicien": "",
-                },
+                "task_suggestion": task_suggestion,
             }
         )
 
@@ -553,15 +687,20 @@ def _render_markdown(rows: list[dict[str, Any]], focus_machine: str | None = Non
     lines.append("")
     lines.append("## 3. Plan d'action")
     for row in rows:
-        task = row["task_suggestion"]
         lines.append(f"### {get_machine_public_label(row['machine_code'], row.get('nom'))}")
         lines.append(f"- **Etat**: {row['summary']}")
         lines.append(f"- **Pourquoi**: {row['plain_reason']}")
         lines.append(f"- **Impact**: {row['impact']}")
         lines.append(f"- **Action recommandee**: {row['recommended_action']}")
-        lines.append(
-            f"- **Tache proposee**: {task['titre']} ({task['type']}) le {task['date_planifiee']} - {task['cout_estime']} TND"
-        )
+        task = row.get("task_suggestion")
+        if task:
+            lines.append(
+                f"- **Tache proposee**: {task['titre']} ({task['type']}) le {task['date_planifiee']} - {task['cout_estime']} TND"
+            )
+        else:
+            lines.append(
+                "- **Tache proposee**: aucune nouvelle creation calendrier pour l'instant."
+            )
         if row.get("task_context"):
             lines.append(f"- **Contexte calendrier**: {row['task_context']}")
         if row["evidence"]:
@@ -631,7 +770,11 @@ async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_a
 
     rows = _build_planner_rows(machines)
     markdown = _render_markdown(rows, body.focus_machine)
-    tasks = [row["task_suggestion"] for row in rows if row["urgency_band"] != "stable"]
+    tasks = [
+        row["task_suggestion"]
+        for row in rows
+        if row["urgency_band"] != "stable" and row.get("task_suggestion")
+    ]
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -667,9 +810,17 @@ async def approve_task(
     except Exception as exc:
         logger.warning("Planner could not inspect existing tasks for %s: %s", body.machine_code, exc)
 
+    duplicate_message = _find_open_duplicate_message(
+        existing_tasks,
+        machine_code=body.machine_code,
+        title=body.titre,
+        task_type=body.type,
+    )
+    if duplicate_message:
+        raise HTTPException(409, duplicate_message)
+
     repeat_note = _build_approval_repeat_note(
         existing_tasks,
-        title=body.titre,
         task_type=body.type,
     )
 

@@ -32,7 +32,10 @@ import {
   getTaskCostReference,
   LABOR_RATE_PER_HOUR,
 } from "@/lib/costModel";
-import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import {
+  getMachinePublicLabel,
+  replaceMachineCodesForDisplay,
+} from "@/lib/machinePresentation";
 import {
   formatHiPercent,
   formatPredictiveRul,
@@ -61,6 +64,19 @@ function getBaselineSourceLabel(source: string) {
     default:
       return "Base : type d'action";
   }
+}
+
+function compactText(value: string | null | undefined, maxLength = 120) {
+  const normalized = replaceMachineCodesForDisplay((value ?? "").replace(/\s+/g, " ").trim());
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+
+  const sentenceCutoff = normalized.lastIndexOf(". ", maxLength);
+  if (sentenceCutoff >= Math.floor(maxLength * 0.55)) {
+    return normalized.slice(0, sentenceCutoff + 1);
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 export function CostsPage() {
@@ -208,27 +224,46 @@ export function CostsPage() {
       .sort((left, right) => right.projectedCost - left.projectedCost);
   }, [fleetHistoricalAverage, historyByMachine, insights]);
 
+  const actionableCostEntries = useMemo(
+    () =>
+      liveCostEntries
+        .filter((entry) => entry.insight.urgencyBand !== "stable")
+        .sort((left, right) => {
+          const urgencyDelta = right.insight.urgencyScore - left.insight.urgencyScore;
+          if (urgencyDelta !== 0) return urgencyDelta;
+          return right.projectedCost - left.projectedCost;
+        }),
+    [liveCostEntries],
+  );
+
+  const routineCostEntries = useMemo(
+    () => liveCostEntries.filter((entry) => entry.insight.urgencyBand === "stable"),
+    [liveCostEntries],
+  );
+
+  const budgetFocusEntries = actionableCostEntries.length > 0 ? actionableCostEntries : liveCostEntries;
+
   const comparisonData = useMemo(
     () =>
-      liveCostEntries.map((entry) => ({
+      budgetFocusEntries.map((entry) => ({
         machine: getMachinePublicLabel(entry.insight.machine),
         history: Math.round(entry.historicalAverage),
         projection: entry.projectedCost,
         delayed: entry.delayedCost,
       })),
-    [liveCostEntries],
+    [budgetFocusEntries],
   );
 
   const totalHistoricalCost = rows.reduce((sum, row) => sum + row.total, 0);
   const totalLabor = rows.reduce((sum, row) => sum + row.mainOeuvre, 0);
   const totalParts = rows.reduce((sum, row) => sum + row.pieces, 0);
-  const projectedBudget = liveCostEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
-  const delayedExposure = liveCostEntries.reduce((sum, entry) => sum + entry.delayPenalty, 0);
+  const projectedBudget = budgetFocusEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
+  const delayedExposure = budgetFocusEntries.reduce((sum, entry) => sum + entry.delayPenalty, 0);
+  const routineProjectionBudget = routineCostEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
   const averageHistoricalTicket = rows.length > 0 ? totalHistoricalCost / rows.length : 0;
-  const actionsToReview = liveCostEntries.filter(
-    (entry) => entry.insight.urgencyBand === "critical" || entry.insight.urgencyBand === "priority",
-  ).length;
-  const topProjectedMachine = liveCostEntries[0] ?? null;
+  const actionsToReview = actionableCostEntries.length;
+  const hasActionableBudgetCases = actionableCostEntries.length > 0;
+  const topProjectedMachine = budgetFocusEntries[0] ?? null;
 
   const timelineData = useMemo(() => {
     if (recentMonthlyData.length === 0) {
@@ -322,8 +357,7 @@ export function CostsPage() {
         <div>
           <div className="section-title">Impact budgetaire du pronostic machine</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ici, le budget ne part pas d'un calendrier fixe : il part du HI, du stress et du RUL, puis
-            estime ce que la prochaine action peut engager.
+            Le budget part du HI, du stress et du RUL, puis estime l'action probable.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Hypothese de reference quand l'historique manque : main-d'oeuvre a {LABOR_RATE_PER_HOUR} DT/h
@@ -345,8 +379,7 @@ export function CostsPage() {
           <div>
             <div className="section-title">Ce que la prediction engage maintenant</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              On compare le coût déjà observé, le coût probable si l'on agit maintenant, puis le surcoût
-              possible si l'on attend encore.
+              Comparatif entre cout observe, prochaine action et cout du retard.
             </p>
           </div>
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.65rem] font-semibold text-muted-foreground">
@@ -354,13 +387,21 @@ export function CostsPage() {
           </span>
         </div>
 
+        {routineCostEntries.length > 0 && hasActionableBudgetCases ? (
+          <div className="mb-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
+            {routineCostEntries.length} machine{routineCostEntries.length > 1 ? "s" : ""} stable
+            {routineCostEntries.length > 1 ? "s restent" : " reste"} suivie
+            {routineCostEntries.length > 1 ? "s" : ""} en projection de routine (
+            {formatCurrency(routineProjectionBudget)}), hors priorite immediate.
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="rounded-2xl border border-border bg-surface-3 p-5">
             <div className="mb-4">
               <h3 className="text-sm font-semibold text-foreground">Historique vs prochaine action</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Gris = ce que la machine coûte d'habitude. Vert = ce qu'elle coûterait si l'on agit
-                maintenant. Orange = ce que l'on risque si l'on reporte encore.
+                Gris = historique. Vert = action now. Orange = cout du report.
               </p>
             </div>
             <ResponsiveContainer width="100%" height={300}>
@@ -398,12 +439,15 @@ export function CostsPage() {
 
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-3 p-5">
-              <div className="industrial-label">Si on agit maintenant</div>
+              <div className="industrial-label">
+                {hasActionableBudgetCases ? "Si on agit maintenant" : "Projection de routine"}
+              </div>
               <div className="mt-3 text-3xl font-bold text-foreground">{formatCurrency(projectedBudget)}</div>
               <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
-                Somme des actions les plus probables sur la flotte, calculée à partir des lectures live
-                et de la base historique disponible. Sans historique exploitable, le calcul revient à{" "}
-                {LABOR_RATE_PER_HOUR} DT/h de main-d'oeuvre plus un forfait pièces par type d'action.
+                {hasActionableBudgetCases
+                  ? "Somme des cas que le pronostic place dans l'action immediate."
+                  : "Projection des prochaines actions de routine sur la flotte stable."}{" "}
+                Sans historique exploitable : {LABOR_RATE_PER_HOUR} DT/h + forfait pieces par type d'action.
               </p>
             </div>
 
@@ -420,7 +464,7 @@ export function CostsPage() {
                 <div className="industrial-label">Cas à arbitrer</div>
                 <div className="mt-2 text-xl font-bold text-warning">{actionsToReview}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Machines à relire dans le plan d'action
+                  Machines non stables à relire dans le plan d'action
                 </div>
               </div>
 
@@ -453,8 +497,7 @@ export function CostsPage() {
                 <div className="text-sm font-semibold text-foreground">Étape suivante</div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Cette page aide à choisir quoi traiter d'abord. Ensuite, on ouvre le plan d'action, on
-                valide, puis la tâche confirmée apparaît dans le calendrier.
+                Choisir, valider, puis envoyer la tache vers le calendrier.
               </p>
               <button
                 type="button"
@@ -511,7 +554,7 @@ export function CostsPage() {
               {projectedBudget.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
             </>
           }
-          sub="Projection immédiate sur la flotte"
+          sub={hasActionableBudgetCases ? "Projection immédiate sur les cas à arbitrer" : "Projection de routine sur la flotte"}
           variant="blue"
         />
         <KpiCard
@@ -529,22 +572,28 @@ export function CostsPage() {
           icon={<CalendarClock className="h-5 w-5" />}
           label="À faire valider"
           value={String(actionsToReview)}
-          sub="Actions prioritaires"
+          sub="Cas non stables"
           variant="warn"
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+      <div
+        data-testid="budget-action-section"
+        className="rounded-2xl border border-border bg-card p-5 shadow-premium"
+      >
         <div className="mb-4">
-          <div className="section-title">Machines dont le pronostic engage le budget</div>
+          <div className="section-title">
+            {hasActionableBudgetCases ? "Machines à arbitrer dans le budget" : "Projection budgétaire de routine"}
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ce ne sont pas forcément les machines les plus anciennes. Ce sont celles dont l'état actuel,
-            le stress et le RUL rendent l'action la plus engageante aujourd'hui.
+            {hasActionableBudgetCases
+              ? "Les cas non stables passent d'abord."
+              : "Toutes les machines lues sont stables."}
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-          {liveCostEntries.slice(0, 3).map((entry) => {
+          {budgetFocusEntries.slice(0, 3).map((entry) => {
             const tone = getUrgencyTone(entry.insight.urgencyBand);
             const costReference = getTaskCostReference(entry.insight.taskTemplate.type);
             return (
@@ -611,7 +660,7 @@ export function CostsPage() {
                 </div>
 
                 <p className="mt-3 text-xs leading-relaxed text-secondary-foreground">
-                  {entry.insight.plainReason}
+                  {compactText(entry.insight.plainReason, 120)}
                 </p>
 
                 <div className="mt-4 flex gap-2">
@@ -634,12 +683,101 @@ export function CostsPage() {
         </div>
       </div>
 
+      {routineCostEntries.length > 0 && hasActionableBudgetCases ? (
+        <div
+          data-testid="budget-routine-section"
+          className="rounded-2xl border border-border bg-card p-5 shadow-premium"
+        >
+          <div className="mb-4">
+            <div className="section-title">Projection de routine (machines stables)</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Les lectures stables restent visibles, sans passer devant les cas a arbitrer.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+            {routineCostEntries.slice(0, 3).map((entry) => {
+              const tone = getUrgencyTone(entry.insight.urgencyBand);
+              const costReference = getTaskCostReference(entry.insight.taskTemplate.type);
+
+              return (
+                <div
+                  key={entry.insight.machine.id}
+                  className={`rounded-2xl border p-4 shadow-sm ${tone.panel}`}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-foreground">
+                        {getMachinePublicLabel(entry.insight.machine)}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {entry.insight.machine.city || entry.insight.machine.loc}
+                      </div>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${tone.badge}`}>
+                      {entry.insight.urgencyLabel}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-card/70 p-2">
+                      <div className="text-[0.6rem] uppercase tracking-[0.18em] text-muted-foreground">HI</div>
+                      <div className="mt-1 text-sm font-bold text-foreground">
+                        {formatHiPercent(entry.insight.machine.hi)}
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-card/70 p-2">
+                      <div className="text-[0.6rem] uppercase tracking-[0.18em] text-muted-foreground">RUL</div>
+                      <div className="mt-1 text-sm font-bold text-foreground">
+                        {formatPredictiveRul(entry.insight)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">Projection routine</div>
+                    <div className="mt-1 text-lg font-bold text-foreground">
+                      {formatCurrency(entry.projectedCost)}
+                    </div>
+                    <div className="mt-1 text-[0.68rem] text-muted-foreground">
+                      {getBaselineSourceLabel(entry.baseSource)} x {entry.multiplier.toFixed(2)}
+                    </div>
+                    <div className="mt-1 text-[0.68rem] text-muted-foreground">
+                      Référence métier : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
+                      {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pièces
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-xs leading-relaxed text-secondary-foreground">
+                    {compactText(entry.insight.recommendedAction, 110)}
+                  </p>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => openDiagnostics(entry.insight.machine.id)}
+                      className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-all hover:bg-surface-3"
+                    >
+                      Voir diagnostic
+                    </button>
+                    <button
+                      onClick={() => openPlanner(entry.insight.machine.id)}
+                      className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+                    >
+                      {isAdmin ? "Ouvrir le plan d'action" : "Voir le calendrier"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-foreground">Du passé vers le budget à venir</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Bleu et ocre = dépenses déjà enregistrées. Turquoise = tâches déjà validées dans le calendrier.
-            Vert = projection du mois en cours à partir de l'état actuel de la flotte.
+            Bleu/ocre = depenses enregistrees. Turquoise = taches validees. Vert = projection du mois en cours.
           </p>
           {historicalContextLabel ? (
             <p className="mt-2 text-xs text-muted-foreground">{historicalContextLabel}</p>

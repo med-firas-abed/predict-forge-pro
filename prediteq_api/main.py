@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY are required")
 
     if not settings.GROQ_API_KEY:
-        logger.warning("GROQ_API_KEY not set — AI chat, reports, and planner will be unavailable")
+        logger.warning("GROQ_API_KEY not set - AI chat and AI reports will be unavailable; the deterministic planner stays available")
     has_smtp = bool(
         settings.SMTP_HOST
         and settings.SMTP_PORT

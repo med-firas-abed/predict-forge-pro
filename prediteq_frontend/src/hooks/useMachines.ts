@@ -1,9 +1,15 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Machine, MachineDecision } from "@/data/machines";
 import { apiFetch } from "@/lib/api";
+import { resolveMachineCoordinates } from "@/lib/machineGeo";
 import {
   normalizeMachineFloors,
   normalizeMachineModel,
@@ -26,6 +32,13 @@ const STATUT_MAP: Record<string, Machine["status"]> = {
 const KW_TO_AMPS = 1000 / (Math.sqrt(3) * 400 * 0.8);
 const MACHINE_CACHE_KEY_PREFIX = "prediteq-machine-cache-v5";
 const LEGACY_MACHINE_CACHE_KEY = "prediteq-machine-cache-v4";
+const FLEET_QUERY_KEYS = [
+  ["machines"],
+  ["couts"],
+  ["gmao_taches"],
+  ["alertes"],
+  ["alert-email-history"],
+] as const;
 
 function formatLastUpdate(value?: string | null) {
   if (!value) return "";
@@ -75,6 +88,23 @@ function buildMachineCacheKey(machineId?: string) {
   return `${MACHINE_CACHE_KEY_PREFIX}:${machineId ?? "all"}`;
 }
 
+function normalizeMachineCoordinates(machine: Machine): Machine {
+  const coordinates = resolveMachineCoordinates({
+    lat: machine.lat,
+    lon: machine.lon,
+    region: machine.city,
+    location: machine.loc,
+    machineId: machine.id,
+    machineName: machine.name,
+  });
+
+  return {
+    ...machine,
+    lat: coordinates.lat,
+    lon: coordinates.lon,
+  };
+}
+
 function statusFromRuntime(
   zone: unknown,
   hi: number | null,
@@ -91,6 +121,36 @@ function statusFromRuntime(
   }
 
   return STATUT_MAP[persistedStatut] || "ok";
+}
+
+function mapPolicyContext(
+  raw: Record<string, unknown> | null | undefined,
+): MachineDecision["policyContext"] {
+  if (!raw) return null;
+
+  const scenarioRaw = (raw.scenario as Record<string, unknown> | undefined) ?? {};
+  const telemetryRaw = (raw.telemetry as Record<string, unknown> | undefined) ?? {};
+  const machineRaw = (raw.machine as Record<string, unknown> | undefined) ?? {};
+
+  return {
+    scenario: {
+      pressure: numberOrNull(scenarioRaw.pressure),
+      label: repairText((scenarioRaw.label as string | null) ?? null),
+      source: repairText((scenarioRaw.source as string | null) ?? null),
+      summary: repairText((scenarioRaw.summary as string | null) ?? null),
+    },
+    telemetry: {
+      trustScore: numberOrNull(telemetryRaw.trust_score),
+      trustLevel: repairText((telemetryRaw.trust_level as string | null) ?? null),
+      autoScheduleGuard: Boolean(telemetryRaw.auto_schedule_guard),
+      heavyActionGuard: Boolean(telemetryRaw.heavy_action_guard),
+    },
+    machine: {
+      criticality: numberOrNull(machineRaw.criticality),
+      category: repairText((machineRaw.category as string | null) ?? null),
+      label: repairText((machineRaw.label as string | null) ?? null),
+    },
+  };
 }
 
 function mapDecision(raw: Record<string, unknown> | null | undefined): MachineDecision | null {
@@ -140,6 +200,7 @@ function mapDecision(raw: Record<string, unknown> | null | undefined): MachineDe
     taskTemplate: {
       type: (taskTemplateRaw.type as MachineDecision["taskTemplate"]["type"]) ?? "inspection",
       leadDays: Number(taskTemplateRaw.lead_days ?? 0),
+      cooldownDays: numberOrNull(taskTemplateRaw.cooldown_days) ?? undefined,
       title: repairText((taskTemplateRaw.title as string) || ""),
       summary: repairText((taskTemplateRaw.summary as string) || ""),
     },
@@ -147,6 +208,9 @@ function mapDecision(raw: Record<string, unknown> | null | undefined): MachineDe
       multiplier: Number(budgetRaw.multiplier ?? 1),
       delayMultiplier: Number(budgetRaw.delay_multiplier ?? 1.05),
     },
+    policyContext: mapPolicyContext(
+      (raw.policy_context as Record<string, unknown> | null | undefined) ?? null,
+    ),
     diagnosisCount: Number(raw.diagnosis_count ?? 0),
     diagnoses: Array.isArray(raw.diagnoses)
       ? raw.diagnoses.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
@@ -222,6 +286,14 @@ function supabaseRowToMachine(row: Record<string, unknown>): Machine {
       ? Math.round(Math.max(rulValue - rulIntervalLow, rulIntervalHigh - rulValue))
       : null;
   const updatedAt = decision?.updatedAt ?? (row.derniere_maj as string | undefined) ?? null;
+  const coordinates = resolveMachineCoordinates({
+    lat: row.latitude,
+    lon: row.longitude,
+    region: (row.region as string | undefined) ?? null,
+    location: (row.emplacement as string | undefined) ?? null,
+    machineId: code,
+    machineName: (row.nom as string | undefined) ?? null,
+  });
 
   return {
     id: repairText(code),
@@ -231,8 +303,8 @@ function supabaseRowToMachine(row: Record<string, unknown>): Machine {
       ((row.emplacement as string | undefined) ?? `Region ${(row.region ?? "") as string}`),
     ),
     city: repairText((row.region ?? "") as string),
-    lat: Number(row.latitude ?? 0),
-    lon: Number(row.longitude ?? 0),
+    lat: coordinates.lat,
+    lon: coordinates.lon,
     hi: hiValue,
     rul: rulValue,
     rulci,
@@ -282,10 +354,16 @@ function parseCachedMachines(raw: string, machineId?: string): Machine[] | null 
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return filterMachines(repairTextDeep(parsed as Machine[]), machineId);
+    return filterMachines(repairTextDeep(parsed as Machine[]), machineId).map(normalizeMachineCoordinates);
   } catch {
     return null;
   }
+}
+
+function invalidateFleetQueries(queryClient: QueryClient) {
+  FLEET_QUERY_KEYS.forEach((queryKey) => {
+    void queryClient.invalidateQueries({ queryKey: [...queryKey] });
+  });
 }
 
 function readCachedMachines(machineId?: string): Machine[] {
@@ -362,14 +440,14 @@ export function useMachines(machineId?: string) {
 
   useEffect(() => {
     return subscribeToMachineChanges(() => {
-      queryClient.invalidateQueries({ queryKey: ["machines"] });
+      invalidateFleetQueries(queryClient);
     });
   }, [machineId, queryClient]);
 
   const addMachine = useMutation({
     mutationFn: (machine: Partial<Machine>) => createMachineRecord(machine),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["machines"] });
+      invalidateFleetQueries(queryClient);
       toast.success(`Machine ${variables.id ?? ""} ajoutee`);
     },
     onError: (error: Error) => {
@@ -381,7 +459,7 @@ export function useMachines(machineId?: string) {
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Machine> }) =>
       updateMachineRecord(id, updates),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["machines"] });
+      invalidateFleetQueries(queryClient);
       toast.success(`Machine ${variables.id} mise a jour`);
     },
     onError: (error: Error) => {
@@ -392,7 +470,7 @@ export function useMachines(machineId?: string) {
   const deleteMachine = useMutation({
     mutationFn: (id: string) => deleteMachineRecord(id),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["machines"] });
+      invalidateFleetQueries(queryClient);
       toast.success(`Machine ${variables} supprimee`);
     },
     onError: (error: Error) => {

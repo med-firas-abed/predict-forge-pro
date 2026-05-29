@@ -5,13 +5,21 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlertes } from "@/hooks/useAlertes";
 import { useAlertEmailHistory } from "@/hooks/useAlertEmailHistory";
-import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
+import {
+  type PredictiveInsight,
+  useFleetPredictiveInsights,
+} from "@/hooks/useFleetPredictiveInsights";
 import { useMachines } from "@/hooks/useMachines";
-import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import {
+  getMachinePublicLabel,
+  replaceMachineCodesForDisplay,
+} from "@/lib/machinePresentation";
+import { repairText } from "@/lib/repairText";
 import {
   formatHiPercent,
   formatPredictiveRul,
   formatStressValue,
+  getUrgencyTone,
 } from "@/lib/predictiveLive";
 import {
   groupAlertes,
@@ -38,6 +46,7 @@ const SEVERITY_ORDER: Record<AlertLevel, number> = {
   surveillance: 2,
   info: 1,
 };
+const REVIEW_ONLY_SIGNAL_AGE_HOURS = 48;
 
 function formatAlertTimestamp(value: string) {
   const timestamp = new Date(value);
@@ -63,7 +72,7 @@ function sortSignals(left: GroupedAlert, right: GroupedAlert) {
 function getSeverityMeta(severity: AlertLevel) {
   if (severity === "urgence") {
     return {
-      label: "A traiter tout de suite",
+      label: "À traiter tout de suite",
       shortLabel: "Critique",
       panelClass: "border-destructive/25 bg-destructive/5",
       badgeClass: "bg-destructive/10 text-destructive",
@@ -73,7 +82,7 @@ function getSeverityMeta(severity: AlertLevel) {
 
   if (severity === "surveillance") {
     return {
-      label: "A surveiller de pres",
+      label: "À surveiller de près",
       shortLabel: "Surveillance",
       panelClass: "border-warning/25 bg-warning/5",
       badgeClass: "bg-warning/10 text-warning",
@@ -88,6 +97,74 @@ function getSeverityMeta(severity: AlertLevel) {
     badgeClass: "bg-primary/10 text-primary",
     lineClass: "border-primary/30 bg-primary/5",
   };
+}
+
+function getCurrentStateMeta(insight: Pick<PredictiveInsight, "urgencyBand">) {
+  const tone = getUrgencyTone(insight.urgencyBand);
+
+  switch (insight.urgencyBand) {
+    case "critical":
+      return {
+        label: "A traiter tout de suite",
+        shortLabel: "Critique",
+        panelClass: tone.panel,
+        badgeClass: tone.badge,
+      };
+    case "priority":
+      return {
+        label: "A planifier vite",
+        shortLabel: "Prioritaire",
+        panelClass: tone.panel,
+        badgeClass: tone.badge,
+      };
+    case "watch":
+      return {
+        label: "A surveiller de pres",
+        shortLabel: "Surveillance",
+        panelClass: tone.panel,
+        badgeClass: tone.badge,
+      };
+    default:
+      return {
+        label: "Etat courant stable",
+        shortLabel: "Stable",
+        panelClass: tone.panel,
+        badgeClass: tone.badge,
+      };
+  }
+}
+
+function getHoursSince(timestamp: string, now = new Date()) {
+  const value = new Date(timestamp).getTime();
+  if (Number.isNaN(value)) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (now.getTime() - value) / (60 * 60 * 1000));
+}
+
+function isReviewOnlySignalRow(
+  row: Pick<MachineActionRow, "latestTimestamp">,
+  insight?: Pick<PredictiveInsight, "urgencyBand"> | null,
+  now = new Date(),
+) {
+  if (!insight || insight.urgencyBand !== "stable") {
+    return false;
+  }
+
+  return getHoursSince(row.latestTimestamp, now) >= REVIEW_ONLY_SIGNAL_AGE_HOURS;
+}
+
+function compactText(value: string | null | undefined, maxLength = 120) {
+  const normalized = replaceMachineCodesForDisplay(
+    repairText((value ?? "").replace(/\s+/g, " ").trim()),
+  );
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+
+  const sentenceCutoff = normalized.lastIndexOf(". ", maxLength);
+  if (sentenceCutoff >= Math.floor(maxLength * 0.55)) {
+    return normalized.slice(0, sentenceCutoff + 1);
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 export function AlertsPage() {
@@ -239,8 +316,29 @@ export function AlertsPage() {
     return [...grouped.values()].sort((left, right) => right.latestTimestamp.localeCompare(left.latestTimestamp));
   }, [historySignals, machines]);
 
-  const activeMachineCount = machineRows.length;
-  const activeSignalCount = activeSignals.length;
+  const { actionRows, reviewRows } = useMemo(() => {
+    const actionable: MachineActionRow[] = [];
+    const reviewOnly: MachineActionRow[] = [];
+
+    machineRows.forEach((row) => {
+      const insight = byMachineId[row.machineId];
+      if (isReviewOnlySignalRow(row, insight)) {
+        reviewOnly.push(row);
+        return;
+      }
+
+      actionable.push(row);
+    });
+
+    return {
+      actionRows: actionable,
+      reviewRows: reviewOnly,
+    };
+  }, [byMachineId, machineRows]);
+
+  const activeMachineCount = actionRows.length;
+  const activeSignalCount = actionRows.reduce((sum, row) => sum + row.openSignalCount, 0);
+  const reviewSignalCount = reviewRows.reduce((sum, row) => sum + row.openSignalCount, 0);
   const filteredEmailHistory = useMemo(() => {
     return emailHistory.filter((entry) => {
       const entryMachineId = entry.machineCode || entry.machineId;
@@ -267,13 +365,15 @@ export function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+      <div
+        data-testid="active-alert-section"
+        className="rounded-2xl border border-border bg-card p-5 shadow-premium"
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="section-title">Alertes issues du pronostic machine</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Ici, une alerte n'est pas juste un seuil brut : chaque cas est relie aux signaux machine,
-              au HI, au stress et au RUL pour guider la prochaine action terrain.
+              Alertes groupées par machine, avec première action terrain.
             </p>
           </div>
           <button
@@ -287,31 +387,202 @@ export function AlertsPage() {
 
         {!isAdmin ? (
           <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
-            Lecture seule: vous consultez uniquement les alertes et traces de votre machine. L'acquittement
-            et les actions de configuration restent reserves a l'administrateur.
+            Lecture seule : alertes et traces de votre machine uniquement.
           </div>
         ) : null}
 
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-foreground">
-            {activeMachineCount} machine{activeMachineCount > 1 ? "s" : ""} a traiter
+            {activeMachineCount} machine{activeMachineCount > 1 ? "s" : ""} à traiter
           </span>
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
             {activeSignalCount} signal{activeSignalCount > 1 ? "aux" : ""} encore ouvert{activeSignalCount > 1 ? "s" : ""}
           </span>
+          {reviewSignalCount > 0 ? (
+            <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
+              {reviewSignalCount} signal{reviewSignalCount > 1 ? "aux" : ""} à requalifier
+            </span>
+          ) : null}
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
-            {filteredEmailHistory.length} email{filteredEmailHistory.length > 1 ? "s" : ""} de trace recente
+            {filteredEmailHistory.length} email{filteredEmailHistory.length > 1 ? "s" : ""} de trace récente
           </span>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+      {reviewRows.length > 0 ? (
+        <div
+          data-testid="review-alert-section"
+          className="rounded-2xl border border-border bg-card p-5 shadow-premium"
+        >
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="section-title">Signaux ouverts à relire</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Traces ouvertes, mais plus prioritaires dans la lecture machine actuelle.
+              </p>
+            </div>
+            <div className="rounded-full bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
+              {reviewRows.length} machine{reviewRows.length > 1 ? "s" : ""}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {reviewRows.map((row) => {
+              const leadSignal = row.activeSignals[0];
+              const isExpanded = Boolean(expandedMachines[row.machineId]);
+              const reviewReason =
+                compactText(
+                  `Le signal ouvert date du ${formatAlertTimestamp(row.latestTimestamp)}, mais la lecture machine actuelle est revenue stable. Relire ce cas avant acquittement.`,
+                  170,
+                ) ??
+                "Le signal reste ouvert alors que la machine est revenue sur une lecture stable.";
+
+              return (
+                <div
+                  key={row.machineId}
+                  className="rounded-2xl border border-border bg-surface-3/70 p-5 shadow-sm"
+                >
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-bold text-foreground">{row.machineName}</span>
+                        <span className="rounded-full bg-card px-2.5 py-1 text-[0.65rem] font-semibold text-foreground">
+                          Signal à requalifier
+                        </span>
+                        <span className="rounded-full bg-success/10 px-2.5 py-1 text-[0.65rem] font-semibold text-success">
+                          État courant stable
+                        </span>
+                        <span className="rounded-full bg-card px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
+                          {row.openSignalCount} signal{row.openSignalCount > 1 ? "aux" : ""} encore ouvert{row.openSignalCount > 1 ? "s" : ""}
+                        </span>
+                        <span className="text-[0.7rem] text-muted-foreground">
+                          {formatAlertTimestamp(row.latestTimestamp)}
+                        </span>
+                      </div>
+
+                      {row.machineSubtitle ? (
+                        <div className="mt-1 text-sm text-muted-foreground">{row.machineSubtitle}</div>
+                      ) : null}
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_0.9fr]">
+                        <div className="rounded-xl border border-border bg-card/80 p-4">
+                          <div className="industrial-label">Pourquoi ce cas sort du prioritaire</div>
+                          <div className="mt-2 text-sm font-semibold text-foreground">
+                            {replaceMachineCodesForDisplay(leadSignal?.title ?? "Signal à relire")}
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
+                            {reviewReason}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-card/80 p-4">
+                          <div className="industrial-label">Action conseillée</div>
+                          <div className="mt-2 text-sm font-semibold text-foreground">
+                            Relire puis acquitter si le terrain confirme le retour a la normale.
+                          </div>
+                          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                            La trace reste visible pour audit.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex w-full flex-col gap-2 xl:w-[220px] xl:min-w-[220px]">
+                      <button
+                        onClick={() => navigate(`/diagnostics?machine=${encodeURIComponent(row.machineId)}`)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                      >
+                        Voir diagnostic
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedMachines((current) => ({
+                            ...current,
+                            [row.machineId]: !current[row.machineId],
+                          }))
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card/80 px-3.5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface-3"
+                      >
+                        {isExpanded ? "Masquer les signaux" : `Voir les signaux actifs (${row.openSignalCount})`}
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isExpanded ? (
+                    <div className="mt-4 rounded-xl border border-border bg-card/70 p-4">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="industrial-label">Signaux actifs</div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Ouverts dans la trace, hors priorite immediate.
+                          </p>
+                        </div>
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => acquitterAlertes.mutate(row.openIds)}
+                            disabled={acquitterAlertes.isPending}
+                            className="rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[0.72rem] font-semibold text-foreground transition-colors hover:bg-border-subtle disabled:opacity-50"
+                          >
+                            Acquitter les signaux
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-2">
+                        {row.activeSignals.map((signal) => {
+                          const signalSeverity = getSeverityMeta(signal.severity);
+
+                          return (
+                            <div
+                              key={signal.key}
+                              className={`rounded-xl border p-3 ${signalSeverity.lineClass}`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`rounded-md px-2 py-0.5 text-[0.62rem] font-semibold ${signalSeverity.badgeClass}`}>
+                                    {signalSeverity.shortLabel}
+                                  </span>
+                                  <span className="text-sm font-semibold text-foreground">
+                                    {replaceMachineCodesForDisplay(signal.title)}
+                                  </span>
+                                </div>
+                                <span className="text-[0.7rem] text-muted-foreground">
+                                  {formatAlertTimestamp(signal.latestTimestamp)}
+                                </span>
+                              </div>
+
+                              {signal.message && signal.message !== signal.title ? (
+                                <p className="mt-2 text-xs leading-relaxed text-secondary-foreground">
+                                  {compactText(signal.message, 110)}
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div
+        data-testid="prioritized-alert-section"
+        className="rounded-2xl border border-border bg-card p-5 shadow-premium"
+      >
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Cas actifs priorises par le pronostic</div>
+            <div className="section-title">Cas actifs priorisés par le pronostic</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Une carte = une machine. Les signaux ouverts sont regroupes, puis relus avec le HI, le stress
-              et le RUL pour decider quoi verifier d'abord.
+              1 carte = 1 machine. HI, stress et RUL guident le premier controle.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -324,17 +595,39 @@ export function AlertsPage() {
           </div>
         </div>
 
-        {machineRows.length === 0 ? (
+        {actionRows.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
             Aucun cas actif ne ressort avec les filtres courants.
           </div>
         ) : (
           <div className="space-y-4">
-            {machineRows.map((row) => {
+            {actionRows.map((row) => {
               const insight = byMachineId[row.machineId];
-              const severity = getSeverityMeta(row.highestSeverity);
+              const severity =
+                insight && insight.urgencyBand !== "stable"
+                  ? getCurrentStateMeta(insight)
+                  : getSeverityMeta(row.highestSeverity);
+              const signalSeverity = getSeverityMeta(row.highestSeverity);
               const leadSignal = row.activeSignals[0];
               const isExpanded = Boolean(expandedMachines[row.machineId]);
+              const leadReason =
+                compactText(
+                  insight?.plainReason ??
+                    leadSignal?.message ??
+                    "Le système demande une vérification terrain.",
+                  150,
+                ) ?? "Le système demande une vérification terrain.";
+              const recommendedAction =
+                compactText(
+                  insight?.recommendedAction ??
+                    "Vérifier la machine avant reprise en charge normale.",
+                  110,
+                ) ?? "Vérifier la machine avant reprise en charge normale.";
+              const actionImpact =
+                compactText(
+                  insight?.impact ?? "Détail complet dans le diagnostic de la machine.",
+                  120,
+                ) ?? "Détail complet dans le diagnostic de la machine.";
 
               return (
                 <div
@@ -347,6 +640,9 @@ export function AlertsPage() {
                         <span className="text-base font-bold text-foreground">{row.machineName}</span>
                         <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${severity.badgeClass}`}>
                           {severity.label}
+                        </span>
+                        <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${signalSeverity.badgeClass}`}>
+                          Signal ouvert : {signalSeverity.shortLabel}
                         </span>
                         <span className="rounded-full bg-card/80 px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
                           {row.openSignalCount} signal{row.openSignalCount > 1 ? "aux" : ""} actif{row.openSignalCount > 1 ? "s" : ""}
@@ -372,7 +668,7 @@ export function AlertsPage() {
                             Stress {formatStressValue(insight.stressValue)}
                           </span>
                           <span className="rounded-full bg-card/80 px-2.5 py-1 text-foreground">
-                            {insight.maintenanceWindow ?? "Fenetre a confirmer"}
+                            {insight.maintenanceWindow ?? "Fenêtre à confirmer"}
                           </span>
                         </div>
                       ) : null}
@@ -381,20 +677,20 @@ export function AlertsPage() {
                         <div className="rounded-xl border border-border bg-card/80 p-4">
                           <div className="industrial-label">Signal dominant</div>
                           <div className="mt-2 text-sm font-semibold text-foreground">
-                            {leadSignal?.title ?? "Signal a confirmer"}
+                            {replaceMachineCodesForDisplay(leadSignal?.title ?? "Signal à confirmer")}
                           </div>
                           <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
-                            {insight?.plainReason ?? leadSignal?.message ?? "Le systeme demande une verification terrain."}
+                            {leadReason}
                           </p>
                         </div>
 
                         <div className="rounded-xl border border-border bg-card/80 p-4">
-                          <div className="industrial-label">Decision terrain conseillee</div>
+                          <div className="industrial-label">Décision terrain conseillée</div>
                           <div className="mt-2 text-sm font-semibold text-foreground">
-                            {insight?.recommendedAction ?? "Verifier la machine avant reprise en charge normale."}
+                            {recommendedAction}
                           </div>
                           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                            {insight?.impact ?? "Le detail technique reste accessible dans le diagnostic de la machine."}
+                            {actionImpact}
                           </p>
                         </div>
                       </div>
@@ -439,7 +735,7 @@ export function AlertsPage() {
                         <div>
                           <div className="industrial-label">Signaux actifs</div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Les repetitions similaires restent regroupees pour garder une lecture claire.
+                            Les répétitions similaires restent regroupées.
                           </p>
                         </div>
                         {isAdmin ? (
@@ -469,7 +765,9 @@ export function AlertsPage() {
                                   <span className={`rounded-md px-2 py-0.5 text-[0.62rem] font-semibold ${signalSeverity.badgeClass}`}>
                                     {signalSeverity.shortLabel}
                                   </span>
-                                  <span className="text-sm font-semibold text-foreground">{signal.title}</span>
+                                  <span className="text-sm font-semibold text-foreground">
+                                    {replaceMachineCodesForDisplay(signal.title)}
+                                  </span>
                                 </div>
                                 <span className="text-[0.7rem] text-muted-foreground">
                                   {formatAlertTimestamp(signal.latestTimestamp)}
@@ -478,14 +776,14 @@ export function AlertsPage() {
 
                               {signal.message && signal.message !== signal.title ? (
                                 <p className="mt-2 text-xs leading-relaxed text-secondary-foreground">
-                                  {signal.message}
+                                  {compactText(signal.message, 110)}
                                 </p>
                               ) : null}
 
                               {historicalEchoCount > 0 ? (
                                 <div className="mt-2 text-[0.7rem] text-muted-foreground">
                                   {historicalEchoCount} occurrence{historicalEchoCount > 1 ? "s" : ""} similaire{historicalEchoCount > 1 ? "s" : ""}
-                                  {" "}deja acquittee{historicalEchoCount > 1 ? "s" : ""} restent repliee{historicalEchoCount > 1 ? "s" : ""} dans l'historique.
+                                  {" "}déjà acquittée{historicalEchoCount > 1 ? "s" : ""} restent repliée{historicalEchoCount > 1 ? "s" : ""} dans l'historique.
                                 </div>
                               ) : null}
                             </div>
@@ -505,13 +803,12 @@ export function AlertsPage() {
         <div className="mb-4">
           <div className="section-title">Filtrer la lecture</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Les cas actifs restent en haut. Les filtres servent surtout a cibler une machine, une periode ou
-            un niveau de severite.
+            Isolez un cas ; les urgences restent triees en haut.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Severite</label>
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Sévérité</label>
             <select
               value={severityFilter}
               onChange={(event) => setSeverityFilter(event.target.value as AlertSeverityFilter)}
@@ -539,7 +836,7 @@ export function AlertsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Date debut</label>
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Date début</label>
             <input
               type="date"
               value={startDate}
@@ -559,7 +856,7 @@ export function AlertsPage() {
         </div>
 
         <div className="mt-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
-          La vue principale reste volontairement operationnelle : un cas actif = une machine a relire maintenant.
+          Vue action : 1 cas actif = 1 machine a relire.
         </div>
       </div>
 
@@ -568,8 +865,7 @@ export function AlertsPage() {
           <div>
             <div className="section-title">Trace des emails d'alerte</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Journal recent des notifications envoyees ou tentees. Cette trace sert a l'audit, pas a la
-              priorisation principale.
+              Journal recent des notifications pour audit.
             </p>
           </div>
           <div className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
@@ -616,12 +912,12 @@ export function AlertsPage() {
                         <div className="rounded-lg border border-border bg-surface-3 px-3 py-2.5">
                           <div className="industrial-label">Objet</div>
                           <div className="mt-1 text-sm font-medium text-foreground">
-                            {entry.subject || "Notification d'alerte PrediTeq"}
+                            {replaceMachineCodesForDisplay(entry.subject || "Notification d'alerte PrediTeq")}
                           </div>
                         </div>
                       </div>
                       {entry.note ? (
-                        <p className="mt-3 text-xs text-muted-foreground">{entry.note}</p>
+                        <p className="mt-3 text-xs text-muted-foreground">{compactText(entry.note, 110)}</p>
                       ) : null}
                     </div>
                   </div>
@@ -631,7 +927,7 @@ export function AlertsPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
-            Aucun email d'alerte recent ne ressort avec les filtres courants.
+            Aucun email d'alerte récent ne ressort avec les filtres courants.
           </div>
         )}
       </div>
@@ -639,9 +935,9 @@ export function AlertsPage() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Historique des alertes cloturees</div>
+            <div className="section-title">Historique des alertes clôturées</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Les anciens signaux restent disponibles ici sans reprendre la main sur les cas encore actifs.
+              Les anciens signaux restent visibles sans reprendre la main.
             </p>
           </div>
           <button
@@ -667,7 +963,7 @@ export function AlertsPage() {
                     </div>
                     <div className="text-right">
                       <div className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
-                        {machineHistory.entries.length} signal{machineHistory.entries.length > 1 ? "aux" : ""} cloture{machineHistory.entries.length > 1 ? "s" : ""}
+                        {machineHistory.entries.length} signal{machineHistory.entries.length > 1 ? "aux" : ""} clôturé{machineHistory.entries.length > 1 ? "s" : ""}
                       </div>
                       <div className="mt-1 text-[0.68rem] text-muted-foreground">
                         {formatAlertTimestamp(machineHistory.latestTimestamp)}
@@ -684,13 +980,17 @@ export function AlertsPage() {
                             <span className={`rounded-md px-2 py-0.5 text-[0.6rem] font-semibold ${severity.badgeClass}`}>
                               {severity.shortLabel}
                             </span>
-                            <span className="text-sm font-semibold text-foreground">{entry.title}</span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {replaceMachineCodesForDisplay(entry.title)}
+                            </span>
                             <span className="text-[0.68rem] text-muted-foreground">
                               {entry.count} occurrence{entry.count > 1 ? "s" : ""}
                             </span>
                           </div>
                           {entry.message && entry.message !== entry.title ? (
-                            <p className="mt-1 text-xs text-secondary-foreground">{entry.message}</p>
+                            <p className="mt-1 text-xs text-secondary-foreground">
+                              {replaceMachineCodesForDisplay(entry.message)}
+                            </p>
                           ) : null}
                         </div>
                       );
@@ -706,7 +1006,7 @@ export function AlertsPage() {
           )
         ) : (
           <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm text-muted-foreground">
-            L'historique detaille reste replie pour garder cette page centree sur les machines a traiter maintenant.
+            Historique replie pour garder la page centree sur l'action.
           </div>
         )}
       </div>

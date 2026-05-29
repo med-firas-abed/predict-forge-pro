@@ -600,37 +600,21 @@ def build_calibrated_rul_response(manager, machine_code: str) -> dict:
     except HTTPException as e:
         if e.status_code in {404, 425}:
             if rul_persisted_days is not None and rul_persisted_days > 0:
+                last_valid_detail = (
+                    "Derniere estimation valide conservee depuis l'etat persiste; "
+                    "un nouveau flux live est encore necessaire avant de republier un RUL prediction."
+                )
                 return {
                     **base_response,
-                    "mode": PREDICTION_MODE,
-                    "legacy_mode": LEGACY_MODE_BY_CANONICAL[PREDICTION_MODE],
-                    "prediction": {
+                    "mode": INITIALIZING_MODE,
+                    "legacy_mode": LEGACY_MODE_BY_CANONICAL[INITIALIZING_MODE],
+                    "prediction": None,
+                    "reference_prediction": {
+                        "kind": "last_valid",
                         "rul_days": rul_persisted_days,
-                        "rul_days_p10": None,
-                        "rul_days_p90": None,
-                        "rul_days_display_low": None,
-                        "rul_days_display_high": None,
-                        "display_interval_label": None,
-                        "cycles_remaining": int(
-                            round(rul_persisted_days * DEFAULT_FACTOR * CYCLES_PER_SIM_MIN)
-                        ),
-                        "cycles_per_day_observed": None,
-                        "factor_used": round(DEFAULT_FACTOR, 2),
-                        "factor_source": "synthetic_scale",
-                        "cycles_per_sim_min": CYCLES_PER_SIM_MIN,
-                        "hi_zone": zone_name,
-                        "maintenance_window": maintenance_window,
-                        "rul_min_simulator": round(rul_persisted_days * DEFAULT_FACTOR, 1),
-                        "rul_min_p10": None,
-                        "rul_min_p90": None,
-                        "n_trees": None,
-                        "cvi": None,
-                        "confidence": "medium",
-                        "stop_recommended": (
-                            zone_name == "Critical" and rul_persisted_days <= 30
-                        ),
                     },
-                    "reference_prediction": None,
+                    "warmup_detail": last_valid_detail,
+                    "warming_up_detail": last_valid_detail,
                     "warmup_hi_threshold": WARMUP_HI_THRESHOLD,
                     "fpt_threshold": WARMUP_HI_THRESHOLD,
                 }

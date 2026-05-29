@@ -48,6 +48,10 @@ function _normalizeMachineLabelValue(value: unknown): string {
   return normalized;
 }
 
+function _escapeMachineLabelPattern(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function _isDemoStyleMachineCode(value: string | null | undefined): boolean {
   const normalized = _normalizeMachineLabelValue(value).toUpperCase();
   return /^ASC-[A-Z]\d+$/.test(normalized);
@@ -151,6 +155,26 @@ export function getMachinePublicOptionsLabel(
   input: MachinePublicLabelInput | string | null | undefined,
 ): string {
   return getMachinePublicLabel(input);
+}
+
+export function replaceMachineCodesForDisplay(
+  value: string | null | undefined,
+  fallback = "Machine",
+): string {
+  const normalized = _normalizeMachineLabelValue(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const escapedFallback = _escapeMachineLabelPattern(fallback);
+  const replaced = normalized.replace(/\bASC-[A-Z]\d+\b/gi, (match) =>
+    getMachinePublicLabel(match, fallback),
+  );
+
+  return replaced.replace(
+    new RegExp(`\\b${escapedFallback}\\s+${escapedFallback}\\s+(\\d+)\\b`, "gi"),
+    `${fallback} $1`,
+  );
 }
 
 export function normalizeMachineFloors(value: unknown): number {

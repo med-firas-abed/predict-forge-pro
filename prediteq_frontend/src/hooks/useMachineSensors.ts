@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { safeStorageGetJson, safeStorageSet } from "@/lib/browserStorage";
 
 const KW_TO_AMPS = 1000 / (Math.sqrt(3) * 400 * 0.8);
+const SENSOR_CACHE_KEY_PREFIX = "prediteq-machine-sensors-cache-v1";
 
 export interface MachineSensorPoint {
   ts?: string;
@@ -119,23 +121,47 @@ function formatSensorTime(
   return minutesAgo === 0 ? "0m" : `-${minutesAgo}m`;
 }
 
-export async function fetchMachineSensorHistory(machineCode: string): Promise<MachineSensorPoint[]> {
-  const data = await apiFetch<MachineSensorPoint[]>(
-    `/machines/${encodeURIComponent(machineCode)}/sensors`
-  );
+function buildSensorCacheKey(machineCode: string) {
+  return `${SENSOR_CACHE_KEY_PREFIX}:${machineCode}`;
+}
 
-  return (data ?? []).map((point) => ({
-    ...point,
-    rms_mms: toNumberOrNull(point.rms_mms),
-    power_kw: toNumberOrNull(point.power_kw),
-    temp_c: toNumberOrNull(point.temp_c),
-    current_a:
-      point.current_a != null
-        ? toNumberOrNull(point.current_a)
-        : point.power_kw != null
-          ? Number(point.power_kw) * KW_TO_AMPS
-          : null,
-  }));
+function readCachedSensorHistory(machineCode: string): MachineSensorPoint[] | null {
+  return safeStorageGetJson<MachineSensorPoint[] | null>(
+    buildSensorCacheKey(machineCode),
+    null,
+  );
+}
+
+export async function fetchMachineSensorHistory(machineCode: string): Promise<MachineSensorPoint[]> {
+  const cacheKey = buildSensorCacheKey(machineCode);
+
+  try {
+    const data = await apiFetch<MachineSensorPoint[]>(
+      `/machines/${encodeURIComponent(machineCode)}/sensors`
+    );
+
+    const normalized = (data ?? []).map((point) => ({
+      ...point,
+      rms_mms: toNumberOrNull(point.rms_mms),
+      power_kw: toNumberOrNull(point.power_kw),
+      temp_c: toNumberOrNull(point.temp_c),
+      current_a:
+        point.current_a != null
+          ? toNumberOrNull(point.current_a)
+          : point.power_kw != null
+            ? Number(point.power_kw) * KW_TO_AMPS
+            : null,
+    }));
+
+    safeStorageSet(cacheKey, JSON.stringify(normalized));
+    return normalized;
+  } catch (error) {
+    const cached = readCachedSensorHistory(machineCode);
+    if (cached) {
+      return cached;
+    }
+    throw error;
+  }
 }
 
 export function useMachineSensors(machineCode?: string) {
@@ -143,6 +169,7 @@ export function useMachineSensors(machineCode?: string) {
     queryKey: ["machine-sensors", machineCode ?? ""],
     queryFn: () => fetchMachineSensorHistory(machineCode ?? ""),
     enabled: Boolean(machineCode),
+    initialData: machineCode ? readCachedSensorHistory(machineCode) ?? undefined : undefined,
     refetchInterval: 5_000,
   });
 

@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Bot, Loader2, Send, Sparkles, User, X } from "lucide-react";
 import { apiStream } from "@/lib/api";
 import { useApp } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Machine } from "@/data/machines";
+import { useMachines } from "@/hooks/useMachines";
+import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { repairText } from "@/lib/repairText";
 
 interface Message {
@@ -11,8 +15,48 @@ interface Message {
 
 type ChatAudience = "jury" | "dual" | "technician";
 
+function getChatMachinePriorityScore(machine: Machine) {
+  const urgencyScore = machine.decision?.urgencyScore;
+  if (typeof urgencyScore === "number" && Number.isFinite(urgencyScore)) {
+    return urgencyScore;
+  }
+
+  const statusScore =
+    machine.status === "critical"
+      ? 90
+      : machine.status === "degraded"
+        ? 55
+        : machine.status === "maintenance"
+          ? 35
+          : 10;
+  const hiPenalty =
+    typeof machine.hi === "number" && Number.isFinite(machine.hi)
+      ? Math.round((1 - machine.hi) * 100)
+      : 0;
+  const rulPenalty =
+    typeof machine.rul === "number" && Number.isFinite(machine.rul)
+      ? Math.max(0, 120 - machine.rul) / 2
+      : 0;
+
+  return statusScore + hiPenalty + rulPenalty;
+}
+
+function getSuggestionMachineLabels(machines: Machine[]) {
+  const rankedLabels = [...machines]
+    .sort((left, right) => getChatMachinePriorityScore(right) - getChatMachinePriorityScore(left))
+    .map((machine) => repairText(getMachinePublicLabel(machine)))
+    .filter(Boolean);
+
+  const primary = rankedLabels[0] ?? null;
+  const secondary = rankedLabels.find((label) => label !== primary) ?? primary;
+
+  return { primary, secondary };
+}
+
 export function ChatWidget() {
   const { t, lang } = useApp();
+  const { currentUser } = useAuth();
+  const { machines } = useMachines(currentUser?.machineId);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -22,6 +66,8 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLInputElement>(null);
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
+  const { primary: primaryMachineLabel, secondary: secondaryMachineLabel } =
+    getSuggestionMachineLabels(machines);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -150,23 +196,78 @@ export function ChatWidget() {
     audience === "jury"
       ? [
           l("Quelle machine demande de l'attention aujourd'hui ?", "Which machine needs attention today?", "Which machine needs attention today?"),
-          l("Explique Machine 2 avec des mots simples", "Explain Machine 2 in simple words", "Explain Machine 2 in simple words"),
+          primaryMachineLabel
+            ? l(
+                `Explique ${primaryMachineLabel} avec des mots simples`,
+                `Explain ${primaryMachineLabel} in simple words`,
+                `Explain ${primaryMachineLabel} in simple words`,
+              )
+            : l(
+                "Explique la machine la plus sensible avec des mots simples",
+                "Explain the most sensitive machine in simple words",
+                "Explain the most sensitive machine in simple words",
+              ),
             l("Résume la flotte pour un jury", "Summarize the fleet for a jury", "Summarize the fleet for a jury"),
             l("Quel est le prochain geste à faire ?", "What should we do next?", "What should we do next?"),
         ]
       : audience === "technician"
         ? [
-            l("Donne HI, RUL et facteur principal pour Machine 2", "Give HI, RUL, and top driver for Machine 2", "Give HI, RUL, and top driver for Machine 2"),
+            primaryMachineLabel
+              ? l(
+                  `Donne HI, RUL et facteur principal pour ${primaryMachineLabel}`,
+                  `Give HI, RUL, and top driver for ${primaryMachineLabel}`,
+                  `Give HI, RUL, and top driver for ${primaryMachineLabel}`,
+                )
+              : l(
+                  "Donne HI, RUL et facteur principal pour la machine la plus sensible",
+                  "Give HI, RUL, and top driver for the most sensitive machine",
+                  "Give HI, RUL, and top driver for the most sensitive machine",
+                ),
             l("Quelles alertes sont urgentes ?", "Which alerts are urgent?", "Which alerts are urgent?"),
             l("Quelle fenêtre d'intervention pour Machine 3 ?", "What is the intervention window for Machine 3?", "What is the intervention window for Machine 3?"),
             l("Résume la flotte avec les priorités terrain", "Summarize the fleet with field priorities", "Summarize the fleet with field priorities"),
           ]
         : [
-            l("Explique Machine 2 simplement puis techniquement", "Explain Machine 2 simply, then technically", "Explain Machine 2 simply, then technically"),
+            primaryMachineLabel
+              ? l(
+                  `Explique ${primaryMachineLabel} simplement puis techniquement`,
+                  `Explain ${primaryMachineLabel} simply, then technically`,
+                  `Explain ${primaryMachineLabel} simply, then technically`,
+                )
+              : l(
+                  "Explique la machine prioritaire simplement puis techniquement",
+                  "Explain the priority machine simply, then technically",
+                  "Explain the priority machine simply, then technically",
+                ),
             l("Quelle machine est prioritaire ?", "Which machine is the priority?", "Which machine is the priority?"),
             l("Résume la flotte pour un jury et un technicien", "Summarize the fleet for a jury and a technician", "Summarize the fleet for a jury and a technician"),
-            l("Pourquoi Machine 3 est urgente ?", "Why is Machine 3 urgent?", "Why is Machine 3 urgent?"),
+            primaryMachineLabel
+              ? l(
+                  `Pourquoi ${primaryMachineLabel} est prioritaire ?`,
+                  `Why is ${primaryMachineLabel} the priority?`,
+                  `Why is ${primaryMachineLabel} the priority?`,
+                )
+              : l(
+                  "Pourquoi la machine prioritaire est urgente ?",
+                  "Why is the priority machine urgent?",
+                  "Why is the priority machine urgent?",
+                ),
           ];
+  const fallbackPriorityLabel = l(
+    "la machine prioritaire",
+    "the priority machine",
+    "the priority machine",
+  );
+  const visibleSuggestions = suggestions.map((suggestion) =>
+    repairText(
+      suggestion
+        .replace(/\bMachine 2\b/g, primaryMachineLabel ?? fallbackPriorityLabel)
+        .replace(
+          /\bMachine 3\b/g,
+          secondaryMachineLabel ?? primaryMachineLabel ?? fallbackPriorityLabel,
+        ),
+    ),
+  );
 
   return (
     <>
@@ -258,7 +359,7 @@ export function ChatWidget() {
                   <p className="mt-3 text-[0.82rem] leading-6 text-muted-foreground">{audienceHelp}</p>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {suggestions.map((suggestion) => (
+                  {visibleSuggestions.map((suggestion) => (
                     <button
                       key={suggestion}
                       onClick={() => {

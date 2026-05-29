@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MachinesPage } from "@/components/pages/MachinesPage";
 
+const apiFetchMock = vi.hoisted(() => vi.fn());
 const useAuthMock = vi.hoisted(() => vi.fn());
 const useAppMock = vi.hoisted(() => vi.fn());
 const useMachinesMock = vi.hoisted(() => vi.fn());
@@ -15,6 +16,10 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 vi.mock("@/contexts/AppContext", () => ({
   useApp: () => useAppMock(),
+}));
+
+vi.mock("@/lib/api", () => ({
+  apiFetch: apiFetchMock,
 }));
 
 vi.mock("@/hooks/useMachines", () => ({
@@ -77,6 +82,7 @@ describe("MachinesPage", () => {
           "mach.idExists": "Cet ID existe déjà",
         })[key] ?? key,
     });
+    apiFetchMock.mockReset();
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
   });
@@ -92,6 +98,7 @@ describe("MachinesPage", () => {
       addMachine: createMutation,
       updateMachine: { mutateAsync: vi.fn(), isPending: false },
       deleteMachine: { mutateAsync: vi.fn(), isPending: false },
+      refetch: vi.fn(),
     });
 
     renderPage();
@@ -130,6 +137,7 @@ describe("MachinesPage", () => {
       addMachine: createMutation,
       updateMachine: { mutateAsync: vi.fn(), isPending: false },
       deleteMachine: { mutateAsync: vi.fn(), isPending: false },
+      refetch: vi.fn(),
     });
 
     renderPage();
@@ -166,6 +174,7 @@ describe("MachinesPage", () => {
       addMachine: { mutateAsync: vi.fn(), isPending: false },
       updateMachine: { mutateAsync: vi.fn(), isPending: false },
       deleteMachine: deleteMutation,
+      refetch: vi.fn(),
     });
 
     renderPage();
@@ -179,5 +188,43 @@ describe("MachinesPage", () => {
 
     expect(screen.getByRole("button", { name: /^oui$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^non$/i })).toBeInTheDocument();
+  });
+
+  it("prepares the future real-machine runtime from the machine card", async () => {
+    const refetchMock = vi.fn().mockResolvedValue(undefined);
+    apiFetchMock.mockResolvedValue({
+      machine_code: "ASC-A1",
+      scenario: "healthy",
+      profile: "A_linear",
+      hi: 0.8046,
+      zone: "Excellent",
+      rul_days: 112.4,
+    });
+
+    useMachinesMock.mockReturnValue({
+      machines: [baseMachine],
+      addMachine: { mutateAsync: vi.fn(), isPending: false },
+      updateMachine: { mutateAsync: vi.fn(), isPending: false },
+      deleteMachine: { mutateAsync: vi.fn(), isPending: false },
+      refetch: refetchMock,
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /préparer flux réel/i }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith("/machines/ASC-A1/prepare-live", {
+        method: "POST",
+        body: JSON.stringify({
+          duration_s: 3600,
+          seed: 99,
+        }),
+      });
+    });
+    expect(refetchMock).toHaveBeenCalledTimes(1);
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining("Machine 1 prêt pour le flux réel"),
+    );
   });
 });

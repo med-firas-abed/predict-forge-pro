@@ -129,7 +129,7 @@ This is the smooth path for demos and first site tests:
 
 ```powershell
 cd prediteq_api
-python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine reelle" --scenario surveillance
+python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine AroTeq" --location "Usine Aroteq - Ben Arous" --scenario surveillance
 ```
 
 This helper:

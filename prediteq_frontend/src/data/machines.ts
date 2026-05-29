@@ -45,6 +45,7 @@ export type MachineDataSource =
 export interface MachineDecisionTaskTemplate {
   type: "preventive" | "corrective" | "inspection";
   leadDays: number;
+  cooldownDays?: number;
   title: string;
   summary: string;
 }
@@ -52,6 +53,32 @@ export interface MachineDecisionTaskTemplate {
 export interface MachineDecisionBudgetModel {
   multiplier: number;
   delayMultiplier: number;
+}
+
+export interface MachineDecisionPolicyScenario {
+  pressure?: number | null;
+  label?: string | null;
+  source?: string | null;
+  summary?: string | null;
+}
+
+export interface MachineDecisionPolicyTelemetry {
+  trustScore?: number | null;
+  trustLevel?: string | null;
+  autoScheduleGuard?: boolean;
+  heavyActionGuard?: boolean;
+}
+
+export interface MachineDecisionPolicyMachine {
+  criticality?: number | null;
+  category?: string | null;
+  label?: string | null;
+}
+
+export interface MachineDecisionPolicyContext {
+  scenario?: MachineDecisionPolicyScenario | null;
+  telemetry?: MachineDecisionPolicyTelemetry | null;
+  machine?: MachineDecisionPolicyMachine | null;
 }
 
 export interface MachineDecision {
@@ -84,6 +111,7 @@ export interface MachineDecision {
   fieldChecks: string[];
   taskTemplate: MachineDecisionTaskTemplate;
   budgetModel: MachineDecisionBudgetModel;
+  policyContext?: MachineDecisionPolicyContext | null;
   diagnosisCount: number;
   diagnoses: Array<Record<string, unknown>>;
   dataSource: MachineDataSource;

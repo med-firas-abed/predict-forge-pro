@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
-import { Download, Plus, Pencil, Trash2, Search, X, Save, BarChart3 } from "lucide-react";
+import { BarChart3, Download, Loader2, Pencil, Plus, Save, Search, Trash2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
+
+import { MachineModal } from "@/components/industrial/MachineModal";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Machine, STATUS_CONFIG } from "@/data/machines";
-import { MachineModal } from "@/components/industrial/MachineModal";
 import { useMachines } from "@/hooks/useMachines";
+import { apiFetch } from "@/lib/api";
+import { getUiLang, localize } from "@/lib/i18n";
 import {
   formatMachineFloorLabel,
   formatMachineModelValue,
@@ -35,63 +38,13 @@ const EMPTY_MACHINE: Machine = {
   last: new Date().toISOString().slice(0, 10),
 };
 
-function getMachineSourceMeta(machine: Machine) {
-  switch (machine.dataSource ?? machine.decision?.dataSource ?? "no_data") {
-    case "live_runtime":
-      return {
-        label: "Flux live",
-        className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700",
-      };
-    case "simulator_demo":
-      return {
-        label: "Replay demo",
-        className: "border-sky-500/20 bg-sky-500/10 text-sky-700",
-      };
-    case "persisted_reference":
-      return {
-        label: "Reference",
-        className: "border-amber-500/20 bg-amber-500/10 text-amber-700",
-      };
-    default:
-      return {
-        label: "En attente",
-        className: "border-border bg-surface-3 text-muted-foreground",
-      };
-  }
-}
-
-function getTelemetrySourceLabel(source?: string | null) {
-  const normalized = (source ?? "").trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized.includes("labview")) return "Bridge LabVIEW / PC relais";
-  if (
-    normalized.includes("site_bridge_pc") ||
-    normalized.includes("bridge_pc") ||
-    normalized.includes("relay") ||
-    normalized.includes("boss_pc")
-  ) {
-    return "Bridge PC relais";
-  }
-  if (normalized.includes("simulator")) return "Replay demo";
-  if (normalized.includes("runtime")) return "Pipeline live";
-  return source?.replace(/_/g, " ") ?? null;
-}
-
-function getFreshnessLabel(machine: Machine) {
-  switch (machine.freshnessState ?? machine.decision?.freshnessState ?? null) {
-    case "live":
-      return "Lecture fraiche";
-    case "retard_leger":
-      return "Flux a confirmer";
-    case "retard":
-      return "Flux en retard";
-    case "reference_recente":
-      return "Reference recente";
-    case "reference_figee":
-      return "Reference figee";
-    default:
-      return null;
-  }
+interface PrepareLiveMachineResponse {
+  machine_code: string;
+  scenario: "healthy" | "surveillance" | "critical";
+  profile: string;
+  hi: number | null;
+  zone: string | null;
+  rul_days: number | null;
 }
 
 interface MachineFormProps {
@@ -102,8 +55,82 @@ interface MachineFormProps {
   onCancel: () => void;
 }
 
+function getStatusLabel(status: Machine["status"], lang = getUiLang()) {
+  switch (status) {
+    case "ok":
+      return localize(lang, "Operationnel", "Operational");
+    case "degraded":
+      return localize(lang, "Surveillance", "Monitoring");
+    case "critical":
+      return localize(lang, "Critique", "Critical");
+    default:
+      return localize(lang, "Maintenance", "Maintenance");
+  }
+}
+
+function getMachineSourceMeta(machine: Machine, lang = getUiLang()) {
+  switch (machine.dataSource ?? machine.decision?.dataSource ?? "no_data") {
+    case "live_runtime":
+      return {
+        label: localize(lang, "Flux live", "Live feed"),
+        className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700",
+      };
+    case "simulator_demo":
+      return {
+        label: localize(lang, "Replay demo", "Demo replay"),
+        className: "border-sky-500/20 bg-sky-500/10 text-sky-700",
+      };
+    case "persisted_reference":
+      return {
+        label: localize(lang, "Reference", "Reference"),
+        className: "border-amber-500/20 bg-amber-500/10 text-amber-700",
+      };
+    default:
+      return {
+        label: localize(lang, "En attente", "Pending"),
+        className: "border-border bg-surface-3 text-muted-foreground",
+      };
+  }
+}
+
+function getTelemetrySourceLabel(source?: string | null, lang = getUiLang()) {
+  const normalized = (source ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes("labview")) return localize(lang, "Bridge LabVIEW / PC relais", "LabVIEW bridge / relay PC");
+  if (
+    normalized.includes("site_bridge_pc") ||
+    normalized.includes("bridge_pc") ||
+    normalized.includes("relay") ||
+    normalized.includes("boss_pc")
+  ) {
+    return localize(lang, "Bridge PC relais", "Relay PC bridge");
+  }
+  if (normalized.includes("simulator")) return localize(lang, "Replay demo", "Demo replay");
+  if (normalized.includes("runtime")) return localize(lang, "Pipeline live", "Live pipeline");
+  return source?.replace(/_/g, " ") ?? null;
+}
+
+function getFreshnessLabel(machine: Machine, lang = getUiLang()) {
+  switch (machine.freshnessState ?? machine.decision?.freshnessState ?? null) {
+    case "live":
+      return localize(lang, "Lecture fraiche", "Fresh reading");
+    case "retard_leger":
+      return localize(lang, "Flux a confirmer", "Feed to confirm");
+    case "retard":
+      return localize(lang, "Flux en retard", "Delayed feed");
+    case "reference_recente":
+      return localize(lang, "Reference recente", "Recent reference");
+    case "reference_figee":
+      return localize(lang, "Reference figee", "Frozen reference");
+    default:
+      return null;
+  }
+}
+
 function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineFormProps) {
   const { t } = useApp();
+  const lang = getUiLang();
+  const l = (fr: string, en: string) => localize(lang, fr, en);
   const [form, setForm] = useState<Machine>({ ...machine });
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -132,7 +159,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
       return;
     }
     if (!MACHINE_CODE_RE.test(normalizedId)) {
-      setError("Le code doit suivre un format comme ARO-01 ou ASC-A1.");
+      setError(l("Le code doit suivre un format comme ARO-01 ou ASC-A1.", "The code must follow a format like ARO-01 or ASC-A1."));
       return;
     }
     if (isNew && normalizedExistingIds.has(normalizedId)) {
@@ -148,7 +175,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
         id: normalizedId,
       });
     } catch {
-      // The mutation hook already surfaces the backend error; keep the form open.
+      // Keep the form open when the mutation hook surfaces a backend error.
     } finally {
       setIsSaving(false);
     }
@@ -158,7 +185,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
     <div className="rounded-lg border border-border bg-card p-6 animate-fade-in">
       <div className="mb-5 flex items-center justify-between">
         <div className="section-title">
-          {isNew ? "Ajouter une machine" : `Modifier ${getMachinePublicLabel(machine)}`}
+          {isNew ? l("Ajouter une machine", "Add a machine") : l(`Modifier ${getMachinePublicLabel(machine)}`, `Edit ${getMachinePublicLabel(machine)}`)}
         </div>
         <button
           onClick={onCancel}
@@ -174,10 +201,10 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
         </div>
       )}
 
-      <div className="mb-3 section-title text-xs">Informations machine</div>
+      <div className="mb-3 section-title text-xs">{l("Informations machine", "Machine information")}</div>
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <div>
-          <label className={labelClassName}>Code interne</label>
+          <label className={labelClassName}>{l("Code interne", "Internal code")}</label>
           <input
             className={inputClassName}
             value={form.id}
@@ -185,26 +212,29 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
             disabled={!isNew}
           />
           <div className="mt-1 text-[0.68rem] leading-relaxed text-muted-foreground">
-            Ce code doit correspondre au `machine_id` envoye par le bridge LabVIEW/PLC.
+            {l(
+              "Ce code doit correspondre au machine_id envoye par le bridge LabVIEW/PLC.",
+              "This code must match the machine_id sent by the LabVIEW/PLC bridge.",
+            )}
           </div>
         </div>
         <div>
-          <label className={labelClassName}>Nom public</label>
+          <label className={labelClassName}>{l("Nom public", "Public name")}</label>
           <input className={inputClassName} value={form.name} onChange={(event) => setField("name", event.target.value)} />
           <div className="mt-1 text-[0.68rem] leading-relaxed text-muted-foreground">
-            Affichage dans l&apos;app : {publicLabelPreview}. Exemple conseille : `Machine 4`.
+            {l("Affichage dans l'app", "Shown in the app")}: {publicLabelPreview}. {l("Exemple conseille", "Recommended example")}: `Machine 4`.
           </div>
         </div>
         <div>
-          <label className={labelClassName}>Ville</label>
+          <label className={labelClassName}>{l("Ville", "City")}</label>
           <input className={inputClassName} value={form.city} onChange={(event) => setField("city", event.target.value)} />
         </div>
         <div>
-          <label className={labelClassName}>Modele</label>
+          <label className={labelClassName}>{l("Modele", "Model")}</label>
           <input className={inputClassName} value={form.model} onChange={(event) => setField("model", event.target.value)} />
         </div>
         <div>
-          <label className={labelClassName}>Niveaux</label>
+          <label className={labelClassName}>{l("Niveaux", "Levels")}</label>
           <input
             className={inputClassName}
             type="number"
@@ -213,7 +243,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
           />
         </div>
         <div>
-          <label className={labelClassName}>Statut</label>
+          <label className={labelClassName}>{l("Statut", "Status")}</label>
           <select
             className={inputClassName}
             value={form.status}
@@ -221,21 +251,21 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
           >
             {(["ok", "degraded", "critical", "maintenance"] as const).map((status) => (
               <option key={status} value={status}>
-                {STATUS_CONFIG[status].label}
+                {getStatusLabel(status, lang)}
               </option>
             ))}
           </select>
         </div>
         <div className="col-span-2 lg:col-span-3">
-          <label className={labelClassName}>Emplacement</label>
+          <label className={labelClassName}>{l("Emplacement", "Location")}</label>
           <input className={inputClassName} value={form.loc} onChange={(event) => setField("loc", event.target.value)} />
         </div>
       </div>
 
-      <div className="mb-3 section-title text-xs">Localisation GPS</div>
+      <div className="mb-3 section-title text-xs">{l("Localisation GPS", "GPS location")}</div>
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div>
-          <label className={labelClassName}>Latitude</label>
+          <label className={labelClassName}>{l("Latitude", "Latitude")}</label>
           <input
             className={inputClassName}
             type="number"
@@ -245,7 +275,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
           />
         </div>
         <div>
-          <label className={labelClassName}>Longitude</label>
+          <label className={labelClassName}>{l("Longitude", "Longitude")}</label>
           <input
             className={inputClassName}
             type="number"
@@ -262,7 +292,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
           disabled={isSaving}
           className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-secondary-foreground hover:bg-surface-3"
         >
-          Annuler
+          {l("Annuler", "Cancel")}
         </button>
         <button
           onClick={handleSave}
@@ -270,7 +300,7 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
           className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-teal px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20"
         >
           <Save className="h-4 w-4" />
-          {isSaving ? "Enregistrement..." : "Enregistrer"}
+          {isSaving ? l("Enregistrement...", "Saving...") : l("Enregistrer", "Save")}
         </button>
       </div>
     </div>
@@ -279,15 +309,23 @@ function MachineForm({ machine, isNew, existingIds, onSave, onCancel }: MachineF
 
 export function MachinesPage() {
   const { currentUser } = useAuth();
+  const lang = getUiLang();
+  const l = (fr: string, en: string) => localize(lang, fr, en);
   const isAdmin = currentUser?.role === "admin";
-  const { machines, addMachine: addMachineMut, updateMachine: updateMachineMut, deleteMachine: deleteMachineMut } =
-    useMachines(currentUser?.machineId);
+  const {
+    machines,
+    addMachine: addMachineMut,
+    updateMachine: updateMachineMut,
+    deleteMachine: deleteMachineMut,
+    refetch,
+  } = useMachines(currentUser?.machineId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Machine["status"] | "all">("all");
+  const [preparingMachineId, setPreparingMachineId] = useState<string | null>(null);
 
   const selectedMachine = machines.find((machine) => machine.id === selectedId) || null;
 
@@ -315,7 +353,7 @@ export function MachinesPage() {
         : rendered;
     };
 
-    const header = "Machine,Code interne,Nom,Ville,Statut,HI,Modèle,Emplacement,Dernière MAJ\n";
+    const header = `${l("Machine", "Machine")},${l("Code interne", "Internal code")},${l("Nom", "Name")},${l("Ville", "City")},${l("Statut", "Status")},HI,${l("Modele", "Model")},${l("Emplacement", "Location")},${l("Derniere MAJ", "Last update")}\n`;
     const csv = filteredMachines
       .map((machine) =>
         [
@@ -323,7 +361,7 @@ export function MachinesPage() {
           machine.id,
           machine.name,
           machine.city,
-          machine.status,
+          getStatusLabel(machine.status, lang),
           machine.hi,
           machine.model,
           machine.loc,
@@ -341,7 +379,40 @@ export function MachinesPage() {
     anchor.download = `machines_${new Date().toISOString().slice(0, 10)}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
-    toast.success("Export CSV pret");
+    toast.success(l("Export CSV pret", "CSV export ready"));
+  };
+
+  const handlePrepareLive = async (machine: Machine) => {
+    setPreparingMachineId(machine.id);
+    try {
+      const response = await apiFetch<PrepareLiveMachineResponse>(
+        `/machines/${encodeURIComponent(machine.id)}/prepare-live`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            duration_s: 3600,
+            seed: 99,
+          }),
+        },
+      );
+
+      await refetch();
+
+      const hiLabel = typeof response.hi === "number" ? `HI ${Math.round(response.hi * 100)}%` : l("HI en preparation", "HI warming up");
+      const zoneLabel = response.zone ? `zone ${response.zone}` : l("zone en cours", "zone pending");
+      const rulLabel =
+        typeof response.rul_days === "number"
+          ? `RUL ${Math.round(response.rul_days)} ${l("j", "d")}`
+          : "RUL warm-up";
+
+      toast.success(
+        `${getMachinePublicLabel(machine)} ${l("prêt pour le flux réel", "ready for the live feed")} · ${hiLabel} · ${zoneLabel} · ${rulLabel}`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : l("Preparation du flux reel impossible", "Unable to prepare the live feed"));
+    } finally {
+      setPreparingMachineId(null);
+    }
   };
 
   if (showAdd && isAdmin) {
@@ -389,9 +460,9 @@ export function MachinesPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="section-title">Gestion des machines</div>
+          <div className="section-title">{l("Gestion des machines", "Machine management")}</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Métadonnées, statut et accès aux analyses détaillées.
+            {l("Metadonnees, statut et acces aux analyses detaillees.", "Metadata, status, and access to detailed analysis.")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -400,7 +471,7 @@ export function MachinesPage() {
             className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-3 px-4 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
           >
             <Download className="h-3.5 w-3.5" />
-            Exporter
+            {l("Exporter", "Export")}
           </button>
           {isAdmin ? (
             <button
@@ -408,7 +479,7 @@ export function MachinesPage() {
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
-              Ajouter machine
+              {l("Ajouter machine", "Add machine")}
             </button>
           ) : null}
         </div>
@@ -420,7 +491,7 @@ export function MachinesPage() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher par code, nom, ville ou emplacement"
+            placeholder={l("Rechercher par code, nom, ville ou emplacement", "Search by code, name, city, or location")}
             className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
@@ -429,21 +500,57 @@ export function MachinesPage() {
           onChange={(event) => setStatusFilter(event.target.value as Machine["status"] | "all")}
           className="rounded-xl border border-border bg-surface-3 px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
         >
-          <option value="all">Tous les statuts</option>
-          <option value="ok">Opérationnel</option>
-          <option value="degraded">Surveillance</option>
-          <option value="critical">Critique</option>
-          <option value="maintenance">Maintenance</option>
+          <option value="all">{l("Tous les statuts", "All statuses")}</option>
+          <option value="ok">{l("Operationnel", "Operational")}</option>
+          <option value="degraded">{l("Surveillance", "Monitoring")}</option>
+          <option value="critical">{l("Critique", "Critical")}</option>
+          <option value="maintenance">{l("Maintenance", "Maintenance")}</option>
         </select>
       </div>
+
+      {isAdmin ? (
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 shadow-premium">
+          <div className="section-title">{l("Connexion machine reelle", "Real machine connection")}</div>
+          <div className="mt-3 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-border bg-card/70 p-4">
+              <div className="industrial-label">{l("1. Code machine", "1. Machine code")}</div>
+              <p className="mt-2 text-sm text-secondary-foreground">
+                {l(
+                  "Le code interne doit etre le meme que le machine_id envoye plus tard par le bridge LabVIEW / PLC.",
+                  "The internal code must match the machine_id sent later by the LabVIEW / PLC bridge.",
+                )}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card/70 p-4">
+              <div className="industrial-label">{l("2. CSV minimum", "2. Minimum CSV")}</div>
+              <p className="mt-2 text-sm text-secondary-foreground">
+                {l(
+                  "Le flux reel peut arriver en CSV ou JSON avec au minimum machine_id, observed_at, rms_mms, power_kw, temp_c et humidity_rh.",
+                  "The live feed can arrive as CSV or JSON with at least machine_id, observed_at, rms_mms, power_kw, temp_c, and humidity_rh.",
+                )}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card/70 p-4">
+              <div className="industrial-label">{l("3. Preparation runtime", "3. Runtime preparation")}</div>
+              <p className="mt-2 text-sm text-secondary-foreground">
+                {l(
+                  "Le bouton Preparer flux reel charge un contexte coherent avec l'etat connu de la machine pour publier HI et RUL rapidement, puis le vrai CSV prend le relais.",
+                  "The Prepare live feed button loads a context consistent with the known machine state so HI and RUL can be published quickly before the real CSV takes over.",
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {filteredMachines.map((machine) => {
           const statusConfig = STATUS_CONFIG[machine.status];
           const hiPct = typeof machine.hi === "number" ? Math.round(machine.hi * 100) : null;
-          const sourceMeta = getMachineSourceMeta(machine);
-          const telemetrySourceLabel = getTelemetrySourceLabel(machine.telemetrySource);
-          const freshnessLabel = getFreshnessLabel(machine);
+          const sourceMeta = getMachineSourceMeta(machine, lang);
+          const telemetrySourceLabel = getTelemetrySourceLabel(machine.telemetrySource, lang);
+          const freshnessLabel = getFreshnessLabel(machine, lang);
+
           return (
             <div key={machine.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-premium">
               <div className="flex items-stretch">
@@ -452,16 +559,14 @@ export function MachinesPage() {
                   <div className="min-w-[220px] flex-1">
                     <div className="mb-1 flex items-center gap-3">
                       <span className="text-sm font-bold text-foreground">{getMachinePublicLabel(machine)}</span>
-                      <span className={`status-pill ${statusConfig.pillClass} text-[0.6rem]`}>{statusConfig.label}</span>
+                      <span className={`status-pill ${statusConfig.pillClass} text-[0.6rem]`}>{getStatusLabel(machine.status, lang)}</span>
                     </div>
-                    <div className="text-sm text-secondary-foreground">{machine.city || "Site industriel"}</div>
+                    <div className="text-sm text-secondary-foreground">{machine.city || l("Site industriel", "Industrial site")}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {machine.loc || "Emplacement non renseigné"}
+                      {machine.loc || l("Emplacement non renseigne", "Location not provided")}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-[0.66rem] font-semibold ${sourceMeta.className}`}
-                      >
+                      <span className={`rounded-full border px-2.5 py-1 text-[0.66rem] font-semibold ${sourceMeta.className}`}>
                         {sourceMeta.label}
                       </span>
                       {freshnessLabel ? (
@@ -478,7 +583,7 @@ export function MachinesPage() {
                   </div>
 
                   <div className="min-w-[120px] text-center">
-                    <div className="industrial-label">Indice de santé (HI)</div>
+                    <div className="industrial-label">{l("Indice de sante (HI)", "Machine health (HI)")}</div>
                     <div className="mt-1 font-mono text-2xl font-bold" style={{ color: statusConfig.hex }}>
                       {hiPct != null ? `${hiPct}%` : "—"}
                     </div>
@@ -488,16 +593,16 @@ export function MachinesPage() {
                   </div>
 
                   <div className="min-w-[180px]">
-                    <div className="industrial-label">Métadonnées</div>
+                    <div className="industrial-label">{l("Metadonnees", "Metadata")}</div>
                     <div className="mt-1 text-sm font-semibold text-foreground">
                       {formatMachineModelValue(machine.model, "-")}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {formatMachineFloorLabel(machine.floors, {
-                        singular: "niveau",
-                        plural: "niveaux",
-                        fallback: "Niveaux non renseignés",
-                      })} · Mise à jour {machine.last}
+                        singular: l("niveau", "level"),
+                        plural: l("niveaux", "levels"),
+                        fallback: l("Niveaux non renseignes", "Levels not provided"),
+                      })} · {l("Mise a jour", "Updated")} {machine.last}
                     </div>
                   </div>
                 </div>
@@ -508,21 +613,33 @@ export function MachinesPage() {
                     className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-all hover:bg-primary/20"
                   >
                     <BarChart3 className="h-3.5 w-3.5" />
-                    Voir analyse
+                    {l("Voir analyse", "View analysis")}
                   </button>
                   {isAdmin ? (
                     <>
+                      <button
+                        onClick={() => void handlePrepareLive(machine)}
+                        disabled={preparingMachineId === machine.id}
+                        className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {preparingMachineId === machine.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="h-3.5 w-3.5" />
+                        )}
+                        {preparingMachineId === machine.id ? l("Préparation...", "Preparing...") : l("Préparer flux réel", "Prepare live feed")}
+                      </button>
                       <button
                         onClick={() => setEditingId(machine.id)}
                         className="flex items-center gap-1.5 rounded-lg bg-surface-3 px-3 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                        Modifier
+                        {l("Modifier", "Edit")}
                       </button>
                       {confirmDeleteId === machine.id ? (
                         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-2">
                           <div className="mb-2 text-[0.68rem] font-semibold text-destructive">
-                            Supprimer {getMachinePublicLabel(machine)} ?
+                            {l("Supprimer", "Delete")} {getMachinePublicLabel(machine)} ?
                           </div>
                           <div className="flex gap-1.5">
                             <button
@@ -540,14 +657,14 @@ export function MachinesPage() {
                               disabled={deleteMachineMut.isPending}
                               className="rounded-xl bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              {deleteMachineMut.isPending ? "Suppression..." : "Oui"}
+                              {deleteMachineMut.isPending ? l("Suppression...", "Deleting...") : l("Oui", "Yes")}
                             </button>
                             <button
                               onClick={() => setConfirmDeleteId(null)}
                               disabled={deleteMachineMut.isPending}
                               className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-secondary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Non
+                              {l("Non", "No")}
                             </button>
                           </div>
                         </div>
@@ -557,7 +674,7 @@ export function MachinesPage() {
                           className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive transition-all hover:bg-destructive/20"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                          Supprimer
+                          {l("Supprimer", "Delete")}
                         </button>
                       )}
                     </>
@@ -566,7 +683,7 @@ export function MachinesPage() {
                       disabled
                       className="flex items-center gap-1.5 rounded-lg bg-surface-3 px-3 py-2 text-xs font-semibold text-muted-foreground"
                     >
-                      Lecture seule
+                      {l("Lecture seule", "Read only")}
                     </button>
                   )}
                 </div>
@@ -577,7 +694,7 @@ export function MachinesPage() {
 
         {filteredMachines.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-            Aucune machine ne correspond aux filtres.
+            {l("Aucune machine ne correspond aux filtres.", "No machines match the current filters.")}
           </div>
         )}
       </div>

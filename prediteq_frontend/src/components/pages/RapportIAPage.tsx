@@ -4,8 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
+import type { Machine } from "@/data/machines";
+import { type PredictiveInsight, useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { useMachines } from "@/hooks/useMachines";
 import { apiBinary, apiBlob, apiFetch, apiStream } from "@/lib/api";
+import { safeStorageGetJson, safeStorageSet } from "@/lib/browserStorage";
+import { type UiLang, getUiLocale } from "@/lib/i18n";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import { repairText } from "@/lib/repairText";
 
@@ -16,6 +20,8 @@ interface SavedReport {
   lang: string;
   titre: string;
   created_at: string;
+  contenu?: string;
+  source?: "backend" | "local_fallback";
 }
 
 type ReportPeriod = "7d" | "15d" | "30d";
@@ -32,17 +38,117 @@ function cleanReportTitle(value: string) {
   );
 }
 
+const REPORT_HISTORY_CACHE_KEY = "prediteq-report-history-v1";
+
+function reportCopy(lang: UiLang, fr: string, en: string, _ar?: string) {
+  return repairText(lang === "en" ? en : fr);
+}
+
+function readCachedReportHistory() {
+  return safeStorageGetJson<SavedReport[]>(REPORT_HISTORY_CACHE_KEY, []);
+}
+
+function writeCachedReportHistory(reports: SavedReport[]) {
+  safeStorageSet(REPORT_HISTORY_CACHE_KEY, JSON.stringify(reports));
+}
+
+function sortReportHistory(reports: SavedReport[]) {
+  return [...reports].sort((left, right) => right.created_at.localeCompare(left.created_at));
+}
+
+function mergeReportHistory(remote: SavedReport[], cached: SavedReport[]) {
+  const merged = new Map<string, SavedReport>();
+
+  for (const report of cached) {
+    merged.set(report.id, report);
+  }
+
+  for (const report of remote) {
+    merged.set(report.id, {
+      ...merged.get(report.id),
+      ...report,
+      source: report.source ?? "backend",
+    });
+  }
+
+  return sortReportHistory([...merged.values()]);
+}
+
+function downloadReportText(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildLocalReport(
+  selectedMachines: Machine[],
+  insights: PredictiveInsight[],
+  period: ReportPeriod,
+  reportLang: UiLang,
+) {
+  const generatedAt = new Date();
+  const header = reportCopy(
+    reportLang,
+    "Rapport de continuité PrediTeq",
+    "PrediTeq continuity report",
+    "تقرير الاستمرارية PrediTeq",
+  );
+  const intro = reportCopy(
+    reportLang,
+    `Source locale de secours - période ${period}. Le moteur IA ou l'export backend est temporairement indisponible, ce rapport reprend les derniers signaux machines déjà chargés dans l'application.`,
+    `Local fallback source - period ${period}. The AI or backend export is temporarily unavailable, so this report reuses the latest machine signals already loaded in the app.`,
+    `مصدر محلي احتياطي - الفترة ${period}. محرك الذكاء الاصطناعي أو تصدير الخادم غير متاح مؤقتا، لذلك يعتمد هذا التقرير على آخر إشارات الآلات المحملة داخل التطبيق.`,
+  );
+
+  const machineBlocks = selectedMachines.map((machine) => {
+    const insight = insights.find((entry) => entry.machine.id === machine.id);
+    const lines = [
+      `- ${reportCopy(reportLang, "Machine", "Machine", "الآلة")}: ${getMachinePublicLabel(machine)}`,
+      `- ${reportCopy(reportLang, "Zone", "Zone", "المنطقة")}: ${repairText(machine.decision?.zone ?? machine.city ?? "N/A")}`,
+      `- HI: ${typeof machine.hi === "number" ? `${Math.round(machine.hi * 100)}%` : "N/A"}`,
+      `- RUL: ${typeof machine.rul === "number" ? `${Math.round(machine.rul)} ${reportCopy(reportLang, "j", "d")}` : "N/A"}`,
+      `- ${reportCopy(reportLang, "Priorité", "Priority", "الأولوية")}: ${repairText(insight?.urgencyLabel ?? "Stable")}`,
+      `- ${reportCopy(reportLang, "Action recommandée", "Recommended action", "الإجراء الموصى به")}: ${repairText(
+        insight?.recommendedAction ?? machine.decision?.recommendedAction ?? "Aucune action lourde immédiate.",
+      )}`,
+      `- ${reportCopy(reportLang, "Preuves", "Evidence", "المؤشرات")}: ${repairText(
+        insight?.evidence.slice(0, 3).join(" | ") ||
+          machine.decision?.evidence?.slice(0, 3).join(" | ") ||
+          reportCopy(reportLang, "Dernier signal exploitable en cache.", "Latest usable cached signal.", "آخر إشارة صالحة في الذاكرة المؤقتة."),
+      )}`,
+    ];
+
+    return lines.join("\n");
+  });
+
+  return [
+    header,
+    `${reportCopy(reportLang, "Généré le", "Generated on", "تم الإنشاء في")} ${generatedAt.toLocaleString(getUiLocale(reportLang))}`,
+    "",
+    intro,
+    "",
+    ...machineBlocks,
+  ]
+    .join("\n")
+    .trim();
+}
+
 export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   const { lang } = useApp();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const isAdmin = currentUser?.role === "admin";
   const { machines } = useMachines(currentUser?.machineId);
+  const { insights } = useFleetPredictiveInsights(machines);
   const [selectedId, setSelectedId] = useState(() =>
     currentUser?.role === "admin" ? "all" : currentUser?.machineCode || "",
   );
   const [period, setPeriod] = useState<ReportPeriod>("7d");
-  const [reportLang, setReportLang] = useState<"fr" | "en" | "ar">(lang);
+  const [reportLang, setReportLang] = useState<UiLang>(lang);
   const reportAudience: ReportAudience = "dual";
   const [reportText, setReportText] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -52,16 +158,26 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   const [viewingReport, setViewingReport] = useState<string | null>(null);
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
+  const machineCode =
+    isAdmin ? (selectedId === "all" ? null : selectedId) : currentUser?.machineCode || null;
+  const selectedMachines = machines.filter((machine) =>
+    machineCode ? machine.id === machineCode : true,
+  );
+  const localFallbackReport = buildLocalReport(
+    selectedMachines,
+    insights,
+    period,
+    reportLang,
+  );
 
   const periodOptions: { value: ReportPeriod; label: string }[] = [
     { value: "7d", label: l("7 jours", "7 days", "7 ايام") },
     { value: "15d", label: l("15 jours", "15 days", "15 يوما") },
     { value: "30d", label: l("30 jours", "30 days", "30 يوما") },
   ];
-  const languageOptions: { value: "fr" | "en" | "ar"; label: string }[] = [
+  const languageOptions: { value: UiLang; label: string }[] = [
     { value: "fr", label: "FR" },
     { value: "en", label: "EN" },
-    { value: "ar", label: "AR" },
   ];
 
   const getPeriodLabel = (value: string) =>
@@ -81,9 +197,14 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
     setLoadingHistory(true);
     try {
       const data = await apiFetch<SavedReport[]>("/report/history");
-      setHistory(data);
+      const merged = mergeReportHistory(
+        data.map((report) => ({ ...report, source: report.source ?? "backend" })),
+        readCachedReportHistory(),
+      );
+      writeCachedReportHistory(merged);
+      setHistory(merged);
     } catch {
-      setHistory([]);
+      setHistory(readCachedReportHistory());
     } finally {
       setLoadingHistory(false);
     }
@@ -96,7 +217,6 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   }, [loadHistory]);
 
   const generateReport = async () => {
-    const machineCode = isAdmin ? (selectedId === "all" ? null : selectedId) : currentUser?.machineCode || null;
     setGenerating(true);
     setReportText("");
 
@@ -128,20 +248,47 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         throw new Error("EMPTY_REPORT");
       }
 
+      setReportText(repairText(text));
       await loadHistory();
       toast.success(l("Rapport genere", "Report generated", "تم انشاء التقرير"));
     } catch (error) {
-      toast.error(
+      const machineTitle = machineCode
+        ? getMachinePublicLabel(selectedMachines[0] ?? machineCode)
+        : reportCopy(reportLang, "toute la flotte", "full fleet", "الأسطول بالكامل");
+      const fallbackEntry: SavedReport = {
+        id: `local-${Date.now()}`,
+        machine_code: machineCode,
+        period,
+        lang: reportLang,
+        titre: reportCopy(
+          reportLang,
+          `Rapport local de secours - ${machineTitle}`,
+          `Local fallback report - ${machineTitle}`,
+          `تقرير احتياطي محلي - ${machineTitle}`,
+        ),
+        created_at: new Date().toISOString(),
+        contenu: localFallbackReport,
+        source: "local_fallback",
+      };
+      const mergedHistory = mergeReportHistory(
+        [fallbackEntry],
+        readCachedReportHistory(),
+      );
+
+      writeCachedReportHistory(mergedHistory);
+      setHistory(mergedHistory);
+      setReportText(localFallbackReport);
+      toast.warning(
         error instanceof Error && error.message === "EMPTY_REPORT"
           ? l(
-              "Le rapport n'a renvoye aucun contenu. Veuillez reessayer.",
-              "The report returned no content. Please try again.",
-              "The report returned no content. Please try again.",
+              "Le rapport IA etait vide - un rapport local de secours a ete affiche.",
+              "The AI report was empty - a local fallback report is now displayed.",
+              "The AI report was empty - a local fallback report is now displayed.",
             )
           : l(
-              "Erreur lors de la generation du rapport",
-              "Failed to generate the report",
-              "فشل انشاء التقرير",
+              "Generation backend indisponible - rapport local de secours affiche.",
+              "Backend generation unavailable - local fallback report displayed.",
+              "تعذر التوليد من الخادم - تم عرض تقرير محلي احتياطي.",
             ),
       );
     } finally {
@@ -150,7 +297,6 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   };
 
   const exportPdf = async () => {
-    const machineCode = isAdmin ? (selectedId === "all" ? null : selectedId) : currentUser?.machineCode || null;
     setExporting(true);
 
     try {
@@ -169,7 +315,18 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
       await loadHistory();
       toast.success(l("PDF telecharge", "PDF downloaded", "تم تنزيل ملف PDF"));
     } catch {
-      toast.error(l("Erreur lors de l'export PDF", "Failed to export PDF", "فشل تصدير PDF"));
+      const fallbackContent = reportText.trim() || localFallbackReport;
+      downloadReportText(
+        `rapport_${machineCode || "all"}_${period}_${new Date().toISOString().slice(0, 10)}.txt`,
+        fallbackContent,
+      );
+      toast.warning(
+        l(
+          "Export PDF indisponible - version texte locale telechargee a la place.",
+          "PDF export unavailable - a local text version was downloaded instead.",
+          "تصدير PDF غير متاح - تم تنزيل نسخة نصية محلية بدلا منه.",
+        ),
+      );
     } finally {
       setExporting(false);
     }
@@ -181,9 +338,21 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
       const data = await apiFetch<{ contenu: string }>(`/report/history/${reportId}`);
       setReportText(repairText(data.contenu));
     } catch {
-      toast.error(
-        l("Erreur lors du chargement du rapport", "Failed to load the report", "فشل تحميل التقرير"),
-      );
+      const cached = readCachedReportHistory().find((report) => report.id === reportId);
+      if (cached?.contenu) {
+        setReportText(repairText(cached.contenu));
+        toast.warning(
+          l(
+            "Rapport charge depuis le cache local.",
+            "Report loaded from the local cache.",
+            "تم تحميل التقرير من الذاكرة المؤقتة المحلية.",
+          ),
+        );
+      } else {
+        toast.error(
+          l("Erreur lors du chargement du rapport", "Failed to load the report", "فشل تحميل التقرير"),
+        );
+      }
     } finally {
       setViewingReport(null);
     }
@@ -199,7 +368,19 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error(l("Erreur lors du telechargement", "Download failed", "فشل التنزيل"));
+      const cached = readCachedReportHistory().find((report) => report.id === reportId);
+      if (cached?.contenu) {
+        downloadReportText(`rapport_${reportId.slice(0, 8)}.txt`, cached.contenu);
+        toast.warning(
+          l(
+            "PDF indisponible - version texte locale telechargee.",
+            "PDF unavailable - local text version downloaded.",
+            "ملف PDF غير متاح - تم تنزيل النسخة النصية المحلية.",
+          ),
+        );
+      } else {
+        toast.error(l("Erreur lors du telechargement", "Download failed", "فشل التنزيل"));
+      }
     }
   };
 

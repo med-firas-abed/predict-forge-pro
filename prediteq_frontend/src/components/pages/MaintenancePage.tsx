@@ -20,7 +20,10 @@ import { useGmaoTaches, type GmaoTache, type TacheStatut, type TacheType } from 
 import { useMachines } from "@/hooks/useMachines";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { apiFetch } from "@/lib/api";
-import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import {
+  getMachinePublicLabel,
+  replaceMachineCodesForDisplay,
+} from "@/lib/machinePresentation";
 import {
   formatHiPercent,
   formatPredictiveRul,
@@ -108,13 +111,13 @@ function toCalendarEvent(task: GmaoTache): CalendarEvent | null {
   if (!task.datePlanifiee) return null;
   return {
     id: task.id,
-    title: task.titre,
+    title: replaceMachineCodesForDisplay(task.titre),
     machineCode: task.machineCode,
     technician: task.technicien || "Non assigné",
     date: task.datePlanifiee.slice(0, 10),
     type: task.type,
     status: task.statut,
-    description: task.description || "",
+    description: replaceMachineCodesForDisplay(task.description || ""),
     cost: task.coutEstime,
   };
 }
@@ -367,8 +370,8 @@ export function MaintenancePage() {
       .map((task) =>
         [
           task.id,
-          task.titre,
-          task.machineCode,
+          replaceMachineCodesForDisplay(task.titre),
+          getMachinePublicLabel(task.machineCode),
           task.statut,
           task.type,
           task.technicien || "-",

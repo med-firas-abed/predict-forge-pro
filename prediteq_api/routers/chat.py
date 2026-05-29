@@ -22,6 +22,7 @@ from core.decision_snapshot import (
     fetch_alert_counts,
     fetch_open_task_counts,
 )
+from core.machine_labels import get_machine_public_label
 from core.supabase_client import get_supabase
 from core.auth import CurrentUser, require_auth, get_machine_filter
 from core.rate_limit import check_user_rate
@@ -202,6 +203,104 @@ TOOLS = [
 _MACHINE_CODE_RE = re.compile(r'^[A-Z]{2,5}-[A-Z0-9]{1,5}$')
 
 
+def _normalize_machine_reference(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"\s+", " ", str(value).strip()).casefold()
+
+
+def _iter_accessible_machines(user: CurrentUser):
+    manager = get_manager()
+    machine_filter = get_machine_filter(user)
+
+    for code, info in manager.machine_cache.items():
+        if machine_filter and info.get("id") != machine_filter:
+            continue
+        yield code, info
+
+
+def _list_accessible_machines(user: CurrentUser) -> list[dict[str, str]]:
+    catalog: list[dict[str, str]] = []
+
+    for code, info in _iter_accessible_machines(user):
+        catalog.append(
+            {
+                "code": code,
+                "public_label": get_machine_public_label(code, info.get("nom")),
+                "name": str(info.get("nom") or ""),
+                "region": str(info.get("region") or ""),
+            }
+        )
+
+    return sorted(catalog, key=lambda item: (item["public_label"], item["code"]))
+
+
+def _known_machine_labels(user: CurrentUser) -> list[str]:
+    return [
+        f"{entry['public_label']} ({entry['code']})"
+        for entry in _list_accessible_machines(user)
+    ]
+
+
+def _resolve_machine_code_reference(machine_reference: str | None, user: CurrentUser) -> str | None:
+    raw_reference = (machine_reference or "").strip()
+    if not raw_reference:
+        return None
+
+    catalog = _list_accessible_machines(user)
+    upper_reference = raw_reference.upper()
+    for entry in catalog:
+        if entry["code"].upper() == upper_reference:
+            return entry["code"]
+
+    alias_map: dict[str, set[str]] = {}
+    for entry in catalog:
+        aliases = {
+            entry["code"],
+            entry["public_label"],
+            entry["name"],
+        }
+
+        lowered_label = entry["public_label"].casefold()
+        if lowered_label.startswith("machine "):
+            aliases.add(entry["public_label"][8:].strip())
+
+        for alias in aliases:
+            normalized = _normalize_machine_reference(alias)
+            if not normalized:
+                continue
+            alias_map.setdefault(normalized, set()).add(entry["code"])
+
+    matches = alias_map.get(_normalize_machine_reference(raw_reference))
+    if matches and len(matches) == 1:
+        return next(iter(matches))
+
+    return None
+
+
+def _build_live_fleet_context(user: CurrentUser) -> str:
+    catalog = _list_accessible_machines(user)
+    if not catalog:
+        return (
+            "Flotte accessible actuelle: aucune machine chargee.\n"
+            "Si une question vise une machine precise, commence par demander une vue de flotte."
+        )
+
+    lines = ["Flotte accessible actuelle:"]
+    for entry in catalog:
+        location = f", site {entry['region']}" if entry["region"] else ""
+        lines.append(f"- {entry['public_label']} => code {entry['code']}{location}")
+
+    lines.extend(
+        [
+            "N'utilise que ces machines pour tes reponses.",
+            "Si l'utilisateur cite un libelle public, convertis-le vers le code interne avant d'appeler un outil.",
+            "Si la question porte sur la flotte globale, utilise get_fleet_overview.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _public_rul_snapshot(manager, machine_code: str) -> dict | None:
     """Use the same calibrated RUL snapshot as the UI and DB."""
     try:
@@ -227,10 +326,15 @@ def _public_rul_snapshot(manager, machine_code: str) -> dict | None:
 
 
 def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
-    if not _MACHINE_CODE_RE.match(machine_code):
-        return {"error": "Code machine invalide"}
+    resolved_code = _resolve_machine_code_reference(machine_code, user)
+    if not resolved_code:
+        return {
+            "error": "Machine introuvable dans la flotte actuelle",
+            "available_machines": _known_machine_labels(user),
+        }
+
+    machine_code = resolved_code
     manager = get_manager()
-    sb = get_supabase()
 
     machine_info = manager.get_machine_info(machine_code)
     if not machine_info:
@@ -274,9 +378,15 @@ def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
 
 
 def _exec_get_alerts(user: CurrentUser, machine_code: str | None = None,
-                     severite: str | None = None, limit: int = 10) -> list:
+                     severite: str | None = None, limit: int = 10) -> list | dict:
     sb = get_supabase()
     manager = get_manager()
+    resolved_code = _resolve_machine_code_reference(machine_code, user) if machine_code else None
+    if machine_code and not resolved_code:
+        return {
+            "error": "Machine introuvable dans la flotte actuelle",
+            "available_machines": _known_machine_labels(user),
+        }
 
     query = sb.table('alertes').select('*, machines!inner(code, nom)') \
         .order('created_at', desc=True).limit(limit)
@@ -284,8 +394,8 @@ def _exec_get_alerts(user: CurrentUser, machine_code: str | None = None,
     machine_filter = get_machine_filter(user)
     if machine_filter:
         query = query.eq('machine_id', machine_filter)
-    elif machine_code:
-        uuid = manager.get_uuid(machine_code)
+    elif resolved_code:
+        uuid = manager.get_uuid(resolved_code)
         if uuid:
             query = query.eq('machine_id', uuid)
 
@@ -309,6 +419,14 @@ def _exec_get_alerts(user: CurrentUser, machine_code: str | None = None,
 def _exec_get_shap(machine_code: str, user: CurrentUser) -> dict:
     import numpy as np
     manager = get_manager()
+    resolved_code = _resolve_machine_code_reference(machine_code, user)
+    if not resolved_code:
+        return {
+            "error": "Machine introuvable dans la flotte actuelle",
+            "available_machines": _known_machine_labels(user),
+        }
+
+    machine_code = resolved_code
 
     machine_filter = get_machine_filter(user)
     if machine_filter:
@@ -436,6 +554,9 @@ def _exec_get_fleet(user: CurrentUser) -> list:
 def _exec_get_tasks(user: CurrentUser, machine_code: str | None = None) -> list:
     sb = get_supabase()
     manager = get_manager()
+    resolved_code = _resolve_machine_code_reference(machine_code, user) if machine_code else None
+    if machine_code and not resolved_code:
+        return [{"error": "Machine introuvable dans la flotte actuelle"}]
 
     query = sb.table('gmao_taches').select('*, machines!inner(code, nom)') \
         .order('created_at', desc=True).limit(10)
@@ -443,8 +564,8 @@ def _exec_get_tasks(user: CurrentUser, machine_code: str | None = None) -> list:
     machine_filter = get_machine_filter(user)
     if machine_filter:
         query = query.eq('machine_id', machine_filter)
-    elif machine_code:
-        uuid = manager.get_uuid(machine_code)
+    elif resolved_code:
+        uuid = manager.get_uuid(resolved_code)
         if uuid:
             query = query.eq('machine_id', uuid)
 
@@ -466,6 +587,9 @@ def _exec_get_tasks(user: CurrentUser, machine_code: str | None = None) -> list:
 def _exec_get_costs(user: CurrentUser, machine_code: str | None = None) -> list:
     sb = get_supabase()
     manager = get_manager()
+    resolved_code = _resolve_machine_code_reference(machine_code, user) if machine_code else None
+    if machine_code and not resolved_code:
+        return [{"error": "Machine introuvable dans la flotte actuelle"}]
 
     query = sb.table('couts').select('*, machines!inner(code)') \
         .order('annee', desc=True).order('mois', desc=True).limit(12)
@@ -473,8 +597,8 @@ def _exec_get_costs(user: CurrentUser, machine_code: str | None = None) -> list:
     machine_filter = get_machine_filter(user)
     if machine_filter:
         query = query.eq('machine_id', machine_filter)
-    elif machine_code:
-        uuid = manager.get_uuid(machine_code)
+    elif resolved_code:
+        uuid = manager.get_uuid(resolved_code)
         if uuid:
             query = query.eq('machine_id', uuid)
 
@@ -547,7 +671,10 @@ async def chat(body: ChatRequest, user: CurrentUser = Depends(require_auth)):
     client = Groq(api_key=settings.GROQ_API_KEY, timeout=30.0)
 
     # Build messages: system + history + new user message
-    messages = [{"role": "system", "content": _build_system_prompt(body.audience)}]
+    messages = [
+        {"role": "system", "content": _build_system_prompt(body.audience)},
+        {"role": "system", "content": _build_live_fleet_context(user)},
+    ]
     for msg in body.history[-16:]:
         role = msg.get("role", "user")
         if role in ("user", "assistant"):

@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from core.planning_policy import resolve_planning_policy, select_task_template
 from core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,29 @@ def _task_template(machine_code: str, band: PredictiveBand, top_driver: str | No
     }
 
 
+def _policy_task_template(
+    machine_code: str,
+    band: PredictiveBand,
+    top_driver: str | None,
+    *,
+    machine_policy: dict[str, Any],
+    scenario_policy: dict[str, Any],
+    telemetry_policy: dict[str, Any],
+    stop_recommended: bool = False,
+    critical_diagnosis_count: int = 0,
+) -> dict[str, Any]:
+    return select_task_template(
+        machine_code,
+        band,
+        top_driver,
+        machine_policy=machine_policy,
+        scenario_policy=scenario_policy,
+        telemetry_policy=telemetry_policy,
+        stop_recommended=stop_recommended,
+        critical_diagnosis_count=critical_diagnosis_count,
+    )
+
+
 def _budget_model(
     hi: float | None,
     urgency_score: int,
@@ -260,6 +284,48 @@ def _budget_model(
         "watch": 1.10,
         "stable": 1.05,
     }[band]
+    return round(multiplier, 2), round(delay_multiplier, 2)
+
+
+def _policy_budget_model(
+    hi: float | None,
+    urgency_score: int,
+    band: PredictiveBand,
+    stress_value: float | None,
+    alerts_24h: int,
+    rul_days: float | None,
+    *,
+    scenario_pressure: float = 0.0,
+    machine_criticality: float = 0.4,
+    telemetry_trust: int | None = None,
+) -> tuple[float, float]:
+    health_component = (1 - hi) if hi is not None else 0.35
+    rul_pressure = _clamp((30 - rul_days) / 30, 0, 1) if rul_days is not None else 0.0
+    anomaly_pressure = _clamp(alerts_24h / 12, 0, 1)
+    uncertainty_pressure = (
+        _clamp((70 - float(telemetry_trust)) / 70, 0, 1)
+        if telemetry_trust is not None
+        else 0.25
+    )
+    multiplier = _clamp(
+        0.82
+        + health_component * 0.85
+        + (stress_value or 0.0) * 0.30
+        + (urgency_score / 100) * 0.52
+        + rul_pressure * 0.42
+        + anomaly_pressure * 0.18
+        + scenario_pressure * 0.38
+        + machine_criticality * 0.24
+        + uncertainty_pressure * 0.08,
+        0.82,
+        3.5,
+    )
+    delay_multiplier = {
+        "critical": 1.28,
+        "priority": 1.18,
+        "watch": 1.10,
+        "stable": 1.05,
+    }[band] + scenario_pressure * 0.08 + machine_criticality * 0.05 + uncertainty_pressure * 0.04
     return round(multiplier, 2), round(delay_multiplier, 2)
 
 
@@ -433,35 +499,112 @@ def build_machine_decision_snapshot(
         or prediction.get("maintenance_window")
     )
     stop_recommended = bool(prediction.get("stop_recommended"))
+    policy_context = resolve_planning_policy(
+        machine,
+        live=live,
+        raw=raw,
+        data_source=data_source,
+        age_seconds=age_seconds,
+        freshness_state=freshness_state,
+        prediction_mode=prediction_mode,
+        confidence=confidence,
+        hi=hi,
+        stress_value=stress_value,
+        alerts_24h=alerts_24h,
+        diagnosis_count=len(diagnosis_payloads),
+    )
+    thresholds = policy_context.get("thresholds") or {}
+    machine_policy = dict(policy_context.get("machine") or {})
+    scenario_policy = dict(policy_context.get("scenario") or {})
+    telemetry_policy = dict(policy_context.get("telemetry") or {})
+
+    hi_critical_threshold = _safe_float(thresholds.get("hi_critical")) or 0.30
+    hi_priority_threshold = _safe_float(thresholds.get("hi_priority")) or 0.45
+    hi_surveillance_threshold = _safe_float(thresholds.get("hi_surveillance")) or 0.60
+    rul_critical_threshold = _safe_float(thresholds.get("rul_critical_days")) or 7.0
+    rul_priority_threshold = _safe_float(thresholds.get("rul_priority_days")) or 15.0
+    rul_surveillance_threshold = _safe_float(thresholds.get("rul_surveillance_days")) or 30.0
+
+    hi_is_critical = hi is not None and hi <= hi_critical_threshold
+    hi_is_priority = hi is not None and hi <= hi_priority_threshold
+    hi_is_watch = hi is not None and hi <= hi_surveillance_threshold
+    telemetry_trust = int(telemetry_policy.get("trust_score") or 0)
+    scenario_pressure = _safe_float(scenario_policy.get("pressure")) or 0.0
+    machine_criticality = _safe_float(machine_policy.get("criticality")) or 0.4
 
     base_score = 18
-    if stop_recommended or status == "critical":
-        base_score = 88
+    if stop_recommended or status == "critical" or hi_is_critical:
+        base_score = 88 if stop_recommended or status == "critical" else 82
     elif prediction_mode == "prediction" and rul_days is not None:
-        if rul_days <= 1:
-            base_score = 88
-        elif rul_days <= 3:
+        if rul_days <= rul_critical_threshold:
             base_score = 80
-        elif rul_days <= 7:
-            base_score = 70
-        elif rul_days <= 15:
+        elif rul_days <= rul_priority_threshold:
+            base_score = 68
+        elif rul_days <= rul_surveillance_threshold:
             base_score = 58
-        elif rul_days <= 30:
-            base_score = 45
+        elif rul_days <= rul_surveillance_threshold * 1.6:
+            base_score = 44
         else:
             base_score = 28
-    elif status == "degraded":
+    elif hi_is_priority:
+        base_score = 58
+    elif hi_is_watch or status == "degraded":
         base_score = 42
     elif prediction_mode == "initializing":
-        base_score = 28 if hi is None or hi >= 0.8 else 42
+        base_score = 28 if hi is None or hi >= hi_surveillance_threshold else 42
     elif prediction_mode == "reference_only":
-        base_score = 16 if hi is None or hi >= 0.8 else 30
+        base_score = 18 if hi is None or hi >= hi_surveillance_threshold else 32
 
-    health_penalty = round((1 - hi) * 18) if hi is not None else 6
-    stress_boost = round((stress_value or 0.0) * 22)
+    if hi is not None:
+        if hi <= hi_surveillance_threshold:
+            health_pressure = _clamp(
+                (hi_surveillance_threshold - hi)
+                / max(hi_surveillance_threshold - hi_critical_threshold, 0.05),
+                0,
+                1,
+            )
+        else:
+            health_pressure = _clamp(
+                (1 - hi) / max(1 - hi_surveillance_threshold, 0.20),
+                0,
+                1,
+            ) * 0.40
+        health_penalty = round(health_pressure * 18)
+    else:
+        health_penalty = 6
+    stress_boost = round((stress_value or 0.0) * 20)
+    scenario_boost = round(
+        scenario_pressure
+        * (12 if str(scenario_policy.get("source") or "") == "demo_scenario" else 5)
+    )
+    machine_boost = round(machine_criticality * 8)
     anomaly_boost = 8 if alerts_24h > 10 else 4 if alerts_24h > 3 else 0
+    open_task_boost = 3 if open_tasks > 0 and (status != "ok" or alerts_24h > 0) else 0
     confidence_penalty = 3 if confidence == "low" else 1 if confidence == "medium" else 0
-    urgency_score = int(_clamp(base_score + health_penalty + stress_boost + anomaly_boost - confidence_penalty, 0, 100))
+    telemetry_penalty = (
+        8
+        if telemetry_trust < 35
+        else 4
+        if telemetry_trust < 55
+        else 2
+        if telemetry_trust < 70 and prediction_mode in {"prediction", "reference_only", "initializing"}
+        else 0
+    )
+    urgency_score = int(
+        _clamp(
+            base_score
+            + health_penalty
+            + stress_boost
+            + scenario_boost
+            + machine_boost
+            + anomaly_boost
+            + open_task_boost
+            - confidence_penalty
+            - telemetry_penalty,
+            0,
+            100,
+        )
+    )
 
     if len(critical_diagnoses) >= 2:
         urgency_score = max(urgency_score, 88)
@@ -474,6 +617,16 @@ def build_machine_decision_snapshot(
 
     urgency_band = _get_urgency_band(urgency_score)
     urgency_meta = URGENCY_META[urgency_band]
+    task_template = _policy_task_template(
+        code,
+        urgency_band,
+        top_driver,
+        machine_policy=machine_policy,
+        scenario_policy=scenario_policy,
+        telemetry_policy=telemetry_policy,
+        stop_recommended=stop_recommended,
+        critical_diagnosis_count=len(critical_diagnoses),
+    )
 
     if stop_recommended or urgency_band == "critical":
         summary = (
@@ -534,6 +687,9 @@ def build_machine_decision_snapshot(
         recommended_action = leading_action
         impact = "Le niveau d'alerte expert invite à vérifier la machine sur le terrain sans attendre une dérive supplémentaire du RUL."
 
+    if bool(telemetry_policy.get("auto_schedule_guard")) and urgency_band in {"critical", "priority"} and not stop_recommended and not critical_diagnoses:
+        recommended_action = "Confirmer rapidement sur site avant de lancer une intervention lourde."
+
     trust_note: str
     if critical_diagnoses and prediction_mode == "reference_only":
         trust_note = (
@@ -543,6 +699,11 @@ def build_machine_decision_snapshot(
     elif critical_diagnoses and prediction_mode == "initializing":
         trust_note = (
             "Le pronostic RUL se calibre encore, mais les règles expertes justifient déjà un contrôle terrain prioritaire."
+        )
+    elif prediction_mode == "initializing" and data_source == "persisted_reference":
+        trust_note = (
+            "Le flux capteur live n'est pas encore revenu; le systeme conserve seulement la derniere estimation valide "
+            "en attendant une nouvelle prediction consolidee."
         )
     elif prediction_mode == "prediction" and confidence:
         trust_note = f"Prédiction publiée avec un niveau de confiance {CONFIDENCE_LABELS.get(str(confidence), 'indéterminé')}."
@@ -554,6 +715,10 @@ def build_machine_decision_snapshot(
         trust_note = "Lecture issue du dernier état persisté, sans flux capteur récent."
     else:
         trust_note = "Lecture fondée sur les derniers signaux disponibles."
+
+    telemetry_level = str(telemetry_policy.get("trust_level") or "").strip()
+    if telemetry_level in {"prudente", "fragile"}:
+        trust_note += f" Le planner applique une garde telemetrie {telemetry_level}."
 
     evidence: list[str] = []
     if hi is not None:
@@ -589,13 +754,23 @@ def build_machine_decision_snapshot(
     elif data_source == "no_data":
         evidence.append("Aucun flux capteur récent disponible")
 
-    budget_multiplier, delay_multiplier = _budget_model(
+    if str(scenario_policy.get("source") or "") == "demo_scenario" and scenario_pressure >= 0.45:
+        evidence.append(
+            f"Contexte scenario {scenario_policy.get('label', 'actif')} ({scenario_policy.get('summary', 'usage soutenu')})"
+        )
+    if telemetry_trust <= 70:
+        evidence.append(f"Telemetrie {telemetry_policy.get('trust_level', 'prudente')} ({telemetry_trust}/100)")
+
+    budget_multiplier, delay_multiplier = _policy_budget_model(
         hi=hi,
         urgency_score=urgency_score,
         band=urgency_band,
         stress_value=stress_value,
         alerts_24h=alerts_24h,
         rul_days=rul_days,
+        scenario_pressure=scenario_pressure,
+        machine_criticality=machine_criticality,
+        telemetry_trust=telemetry_trust,
     )
 
     return {
@@ -629,11 +804,12 @@ def build_machine_decision_snapshot(
         ),
         "evidence": evidence,
         "field_checks": _field_checks(dominant_axis_key if isinstance(dominant_axis_key, str) else None, status),
-        "task_template": _task_template(code, urgency_band, top_driver),
+        "task_template": task_template,
         "budget_model": {
             "multiplier": budget_multiplier,
             "delay_multiplier": delay_multiplier,
         },
+        "policy_context": policy_context,
         "diagnosis_count": len(diagnosis_payloads),
         "diagnoses": diagnosis_payloads[:3],
         "data_source": data_source,

@@ -44,6 +44,7 @@ export interface PredictiveInsight {
 const DEFAULT_TASK_TEMPLATE: MachineDecisionTaskTemplate = {
   type: "inspection",
   leadDays: 7,
+  cooldownDays: 21,
   title: "Inspection",
   summary: "Vérifier la machine et confirmer les signaux observés.",
 };

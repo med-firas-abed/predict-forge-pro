@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AlertsPage } from "@/components/pages/AlertsPage";
@@ -211,11 +211,119 @@ describe("AlertsPage", () => {
     renderPage();
 
     expect(
-      screen.getByText(/lecture seule: vous consultez uniquement les alertes et traces de votre machine/i),
+      screen.getByText(/lecture seule : alertes et traces de votre machine uniquement/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /voir les signaux actifs/i }));
 
     expect(screen.queryByRole("button", { name: /acquitter les signaux/i })).not.toBeInTheDocument();
+  });
+
+  it("moves old recovered signals into the review bucket instead of the prioritized cases", () => {
+    useMachinesMock.mockReturnValue({
+      machines: [
+        {
+          id: "ASC-A1",
+          name: "Machine 1",
+          city: "Bizerte",
+          loc: "Site Nord",
+          hi: 0.95,
+        },
+        {
+          id: "ASC-B2",
+          name: "Machine 2",
+          city: "Sfax",
+          loc: "Batiment B",
+          hi: 0.18,
+        },
+      ],
+    });
+
+    useAlertesMock.mockReturnValue({
+      alertes: [
+        {
+          id: "alert-old-a1",
+          machineId: "uuid-a1",
+          machineCode: "ASC-A1",
+          titre: "Signal ancien encore ouvert",
+          description: "Ancienne alerte de surveillance.",
+          severite: "surveillance",
+          acquitte: false,
+          createdAt: "2026-05-20T08:00:00.000Z",
+        },
+        {
+          id: "alert-fresh-b2",
+          machineId: "uuid-b2",
+          machineCode: "ASC-B2",
+          titre: "Machine critique",
+          description: "Derive critique en cours.",
+          severite: "urgence",
+          acquitte: false,
+          createdAt: "2026-05-28T08:00:00.000Z",
+        },
+      ],
+      acquitterAlertes: { mutate: vi.fn(), isPending: false },
+    });
+
+    useFleetPredictiveInsightsMock.mockReturnValue({
+      insights: [
+        {
+          urgencyScore: 20,
+          urgencyBand: "stable",
+          urgencyLabel: "Stable",
+          maintenanceWindow: "Routine",
+          plainReason: "Lecture stable",
+          recommendedAction: "Surveillance de routine",
+          impact: "Aucun cas prioritaire",
+          stressValue: 0.04,
+          machine: { id: "ASC-A1", hi: 0.95 },
+        },
+        {
+          urgencyScore: 90,
+          urgencyBand: "critical",
+          urgencyLabel: "Urgent",
+          maintenanceWindow: "Sous 24 h",
+          plainReason: "Derive critique",
+          recommendedAction: "Inspection immediate",
+          impact: "Risque de panne",
+          stressValue: 0.82,
+          machine: { id: "ASC-B2", hi: 0.18 },
+        },
+      ],
+      byMachineId: {
+        "ASC-A1": {
+          urgencyScore: 20,
+          urgencyBand: "stable",
+          urgencyLabel: "Stable",
+          maintenanceWindow: "Routine",
+          plainReason: "Lecture stable",
+          recommendedAction: "Surveillance de routine",
+          impact: "Aucun cas prioritaire",
+          stressValue: 0.04,
+          machine: { id: "ASC-A1", hi: 0.95 },
+        },
+        "ASC-B2": {
+          urgencyScore: 90,
+          urgencyBand: "critical",
+          urgencyLabel: "Urgent",
+          maintenanceWindow: "Sous 24 h",
+          plainReason: "Derive critique",
+          recommendedAction: "Inspection immediate",
+          impact: "Risque de panne",
+          stressValue: 0.82,
+          machine: { id: "ASC-B2", hi: 0.18 },
+        },
+      },
+    });
+
+    renderPage();
+
+    const reviewSection = screen.getByTestId("review-alert-section");
+    expect(within(reviewSection).getByText("Machine 1")).toBeInTheDocument();
+    expect(within(reviewSection).getByText(/signal à requalifier/i)).toBeInTheDocument();
+
+    const prioritizedSection = screen.getByTestId("prioritized-alert-section");
+    expect(within(prioritizedSection).getByText("Machine 2")).toBeInTheDocument();
+    expect(within(prioritizedSection).queryByText("Machine 1")).not.toBeInTheDocument();
   });
 });

@@ -24,8 +24,16 @@ import {
 } from "@/hooks/useFleetPredictiveInsights";
 import { apiFetch } from "@/lib/api";
 import { getBudgetReferenceCost, LABOR_RATE_PER_HOUR } from "@/lib/costModel";
-import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import {
+  getMachinePublicLabel,
+  replaceMachineCodesForDisplay,
+} from "@/lib/machinePresentation";
 import { repairText } from "@/lib/repairText";
+import {
+  createGmaoTache,
+  listGmaoTaches,
+  type GmaoTache,
+} from "@/lib/runtimeDataRepository";
 
 interface RiskEntry {
   machine_code: string;
@@ -68,6 +76,7 @@ interface PlannerFleetRow extends RiskEntry {
   task_context?: string | null;
   similar_open_tasks?: number;
   recent_completed_tasks?: number;
+  repeat_cooldown_active?: boolean;
   task_suggestion?: ProposedTask;
 }
 
@@ -117,6 +126,19 @@ const RISK_CONFIG = {
   },
 } as const;
 
+const OPEN_TASK_STATUSES = new Set(["planifiee", "en_cours"]);
+const TASK_TYPE_LABELS = {
+  preventive: "maintenance preventive",
+  corrective: "intervention corrective",
+  inspection: "inspection",
+} as const;
+const RECENT_TASK_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
+const FALLBACK_COOLDOWN_BY_TYPE: Record<ProposedTask["type"], number> = {
+  preventive: 14,
+  corrective: 3,
+  inspection: 21,
+};
+
 function formatHi(hi: number | null) {
   if (typeof hi !== "number") return "Indisponible";
   return `HI ${Math.round(hi * 100)}%`;
@@ -151,7 +173,7 @@ function getSourceLabel(source: string) {
 }
 
 function formatCurrency(value: number | null) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "Cout indisponible";
+  if (typeof value !== "number" || Number.isNaN(value)) return "Coût indisponible";
   return `${Math.round(value).toLocaleString("fr-FR")} TND`;
 }
 
@@ -183,9 +205,30 @@ function stringArrayValue(value: unknown) {
 }
 
 function trimPlannerText(value: string | null | undefined, maxLength = 72) {
-  const compact = repairText((value ?? "").replace(/\s+/g, " ").trim());
+  const compact = replaceMachineCodesForDisplay(
+    repairText((value ?? "").replace(/\s+/g, " ").trim()),
+  );
   if (!compact) return null;
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function parseApiError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return { status: null as number | null, message: null as string | null };
+  }
+
+  const match = error.message.match(/^API\s+(\d+):\s*(.*)$/s);
+  if (!match) {
+    const message = repairText(error.message.trim());
+    return { status: null as number | null, message: message || null };
+  }
+
+  const status = Number(match[1]);
+  const message = repairText(match[2].trim());
+  return {
+    status: Number.isFinite(status) ? status : null,
+    message: message || null,
+  };
 }
 
 function normalizeRiskLevel(value: unknown): PlannerFleetRow["risk_level"] {
@@ -207,14 +250,20 @@ function _priorityFromBand(band: RiskEntry["risk_level"]): ProposedTask["priorit
   return "basse";
 }
 
-function buildLocalTaskTitle(insight: PredictiveInsight) {
+function buildLocalTaskTitle(
+  insight: PredictiveInsight,
+  options?: {
+    hasSimilarOpenTasks?: boolean;
+  },
+) {
+  const machineLabel = formatMachineLabel(insight.machine.id, insight.machine.name);
   const baseTitle = trimPlannerText(
-    insight.taskTemplate.title || `Intervention ${insight.machine.id}`,
+    insight.taskTemplate.title || `Intervention ${machineLabel}`,
     120,
-  ) ?? `Intervention ${insight.machine.id}`;
-  const titleWithMachine = baseTitle.includes(insight.machine.id)
+  ) ?? `Intervention ${machineLabel}`;
+  const titleWithMachine = baseTitle.includes(machineLabel)
     ? baseTitle
-    : `${baseTitle} ${insight.machine.id}`;
+    : `${baseTitle} ${machineLabel}`;
   const qualifiers: string[] = [];
   const driver = trimPlannerText(insight.topDriver ?? insight.dominantAxis ?? null, 38);
   if (driver) qualifiers.push(driver);
@@ -223,7 +272,9 @@ function buildLocalTaskTitle(insight: PredictiveInsight) {
   } else if ((insight.urgencyBand === "critical" || insight.urgencyBand === "watch") && typeof insight.machine.hi === "number") {
     qualifiers.push(`HI ${Math.round(insight.machine.hi * 100)}%`);
   }
-  if ((insight.machine.decision?.openTasks ?? 0) > 0) {
+  const hasSimilarOpenTasks =
+    options?.hasSimilarOpenTasks ?? (insight.machine.decision?.openTasks ?? 0) > 0;
+  if (hasSimilarOpenTasks) {
     qualifiers.push("reprise");
   }
 
@@ -237,7 +288,13 @@ function buildLocalTaskTitle(insight: PredictiveInsight) {
   return title;
 }
 
-function buildLocalTaskDescription(insight: PredictiveInsight) {
+function buildLocalTaskDescription(
+  insight: PredictiveInsight,
+  options?: {
+    taskContext?: string | null;
+    useDefaultOpenTaskContext?: boolean;
+  },
+) {
   const parts: string[] = [];
   const stateParts: string[] = [];
   const recommendedAction = trimPlannerText(insight.recommendedAction, 260);
@@ -262,34 +319,266 @@ function buildLocalTaskDescription(insight: PredictiveInsight) {
   if (driver) stateParts.push(`signal dominant ${driver}`);
 
   if (recommendedAction) parts.push(`Action: ${recommendedAction}.`);
-  if (stateParts.length > 0) parts.push(`Etat: ${stateParts.join(", ")}.`);
+  if (stateParts.length > 0) parts.push(`État: ${stateParts.join(", ")}.`);
   if (plainReason) parts.push(`Motif: ${plainReason}.`);
-  if (maintenanceWindow) parts.push(`Fenetre: ${maintenanceWindow}.`);
+  if (maintenanceWindow) parts.push(`Fenêtre: ${maintenanceWindow}.`);
   if (impact) parts.push(`Impact: ${impact}.`);
   if (evidence.length > 0) parts.push(`Preuves: ${evidence.join(" | ")}.`);
-  if (fieldCheck) parts.push(`Controle terrain: ${fieldCheck}.`);
-  if (openTasks > 0) {
+  if (fieldCheck) parts.push(`Contrôle terrain: ${fieldCheck}.`);
+  if (options && "taskContext" in options) {
+    if (options.taskContext) parts.push(options.taskContext);
+  } else if ((options?.useDefaultOpenTaskContext ?? true) && openTasks > 0) {
     parts.push(
-      `Contexte calendrier: ${openTasks} tache(s) deja ouverte(s) sur cette machine; une relance peut rester necessaire si les signaux persistent.`,
+      `Contexte calendrier: ${openTasks} tâche(s) déjà ouverte(s) sur cette machine; aucune nouvelle suggestion calendrier n'est créée tant qu'elles ne sont pas clôturées.`,
     );
   }
 
   return parts.join(" ").trim();
 }
 
-function buildLocalTaskSuggestion(insight: PredictiveInsight, projectedCost: number): ProposedTask | undefined {
-  if (insight.urgencyBand === "stable") return undefined;
+function buildLocalTaskSuggestion(
+  insight: PredictiveInsight,
+  projectedCost: number,
+  options?: {
+    similarOpenTasks?: number;
+    repeatCooldownActive?: boolean;
+    taskContext?: string | null;
+    useDefaultOpenTaskContext?: boolean;
+  },
+): ProposedTask | undefined {
+  const similarOpenTasks = options?.similarOpenTasks ?? (insight.machine.decision?.openTasks ?? 0);
+  if (insight.urgencyBand === "stable" || similarOpenTasks > 0 || options?.repeatCooldownActive) {
+    return undefined;
+  }
 
   return {
     machine_code: insight.machine.id,
-    titre: buildLocalTaskTitle(insight),
+    titre: buildLocalTaskTitle(insight, {
+      hasSimilarOpenTasks: similarOpenTasks > 0,
+    }),
     type: insight.taskTemplate.type,
     priorite: _priorityFromBand(insight.urgencyBand),
     date_planifiee: _suggestedDate(insight.taskTemplate.leadDays),
     cout_estime: projectedCost,
-    description: buildLocalTaskDescription(insight),
+    description: buildLocalTaskDescription(insight, {
+      taskContext: options?.taskContext,
+      useDefaultOpenTaskContext: options?.useDefaultOpenTaskContext,
+    }),
     technicien: "",
   };
+}
+
+interface LocalTaskHistorySummary {
+  openSameType: number;
+  recentCompletedSameType: number;
+  completedSameType: number;
+  latestCompletedAt: Date | null;
+}
+
+interface LocalRepeatGuard {
+  blocked: boolean;
+  cooldownDays: number;
+  remainingDays: number;
+  latestCompletedAt: Date | null;
+}
+
+function parsePlannerTaskDate(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = value.length === 10 ? `${value}T00:00:00Z` : value;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function buildTaskHistoryIndex(tasks: GmaoTache[]) {
+  return tasks.reduce<Record<string, GmaoTache[]>>((acc, task) => {
+    const machineCode = repairText(task.machineCode).trim().toUpperCase();
+    if (!machineCode) return acc;
+    if (!acc[machineCode]) acc[machineCode] = [];
+    acc[machineCode].push(task);
+    return acc;
+  }, {});
+}
+
+function summarizeLocalTaskHistory(
+  machineTasks: GmaoTache[],
+  taskType: ProposedTask["type"],
+): LocalTaskHistorySummary {
+  const recentCutoff = Date.now() - RECENT_TASK_WINDOW_MS;
+  let openSameType = 0;
+  let recentCompletedSameType = 0;
+  let completedSameType = 0;
+  let latestCompletedAt: Date | null = null;
+
+  for (const task of machineTasks) {
+    if (task.type !== taskType) continue;
+
+    const when = parsePlannerTaskDate(task.datePlanifiee ?? task.createdAt);
+    if (OPEN_TASK_STATUSES.has(task.statut)) {
+      openSameType += 1;
+      continue;
+    }
+
+    if (task.statut !== "terminee") continue;
+
+    completedSameType += 1;
+    if (when && when.getTime() >= recentCutoff) {
+      recentCompletedSameType += 1;
+    }
+    if (when && (!latestCompletedAt || when > latestCompletedAt)) {
+      latestCompletedAt = when;
+    }
+  }
+
+  return {
+    openSameType,
+    recentCompletedSameType,
+    completedSameType,
+    latestCompletedAt,
+  };
+}
+
+function getLocalCooldownDays(insight: PredictiveInsight) {
+  const explicitCooldown = insight.taskTemplate.cooldownDays;
+  if (typeof explicitCooldown === "number" && Number.isFinite(explicitCooldown) && explicitCooldown > 0) {
+    return explicitCooldown;
+  }
+  return FALLBACK_COOLDOWN_BY_TYPE[insight.taskTemplate.type];
+}
+
+function evaluateLocalRepeatGuard(
+  insight: PredictiveInsight,
+  historySummary: LocalTaskHistorySummary,
+): LocalRepeatGuard {
+  const latestCompletedAt = historySummary.latestCompletedAt;
+  const cooldownDays = getLocalCooldownDays(insight);
+  if (!latestCompletedAt || cooldownDays <= 0) {
+    return {
+      blocked: false,
+      cooldownDays,
+      remainingDays: 0,
+      latestCompletedAt,
+    };
+  }
+
+  const expiresAt = new Date(latestCompletedAt.getTime() + cooldownDays * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  if (expiresAt <= now) {
+    return {
+      blocked: false,
+      cooldownDays,
+      remainingDays: 0,
+      latestCompletedAt,
+    };
+  }
+
+  const alerts24h = insight.machine.decision?.alerts24h ?? insight.machine.anom ?? 0;
+  const telemetryTrust = insight.machine.decision?.policyContext?.telemetry?.trustScore ?? 0;
+  const scenarioPressure = insight.machine.decision?.policyContext?.scenario?.pressure ?? 0;
+  const escalated =
+    insight.urgencyBand === "critical" ||
+    insight.stopRecommended ||
+    alerts24h >= 6 ||
+    insight.urgencyScore >= 82 ||
+    (insight.urgencyBand === "priority" && telemetryTrust >= 72 && scenarioPressure >= 0.65);
+
+  if (escalated) {
+    return {
+      blocked: false,
+      cooldownDays,
+      remainingDays: 0,
+      latestCompletedAt,
+    };
+  }
+
+  const remainingMs = Math.max(expiresAt.getTime() - now.getTime(), 0);
+  const remainingDays = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+  return {
+    blocked: true,
+    cooldownDays,
+    remainingDays,
+    latestCompletedAt,
+  };
+}
+
+function buildLocalTaskHistoryNote(
+  taskType: ProposedTask["type"],
+  historySummary: LocalTaskHistorySummary,
+  repeatGuard?: LocalRepeatGuard,
+) {
+  const taskLabel = TASK_TYPE_LABELS[taskType] ?? taskType;
+
+  if (historySummary.openSameType > 0) {
+    return (
+      `Contexte calendrier: ${historySummary.openSameType} tâche(s) de ${taskLabel} sont déjà ouvertes sur cette machine; ` +
+      "aucune nouvelle suggestion calendrier n'est émise tant qu'elles ne sont pas clôturées."
+    );
+  }
+
+  if (repeatGuard?.blocked) {
+    const latest = repeatGuard.latestCompletedAt
+      ? repeatGuard.latestCompletedAt.toLocaleDateString("fr-FR")
+      : "date récente";
+    return (
+      `Historique planner: une action similaire a été clôturée le ${latest}; ` +
+      `le planner attend encore ${repeatGuard.remainingDays} j ou une escalade nette avant de reproposer la même intervention.`
+    );
+  }
+
+  if (historySummary.recentCompletedSameType > 0) {
+    const latest = historySummary.latestCompletedAt
+      ? historySummary.latestCompletedAt.toLocaleDateString("fr-FR")
+      : "date récente";
+    return (
+      `Historique: ${historySummary.recentCompletedSameType} action(s) similaires ont déjà été clôturées récemment ` +
+      `(dernière le ${latest}); la répétition reste cohérente si les signaux n'ont pas disparu.`
+    );
+  }
+
+  if (historySummary.completedSameType > 0 && historySummary.latestCompletedAt) {
+    return (
+      `Historique: une action comparable a déjà été menée (dernière le ` +
+      `${historySummary.latestCompletedAt.toLocaleDateString("fr-FR")}).`
+    );
+  }
+
+  return null;
+}
+
+function findLocalDuplicateMessage(tasks: GmaoTache[], task: ProposedTask) {
+  const normalizedMachineCode = task.machine_code.trim().toUpperCase();
+  const machineTasks = tasks.filter(
+    (entry) => repairText(entry.machineCode).trim().toUpperCase() === normalizedMachineCode,
+  );
+  const normalizedTitle = task.titre.trim().toLowerCase();
+  let sameTitleOpen = 0;
+  let sameTypeOpen = 0;
+
+  for (const entry of machineTasks) {
+    if (!OPEN_TASK_STATUSES.has(entry.statut)) continue;
+    if (entry.titre.trim().toLowerCase() === normalizedTitle) sameTitleOpen += 1;
+    if (entry.type === task.type) sameTypeOpen += 1;
+  }
+
+  if (sameTitleOpen > 0) {
+    return (
+      replaceMachineCodesForDisplay(
+        `Une tâche ouverte avec le titre "${task.titre}" existe déjà dans le calendrier pour ${task.machine_code}. ` +
+          "Fermez ou modifiez la tâche existante avant d'en créer une nouvelle.",
+      )
+    );
+  }
+
+  if (sameTypeOpen > 0) {
+    const taskLabel = TASK_TYPE_LABELS[task.type] ?? task.type;
+    return (
+      replaceMachineCodesForDisplay(
+        `Une tâche ouverte de ${taskLabel} existe déjà dans le calendrier pour ${task.machine_code}. ` +
+          "Fermez ou modifiez la tâche existante avant d'en créer une nouvelle.",
+      )
+    );
+  }
+
+  return null;
 }
 
 function normalizeProposedTask(raw: unknown): ProposedTask | null {
@@ -347,6 +636,7 @@ function normalizePlannerFleetRow(raw: unknown): PlannerFleetRow | null {
     task_context: nullableStringValue(row.task_context),
     similar_open_tasks: numberValue(row.similar_open_tasks, 0),
     recent_completed_tasks: numberValue(row.recent_completed_tasks, 0),
+    repeat_cooldown_active: Boolean(row.repeat_cooldown_active),
     task_suggestion: normalizeProposedTask(row.task_suggestion),
   };
 }
@@ -392,7 +682,10 @@ function buildLocalGeneratePlanResponse(
   };
 }
 
-function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRow[] {
+function buildFallbackPlannerRows(
+  insights: PredictiveInsight[],
+  taskHistoryByMachine?: Record<string, GmaoTache[]>,
+): PlannerFleetRow[] {
   return [...insights]
     .sort((left, right) => right.urgencyScore - left.urgencyScore)
     .map((insight) => {
@@ -400,6 +693,18 @@ function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRo
       const projectedCost = Math.round(avgCost * insight.budgetMultiplier);
       const delayedCost = Math.round(projectedCost * insight.delayMultiplier);
       const openTasks = insight.machine.decision?.openTasks ?? 0;
+      const machineTasks = taskHistoryByMachine?.[insight.machine.id] ?? [];
+      const hasTaskHistory = machineTasks.length > 0;
+      const historySummary = hasTaskHistory
+        ? summarizeLocalTaskHistory(machineTasks, insight.taskTemplate.type)
+        : null;
+      const repeatGuard = historySummary ? evaluateLocalRepeatGuard(insight, historySummary) : null;
+      const similarOpenTasks = historySummary ? historySummary.openSameType : openTasks;
+      const taskContext = historySummary
+        ? buildLocalTaskHistoryNote(insight.taskTemplate.type, historySummary, repeatGuard ?? undefined)
+        : openTasks > 0
+          ? `Contexte calendrier: ${openTasks} tâche(s) déjà ouverte(s) sur cette machine; aucune nouvelle suggestion calendrier n'est créée tant qu'elles ne sont pas clôturées.`
+          : null;
       const row: PlannerFleetRow = {
         machine_code: insight.machine.id,
         nom: insight.machine.name,
@@ -424,13 +729,16 @@ function buildFallbackPlannerRows(insights: PredictiveInsight[]): PlannerFleetRo
         projected_cost: projectedCost,
         delayed_cost: delayedCost,
         delay_penalty: delayedCost - projectedCost,
-        task_context:
-          openTasks > 0
-            ? `Contexte calendrier: ${openTasks} tache(s) deja ouverte(s) sur cette machine; une relance peut rester necessaire si les signaux persistent.`
-            : null,
-        similar_open_tasks: openTasks,
-        recent_completed_tasks: 0,
-        task_suggestion: buildLocalTaskSuggestion(insight, projectedCost),
+        task_context: taskContext,
+        similar_open_tasks: similarOpenTasks,
+        recent_completed_tasks: historySummary?.recentCompletedSameType ?? 0,
+        repeat_cooldown_active: Boolean(repeatGuard?.blocked),
+        task_suggestion: buildLocalTaskSuggestion(insight, projectedCost, {
+          similarOpenTasks,
+          repeatCooldownActive: Boolean(repeatGuard?.blocked),
+          taskContext,
+          useDefaultOpenTaskContext: !hasTaskHistory,
+        }),
       };
       return row;
     });
@@ -451,29 +759,29 @@ function buildPlanNarrative(
   lines.push(
     focusMachine
       ? l(
-          `Synthese ciblee: ${formatMachineLabel(focusMachine)}`,
+          `Synthèse ciblée: ${formatMachineLabel(focusMachine)}`,
           `Focused summary: ${formatMachineLabel(focusMachine)}`,
           `Focused summary: ${formatMachineLabel(focusMachine)}`,
         )
-      : l("Synthese flotte", "Fleet summary", "Fleet summary"),
+      : l("Synthèse flotte", "Fleet summary", "Fleet summary"),
   );
   lines.push("");
   lines.push(
     l(
-      `${criticalRows.length} machine(s) urgentes, ${priorityRows.length} a programmer, ${watchRows.length} a suivre.`,
+      `${criticalRows.length} machine(s) urgentes, ${priorityRows.length} à programmer, ${watchRows.length} à suivre.`,
       `${criticalRows.length} critical, ${priorityRows.length} to schedule, ${watchRows.length} to watch.`,
       `${criticalRows.length} critical, ${priorityRows.length} to schedule, ${watchRows.length} to watch.`,
     ),
   );
   lines.push("");
-  lines.push(l("Priorites retenues :", "Selected priorities:", "Selected priorities:"));
+  lines.push(l("Priorités retenues :", "Selected priorities:", "Selected priorities:"));
 
   for (const row of rows) {
     lines.push(`- ${formatMachineLabel(row.machine_code, row.nom)} (${row.risk_label}) : ${row.summary}`);
     lines.push(`  ${row.recommended_action}`);
     if (row.maintenance_window) {
       lines.push(
-        `  ${l("Fenetre", "Window", "Window")}: ${row.maintenance_window}`,
+        `  ${l("Fenêtre", "Window", "Window")}: ${row.maintenance_window}`,
       );
     }
     if (row.evidence.length > 0) {
@@ -484,27 +792,27 @@ function buildPlanNarrative(
   lines.push("");
   lines.push(
     l(
-      `Cout projete total: ${Math.round(totalProjected).toLocaleString("fr-FR")} TND`,
+      `Coût projeté total: ${Math.round(totalProjected).toLocaleString("fr-FR")} TND`,
       `Projected cost: ${Math.round(totalProjected).toLocaleString("fr-FR")} TND`,
       `Projected cost: ${Math.round(totalProjected).toLocaleString("fr-FR")} TND`,
     ),
   );
   lines.push(
     l(
-      `Surcout potentiel si l'on attend: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
+      `Surcoût potentiel si l'on attend: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
       `Potential delay penalty: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
       `Potential delay penalty: ${Math.round(totalPenalty).toLocaleString("fr-FR")} TND`,
     ),
   );
   lines.push(
     l(
-      `Base de calcul sans historique: main-d'oeuvre ${LABOR_RATE_PER_HOUR} DT/h + forfait pieces par type d'action.`,
+      `Base de calcul sans historique: main-d'oeuvre ${LABOR_RATE_PER_HOUR} DT/h + forfait pièces par type d'action.`,
       `Fallback estimate without history: labor ${LABOR_RATE_PER_HOUR} TND/hour + a parts allowance per task type.`,
       `Fallback estimate without history: labor ${LABOR_RATE_PER_HOUR} TND/hour + a parts allowance per task type.`,
     ),
   );
 
-  return lines.join("\n");
+  return replaceMachineCodesForDisplay(lines.join("\n"));
 }
 
 export function PlannerPage({ embedded = false }: PlannerPageProps) {
@@ -536,6 +844,15 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     () => buildFallbackPlannerRows(insights),
     [insights],
   );
+  const blockedCalendarRows = useMemo(
+    () =>
+      generatedFleet.filter(
+        (row) =>
+          !row.task_suggestion &&
+          ((row.similar_open_tasks ?? 0) > 0 || Boolean(row.repeat_cooldown_active)),
+      ),
+    [generatedFleet],
+  );
 
   const plannerTitle = l(
     "Choisir quoi traiter en premier",
@@ -543,18 +860,18 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     "Fleet priority control",
   );
   const plannerSubtitle = l(
-    "La page classe les machines, prepare un plan d'action, puis envoie les taches validees au calendrier maintenance.",
+    "La page classe les machines, prépare un plan d'action, puis envoie les tâches validées au calendrier maintenance.",
     "Ranks the fleet, suggests useful actions, and prepares the send to the maintenance calendar.",
     "Ranks the fleet, suggests useful actions, and prepares the send to the maintenance calendar.",
   );
-  const workflowTitle = l("3 etapes simples", "3 simple steps", "3 simple steps");
+  const workflowTitle = l("3 étapes simples", "3 simple steps", "3 simple steps");
   const workflowSubtitle = l(
-    "1. Cliquez une machine dans la liste si vous voulez la cibler. 2. Lancez le plan d'action. 3. Validez les taches a envoyer au calendrier.",
+    "1. Cliquez une machine dans la liste si vous voulez la cibler. 2. Lancez le plan d'action. 3. Validez les tâches à envoyer au calendrier.",
     "1. Focus a machine if needed. 2. Generate the proposed actions. 3. Validate each action to send it to the calendar.",
     "1. Focus a machine if needed. 2. Generate the proposed actions. 3. Validate each action to send it to the calendar.",
   );
   const fleetRiskTitle = l(
-    "Machines a traiter d'abord",
+    "Machines à traiter d'abord",
     "Machine priority order",
     "Machine priority order",
   );
@@ -564,20 +881,66 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     "Generate proposed actions",
     "Generate proposed actions",
   );
-  const generatingLabel = l("Generation...", "Generating...", "Generating...");
+  const generatingLabel = l("Génération...", "Generating...", "Generating...");
   const proposedTasksTitle = l(
-    "Taches a envoyer au calendrier",
+    "Tâches à envoyer au calendrier",
     "Actions to validate for the calendar",
     "Actions to validate for the calendar",
   );
   const loadingRiskLabel = l("Chargement...", "Loading...", "Loading...");
   const noDataLabel = l(
-    "Aucune lecture disponible - demarrez le simulateur",
+    "Aucune lecture disponible - démarrez le simulateur",
     "No data - start the simulator",
     "No data - start the simulator",
   );
-  const openTasksLabel = l("tache(s) ouverte(s)", "open task(s)", "open task(s)");
-  const autoRefreshLabel = l("Mise a jour auto 5 s", "Auto refresh 5 s", "Auto refresh 5 s");
+  const openTasksLabel = l("tâche(s) ouverte(s)", "open task(s)", "open task(s)");
+  const alreadyScheduledLabel = l(
+    "action(s) déjà planifiée(s)",
+    "similar task(s) already open",
+    "similar task(s) already open",
+  );
+  const autoRefreshLabel = l("Mise à jour auto 5 s", "Auto refresh 5 s", "Auto refresh 5 s");
+
+  const notifyPlanGeneration = (taskCount: number, blockedCount: number) => {
+    if (taskCount > 0) {
+      toast.success(
+        l(
+          `${taskCount} tâche(s) proposée(s) par le planificateur.`,
+          `${taskCount} task(s) proposed by the planner.`,
+          `${taskCount} task(s) proposed by the planner.`,
+        ),
+      );
+      return;
+    }
+
+    if (blockedCount > 0) {
+      toast.warning(
+        l(
+          "Aucune nouvelle tâche à valider : une action équivalente est déjà ouverte ou vient d'être réalisée récemment.",
+          "No new task to approve: an equivalent action is already open or was completed recently.",
+          "No new task to approve: an equivalent action is already open or was completed recently.",
+        ),
+      );
+      return;
+    }
+
+    toast.success(
+      l(
+        "Aucune nouvelle tâche à proposer pour le moment.",
+        "No new task to propose right now.",
+        "No new task to propose right now.",
+      ),
+    );
+  };
+
+  const loadFallbackPlannerRowsWithHistory = async () => {
+    try {
+      const tasks = await listGmaoTaches();
+      return buildFallbackPlannerRows(insights, buildTaskHistoryIndex(tasks));
+    } catch {
+      return buildFallbackPlannerRows(insights);
+    }
+  };
 
   useEffect(() => {
     setLoadingRisk(loadingMachines && fallbackPlannerRows.length === 0);
@@ -633,18 +996,19 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       setPlanGeneratedAt(data.generated_at);
       setGeneratedFleet(data.fleet);
       setProposedTasks(data.tasks);
-
-      toast.success(
-        l(
-          `${data.tasks.length} tache(s) proposee(s) par le planificateur.`,
-          `${data.tasks.length} task(s) proposed by the planner.`,
-          `${data.tasks.length} task(s) proposed by the planner.`,
-        ),
+      notifyPlanGeneration(
+        data.tasks.length,
+        data.fleet.filter(
+          (row) =>
+            !row.task_suggestion &&
+            ((row.similar_open_tasks ?? 0) > 0 || Boolean(row.repeat_cooldown_active)),
+        ).length,
       );
     } catch (error) {
+      const localRows = await loadFallbackPlannerRowsWithHistory();
       const scopedRows = focusMachine
-        ? fallbackPlannerRows.filter((row) => row.machine_code === focusMachine)
-        : fallbackPlannerRows;
+        ? localRows.filter((row) => row.machine_code === focusMachine)
+        : localRows;
 
       if (scopedRows.length > 0) {
         const fallbackData = buildLocalGeneratePlanResponse(scopedRows, focusMachine, l);
@@ -652,9 +1016,17 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
         setPlanGeneratedAt(fallbackData.generated_at);
         setGeneratedFleet(fallbackData.fleet);
         setProposedTasks(fallbackData.tasks);
+        notifyPlanGeneration(
+          fallbackData.tasks.length,
+          fallbackData.fleet.filter(
+            (row) =>
+              !row.task_suggestion &&
+              ((row.similar_open_tasks ?? 0) > 0 || Boolean(row.repeat_cooldown_active)),
+          ).length,
+        );
         toast.warning(
           l(
-            "Plan backend indisponible - plan local de secours genere avec les donnees machines chargees.",
+            "Plan backend indisponible - plan local de secours généré avec les données machines chargées.",
             "Planner API unavailable - local fallback plan generated from loaded machine data.",
             "Planner API unavailable - local fallback plan generated from loaded machine data.",
           ),
@@ -664,7 +1036,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
           error instanceof Error
             ? error.message
             : l(
-                "Erreur lors de la generation de la synthese",
+                "Erreur lors de la génération de la synthèse",
                 "Failed to generate the summary",
                 "Failed to generate the summary",
               ),
@@ -673,6 +1045,35 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const finalizeApprovedTask = (idx: number, task: ProposedTask) => {
+    setRiskData((previous) =>
+      previous.map((entry) =>
+        entry.machine_code === task.machine_code
+          ? { ...entry, open_tasks: entry.open_tasks + 1 }
+          : entry,
+      ),
+    );
+    setGeneratedFleet((previous) =>
+      previous.map((entry) =>
+        entry.machine_code === task.machine_code
+          ? {
+              ...entry,
+              open_tasks: entry.open_tasks + 1,
+              similar_open_tasks: (entry.similar_open_tasks ?? 0) + 1,
+            }
+          : entry,
+      ),
+    );
+    setProposedTasks((previous) => previous.filter((_, index) => index !== idx));
+    setEditingIdx((previous) => {
+      if (previous == null) return previous;
+      if (previous === idx) return null;
+      return previous > idx ? previous - 1 : previous;
+    });
+    void queryClient.invalidateQueries({ queryKey: ["gmao_taches"] });
+    void queryClient.invalidateQueries({ queryKey: ["machines"] });
   };
 
   const approveTask = async (idx: number) => {
@@ -686,51 +1087,108 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
         body: JSON.stringify(task),
       })) as ApproveTaskResponse;
       toast.success(
-        l(
-          `Tache "${task.titre}" creee dans la GMAO`,
+        replaceMachineCodesForDisplay(
+          l(
+          `Tâche "${task.titre}" créée dans la GMAO`,
           `Task "${task.titre}" created in the GMAO`,
           `Task "${task.titre}" created in the GMAO`,
+          ),
         ),
       );
       if (response?.repeat_note) {
-        toast.warning(response.repeat_note);
+        toast.warning(replaceMachineCodesForDisplay(response.repeat_note));
       }
-      setRiskData((previous) =>
-        previous.map((entry) =>
-          entry.machine_code === task.machine_code
-            ? { ...entry, open_tasks: entry.open_tasks + 1 }
-            : entry,
-        ),
-      );
-      setGeneratedFleet((previous) =>
-        previous.map((entry) =>
-          entry.machine_code === task.machine_code
-            ? {
-                ...entry,
-                open_tasks: entry.open_tasks + 1,
-                similar_open_tasks: (entry.similar_open_tasks ?? 0) + 1,
-              }
-            : entry,
-        ),
-      );
-      setProposedTasks((previous) => previous.filter((_, index) => index !== idx));
-      setEditingIdx((previous) => {
-        if (previous == null) return previous;
-        if (previous === idx) return null;
-        return previous > idx ? previous - 1 : previous;
-      });
-      void queryClient.invalidateQueries({ queryKey: ["gmao_taches"] });
-      void queryClient.invalidateQueries({ queryKey: ["machines"] });
+      finalizeApprovedTask(idx, task);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : l("Erreur d'approbation", "Approval failed", "Approval failed"),
-      );
+      const apiError = parseApiError(error);
+      if (apiError.status === 409) {
+        toast.warning(
+          replaceMachineCodesForDisplay(
+            apiError.message ||
+              l(
+                "Une action équivalente est déjà ouverte dans le calendrier.",
+                "An equivalent action is already open in the calendar.",
+                "An equivalent action is already open in the calendar.",
+              ),
+          ),
+        );
+        return;
+      }
+      if (apiError.status !== null && apiError.status < 500) {
+        toast.error(
+          replaceMachineCodesForDisplay(
+            apiError.message ||
+              l(
+                "Impossible de valider la tâche.",
+                "Unable to approve the task.",
+                "Unable to approve the task.",
+              ),
+          ),
+        );
+        return;
+      }
+
+      try {
+        try {
+          const existingTasks = await listGmaoTaches();
+          const duplicateMessage = findLocalDuplicateMessage(existingTasks, task);
+          if (duplicateMessage) {
+            toast.warning(duplicateMessage);
+            return;
+          }
+        } catch {
+          // Continue to the write fallback when task history cannot be loaded.
+        }
+
+        const targetMachine = machines.find((machine) => machine.id === task.machine_code);
+        const fallbackResult = await createGmaoTache({
+          machine_id: targetMachine?.uuid ?? targetMachine?.id ?? task.machine_code,
+          titre: task.titre,
+          description: task.description,
+          statut: "planifiee",
+          technicien: task.technicien || undefined,
+          date_planifiee: task.date_planifiee || undefined,
+          cout_estime: task.cout_estime ?? undefined,
+          type: task.type,
+        });
+
+        finalizeApprovedTask(idx, task);
+        if (fallbackResult.mode === "queued") {
+          toast.warning(
+            replaceMachineCodesForDisplay(
+              l(
+                `Backend GMAO indisponible - tâche "${task.titre}" gardée localement et prête à être synchronisée.`,
+                `GMAO backend unavailable - task "${task.titre}" was queued locally for sync.`,
+                `تعذر الوصول إلى GMAO - تم حفظ المهمة "${task.titre}" محليا إلى حين المزامنة.`,
+              ),
+            ),
+          );
+        } else {
+          toast.success(
+            replaceMachineCodesForDisplay(
+              l(
+                `Tâche "${task.titre}" créée via le plan B GMAO`,
+                `Task "${task.titre}" created through the GMAO fallback`,
+                `تم إنشاء المهمة "${task.titre}" عبر المسار الاحتياطي`,
+              ),
+            ),
+          );
+        }
+      } catch (fallbackError) {
+        toast.error(
+          fallbackError instanceof Error
+            ? replaceMachineCodesForDisplay(fallbackError.message)
+            : error instanceof Error
+              ? replaceMachineCodesForDisplay(error.message)
+              : l("Erreur d'approbation", "Approval failed", "Approval failed"),
+        );
+      }
     } finally {
       setApprovingIdx(null);
     }
   };
 
-  const displayText = planText.trim();
+  const displayText = replaceMachineCodesForDisplay(planText.trim());
   const rankedRisk = useMemo(
     () => [...riskData].sort((left, right) => right.risk_score - left.risk_score),
     [riskData],
@@ -751,16 +1209,16 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       caption: l("agir vite", "Fast action", "Fast action"),
     },
     {
-      label: l("A programmer", "To schedule", "To schedule"),
+      label: l("À programmer", "To schedule", "To schedule"),
       value: priorityCount,
       valueClass: "text-warning",
-      caption: l("a planifier", "Useful window", "Useful window"),
+      caption: l("à planifier", "Useful window", "Useful window"),
     },
     {
-      label: l("A verifier", "To confirm", "To confirm"),
+      label: l("À vérifier", "To confirm", "To confirm"),
       value: staleCount,
       valueClass: "text-primary",
-      caption: l("lecture a revoir", "Stream to recheck", "Stream to recheck"),
+      caption: l("lecture à revoir", "Stream to recheck", "Stream to recheck"),
     },
   ];
 
@@ -773,12 +1231,12 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     : fullPlanTitle;
   const planSubtitle = selectedRisk
     ? l(
-        `Lisez le resume pour ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)}, puis validez seulement les actions utiles ci-dessous.`,
+        `Lisez le résumé pour ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)}, puis validez seulement les actions utiles ci-dessous.`,
         `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the actions below.`,
         `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the actions below.`,
       )
     : l(
-        "Lisez le resume, puis validez les actions que vous voulez envoyer au calendrier.",
+        "Lisez le résumé, puis validez les actions que vous voulez envoyer au calendrier.",
         "The summary helps review the priorities before validating the actions.",
         "The summary helps review the priorities before validating the actions.",
       );
@@ -790,12 +1248,12 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       title: l("Cliquer une machine", "Click a machine", "Click a machine"),
       detail: focusMachine
         ? l(
-            `Machine choisie : ${formatMachineLabel(focusMachine)}. Recliquez sur sa carte ou utilisez "Voir toute la flotte" pour revenir a la vue globale.`,
+            `Machine choisie : ${formatMachineLabel(focusMachine)}. Recliquez sur sa carte ou utilisez "Voir toute la flotte" pour revenir à la vue globale.`,
             `Focused machine: ${formatMachineLabel(focusMachine)}`,
             `Focused machine: ${formatMachineLabel(focusMachine)}`,
           )
         : l(
-            "Cliquez une carte dans la liste ci-dessous pour cibler une machine. Sans selection, le plan reste global pour toute la flotte.",
+            "Cliquez une carte dans la liste ci-dessous pour cibler une machine. Sans sélection, le plan reste global pour toute la flotte.",
             "Optional: keep the fleet view or choose a machine in the list below.",
             "Optional: keep the fleet view or choose a machine in the list below.",
           ),
@@ -807,12 +1265,12 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       title: l("Lancer le plan", "Run the plan", "Run the plan"),
       detail: displayText
         ? l(
-            "Le plan est pret. Verifiez-le avant de valider les taches.",
+            "Le plan est prêt. Vérifiez-le avant de valider les tâches.",
             "Summary ready for review before validation.",
             "Summary ready for review before validation.",
           )
         : l(
-            "Cliquez sur le bouton vert pour generer le plan d'action.",
+            "Cliquez sur le bouton vert pour générer le plan d'action.",
             "Run the summary to prepare maintenance decisions.",
             "Run the summary to prepare maintenance decisions.",
           ),
@@ -825,12 +1283,12 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       detail:
         proposedTasks.length > 0
           ? l(
-              `${proposedTasks.length} tache(s) sont pretes a etre envoyees au calendrier.`,
+              `${proposedTasks.length} tâche(s) sont prêtes à être envoyées au calendrier.`,
               `${proposedTasks.length} action(s) waiting for calendar validation.`,
               `${proposedTasks.length} action(s) waiting for calendar validation.`,
             )
           : l(
-              "Apres generation, chaque validation ajoute la tache au calendrier maintenance.",
+              "Après génération, chaque validation ajoute la tâche au calendrier maintenance.",
               "Each validation creates the task directly in the maintenance calendar.",
               "Each validation creates the task directly in the maintenance calendar.",
             ),
@@ -913,7 +1371,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
             </button>
             <p className="mt-1 text-xs text-muted-foreground">
               {l(
-                "Cliquez une carte pour cibler cette machine. Recliquez dessus, ou utilisez \"Voir toute la flotte\", pour revenir a la vue globale.",
+                "Cliquez une carte pour cibler cette machine. Recliquez dessus, ou utilisez \"Voir toute la flotte\", pour revenir à la vue globale.",
                 "Choose a machine to focus the summary, or keep the fleet view for a global readout.",
                 "Choose a machine to focus the summary, or keep the fleet view for a global readout.",
               )}
@@ -981,7 +1439,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                             </span>
                             {active && (
                               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.6rem] font-semibold text-primary">
-                                {l("Machine ciblee", "Focused machine", "Focused machine")}
+                                {l("Machine ciblée", "Focused machine", "Focused machine")}
                               </span>
                             )}
                           </div>
@@ -1018,7 +1476,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
             </div>
             {focusMachine && (
               <span className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.7rem] font-medium text-muted-foreground">
-                {l("Machine ciblee", "Focused machine", "Focused machine")}: {formatMachineLabel(focusMachine)}
+                {l("Machine ciblée", "Focused machine", "Focused machine")}: {formatMachineLabel(focusMachine)}
               </span>
             )}
           </div>
@@ -1026,11 +1484,11 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
           {displayText ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {planGeneratedAt && (
-                  <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
-                    {l("Generee le", "Generated on", "Generated on")} {formatUpdatedAt(planGeneratedAt)}
-                  </span>
-                )}
+                    {planGeneratedAt && (
+                      <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
+                    {l("Généré le", "Generated on", "Generated on")} {formatUpdatedAt(planGeneratedAt)}
+                      </span>
+                    )}
                 {focusMachine && (
                   <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
                     {l("Cible", "Focus", "Focus")} {formatMachineLabel(focusMachine)}
@@ -1038,7 +1496,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                 )}
                 {generatedFleet.length > 0 && (
                   <span className="rounded-full border border-border bg-surface-3 px-3 py-1">
-                    {generatedFleet.length} {l("priorite(s) retenue(s)", "selected priorities", "selected priorities")}
+                    {generatedFleet.length} {l("priorité(s) retenue(s)", "selected priorities", "selected priorities")}
                   </span>
                 )}
               </div>
@@ -1049,7 +1507,15 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                   <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {generatedFleet.slice(0, 4).map((row) => {
                       const config = RISK_CONFIG[row.risk_level] || RISK_CONFIG.stable;
-                      const checks = row.field_checks.slice(0, 2).join(" | ");
+                      const reasonText =
+                        trimPlannerText(row.plain_reason || row.summary, 110) ??
+                        trimPlannerText(row.summary, 110) ??
+                        null;
+                      const recommendedActionText =
+                        trimPlannerText(row.recommended_action, 96) ?? row.recommended_action;
+                      const impactText = trimPlannerText(row.impact, 104);
+                      const taskContextText = trimPlannerText(row.task_context ?? null, 104);
+                      const checks = trimPlannerText(row.field_checks.slice(0, 2).join(" | "), 110);
                       return (
                         <div key={row.machine_code} className={`rounded-2xl border p-4 ${config.panel}`}>
                           <div className="flex items-start justify-between gap-3">
@@ -1057,9 +1523,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                               <div className="text-sm font-semibold text-foreground">
                                 {formatMachineLabel(row.machine_code, row.nom)}
                               </div>
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {row.plain_reason || row.summary}
-                              </div>
+                              {reasonText ? (
+                                <div className="mt-1 text-xs text-muted-foreground">{reasonText}</div>
+                              ) : null}
                             </div>
                             <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${config.bg} ${config.color}`}>
                               {row.risk_label}
@@ -1076,23 +1542,28 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                             </span>
                             {(row.similar_open_tasks ?? 0) > 0 && (
                               <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
-                                {row.similar_open_tasks} {l("relance(s) ouverte(s)", "similar open task(s)", "similar open task(s)")}
+                                {row.similar_open_tasks} {alreadyScheduledLabel}
                               </span>
                             )}
                             {(row.recent_completed_tasks ?? 0) > 0 && (
                               <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
-                                {row.recent_completed_tasks} {l("action(s) recente(s)", "recent action(s)", "recent action(s)")}
+                                {row.recent_completed_tasks} {l("action(s) récente(s)", "recent action(s)", "recent action(s)")}
+                              </span>
+                            )}
+                            {row.repeat_cooldown_active && (
+                              <span className="rounded-full bg-card px-2.5 py-1 text-foreground">
+                                {l("cooldown récent actif", "recent cooldown active", "recent cooldown active")}
                               </span>
                             )}
                           </div>
-                          <div className="mt-3 text-sm text-secondary-foreground">{row.recommended_action}</div>
-                          {row.impact && <div className="mt-2 text-xs text-muted-foreground">{row.impact}</div>}
-                          {row.task_context && (
-                            <div className="mt-2 text-[0.72rem] text-muted-foreground">{row.task_context}</div>
+                          <div className="mt-3 text-sm text-secondary-foreground">{recommendedActionText}</div>
+                          {impactText && <div className="mt-2 text-xs text-muted-foreground">{impactText}</div>}
+                          {taskContextText && (
+                            <div className="mt-2 text-[0.72rem] text-muted-foreground">{taskContextText}</div>
                           )}
                           {checks && (
                             <div className="mt-2 text-[0.72rem] text-muted-foreground">
-                              {l("Controle terrain", "Field checks", "Field checks")}: {checks}
+                              {l("Contrôle terrain", "Field checks", "Field checks")}: {checks}
                             </div>
                           )}
                         </div>
@@ -1103,7 +1574,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
               )}
 
               <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                <div className="industrial-label mb-2">{l("Resume", "Planner note", "Planner note")}</div>
+                <div className="industrial-label mb-2">{l("Résumé", "Planner note", "Planner note")}</div>
                 <div className="whitespace-pre-wrap text-sm leading-relaxed text-secondary-foreground">{displayText}</div>
               </div>
             </div>
@@ -1116,12 +1587,27 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
         </div>
       )}
 
+      {!generating && proposedTasks.length === 0 && blockedCalendarRows.length > 0 && (
+        <div className="rounded-2xl border border-warning/20 bg-warning/5 p-5">
+          <div className="section-title mb-1">
+            {l("Calendrier déjà alimenté", "Calendar already filled", "Calendar already filled")}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {l(
+              "Aucune nouvelle tâche à valider : une action équivalente est déjà ouverte ou vient d'être réalisée récemment sur les machines prioritaires. Vérifiez la tâche existante ou laissez passer la fenêtre de cooldown.",
+              "No new task to approve: an equivalent action is already open or was completed recently on the priority machines. Review the existing task or wait for the cooldown window.",
+              "No new task to approve: an equivalent action is already open or was completed recently on the priority machines. Review the existing task or wait for the cooldown window.",
+            )}
+          </p>
+        </div>
+      )}
+
       {proposedTasks.length > 0 && (
         <div className="rounded-2xl border border-border bg-card p-5">
           <h3 className="section-title mb-1">{proposedTasksTitle}</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             {l(
-              "Chaque validation cree immediatement une tache dans le calendrier de maintenance.",
+              "Chaque validation crée immédiatement une tâche dans le calendrier de maintenance.",
               "Each approval immediately creates a task in the maintenance calendar.",
               "Each approval immediately creates a task in the maintenance calendar.",
             )}
@@ -1176,14 +1662,14 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                             );
                           }}
                         >
-                          <option value="preventive">{l("Preventive", "Preventive", "Preventive")}</option>
+                          <option value="preventive">{l("Préventive", "Preventive", "Preventive")}</option>
                           <option value="corrective">{l("Corrective", "Corrective", "Corrective")}</option>
                           <option value="inspection">{l("Inspection", "Inspection", "Inspection")}</option>
                         </select>
                       </div>
                       <div>
                         <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
-                          {l("Priorite", "Priority", "Priority")}
+                          {l("Priorité", "Priority", "Priority")}
                         </label>
                         <select
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
@@ -1202,7 +1688,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                       </div>
                       <div>
                         <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
-                          {l("Date planifiee", "Scheduled date", "Scheduled date")}
+                          {l("Date planifiée", "Scheduled date", "Scheduled date")}
                         </label>
                         <input
                           type="date"
@@ -1218,7 +1704,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                       </div>
                       <div>
                         <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
-                          {l("Cout estime (TND)", "Estimated cost (TND)", "Estimated cost (TND)")}
+                          {l("Coût estimé (TND)", "Estimated cost (TND)", "Estimated cost (TND)")}
                         </label>
                         <input
                           type="number"
@@ -1234,7 +1720,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                       </div>
                       <div className="sm:col-span-2">
                         <label className="mb-1 block text-[0.65rem] font-medium text-muted-foreground">
-                          {l("Assigne a (optionnel)", "Assigned to (optional)", "Assigned to (optional)")}
+                          {l("Assigné à (optionnel)", "Assigned to (optional)", "Assigned to (optional)")}
                         </label>
                         <input
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
@@ -1293,7 +1779,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-foreground">{task.titre}</span>
+                        <span className="text-sm font-semibold text-foreground">
+                          {replaceMachineCodesForDisplay(task.titre)}
+                        </span>
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.6rem] font-medium text-primary">
                           {formatMachineLabel(task.machine_code)}
                         </span>
@@ -1301,7 +1789,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                           {task.type}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">{task.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {replaceMachineCodesForDisplay(task.description)}
+                      </p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[0.65rem] text-muted-foreground">
                         {task.date_planifiee && (
                           <span>
@@ -1310,7 +1800,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                         )}
                         {task.cout_estime != null && (
                           <span>
-                            {l("Cout", "Cost", "Cost")}: {task.cout_estime} TND
+                            {l("Coût", "Cost", "Cost")}: {task.cout_estime} TND
                           </span>
                         )}
                         {task.technicien && (

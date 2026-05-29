@@ -27,6 +27,10 @@ vi.mock("@/components/layout/AppFooter", () => ({
   AppFooter: () => <div data-testid="footer" />,
 }));
 
+vi.mock("@/components/layout/ResilienceBanner", () => ({
+  ResilienceBanner: () => null,
+}));
+
 vi.mock("@/components/industrial/ChatWidget", () => ({
   ChatWidget: () => <div data-testid="chat-widget" />,
 }));

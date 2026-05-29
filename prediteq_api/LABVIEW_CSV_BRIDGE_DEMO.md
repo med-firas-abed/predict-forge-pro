@@ -75,7 +75,7 @@ This creates:
 
 ```powershell
 cd prediteq_api
-python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine reelle" --scenario surveillance
+python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine AroTeq" --location "Usine Aroteq - Ben Arous" --scenario surveillance
 ```
 
 Why this matters:

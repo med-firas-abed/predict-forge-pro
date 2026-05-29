@@ -1,0 +1,6 @@
+machine_code,time,sim_elapsed_s,profile,scenario,phase,vibration_mm_s,motor_power,temperature,humidity,current,charge,state,source
+ARO-01,2026-05-26T15:49:39.184Z,0,B_quadratic,surveillance,ascent,1.655,0.850,24.3,61.5,1.534,90.0,ascent,labview_demo_csv
+ARO-01,2026-05-26T15:49:39.199Z,1,B_quadratic,surveillance,ascent,1.697,0.847,24.2,63.1,1.528,90.0,ascent,labview_demo_csv
+ARO-01,2026-05-26T15:49:39.210Z,2,B_quadratic,surveillance,ascent,1.668,0.839,24.1,64.3,1.514,90.0,ascent,labview_demo_csv
+ARO-01,2026-05-26T15:49:39.223Z,3,B_quadratic,surveillance,ascent,1.712,0.851,23.9,65.5,1.536,90.0,ascent,labview_demo_csv
+ARO-01,2026-05-26T15:49:39.238Z,4,B_quadratic,surveillance,ascent,1.668,0.847,23.7,66.8,1.529,90.0,ascent,labview_demo_csv

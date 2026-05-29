@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { useAuth, UserRole } from "@/contexts/AuthContext";
+import { Award, Eye, EyeOff, Globe, Lock, Moon, Shield, Sun, UserPlus } from "lucide-react";
+
 import { useApp } from "@/contexts/AppContext";
+import { useAuth, UserRole } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
-import { Sun, Moon, Globe, Shield, Lock, Award, UserPlus, Eye, EyeOff } from "lucide-react";
 
 interface SignupPageProps {
   onNavigate: (route: string) => void;
@@ -26,6 +27,9 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const l = (fr: string, en: string) => (lang === "en" ? en : fr);
+
   const isAdminCreateMode =
     currentUser?.role === "admin" &&
     currentUser.status === "approved" &&
@@ -41,92 +45,6 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
     }
   }, [isAdminCreateMode]);
 
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  const validateName = (value: string) => {
-    if (value && !/^[\p{L}\s'-]+$/u.test(value)) {
-      return lang === "fr"
-        ? "Le nom ne doit contenir que des lettres"
-        : lang === "en"
-          ? "Name must contain only letters"
-          : "يجب أن يحتوي الاسم على أحرف فقط";
-    }
-    if (value && value.trim().length < 3) {
-      return lang === "fr"
-        ? "Minimum 3 caractères"
-        : lang === "en"
-          ? "Minimum 3 characters"
-          : "3 أحرف على الأقل";
-    }
-    return "";
-  };
-
-  const validateEmail = (value: string) => {
-    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
-      return lang === "fr"
-        ? "Email invalide"
-        : lang === "en"
-          ? "Invalid email"
-          : "بريد إلكتروني غير صالح";
-    }
-    return "";
-  };
-
-  const validatePassword = (value: string) => {
-    if (!value) return "";
-    if (value.length < 8) {
-      return lang === "fr"
-        ? "Minimum 8 caractères"
-        : lang === "en"
-          ? "Minimum 8 characters"
-          : "8 أحرف على الأقل";
-    }
-    if (!/[A-Z]/.test(value)) {
-      return lang === "fr"
-        ? "Une majuscule requise"
-        : lang === "en"
-          ? "One uppercase letter required"
-          : "حرف كبير واحد مطلوب";
-    }
-    if (!/[a-z]/.test(value)) {
-      return lang === "fr"
-        ? "Une minuscule requise"
-        : lang === "en"
-          ? "One lowercase letter required"
-          : "حرف صغير واحد مطلوب";
-    }
-    if (!/[0-9]/.test(value)) {
-      return lang === "fr"
-        ? "Un chiffre requis"
-        : lang === "en"
-          ? "One digit required"
-          : "رقم واحد مطلوب";
-    }
-    return "";
-  };
-
-  const validateConfirm = (value: string) => {
-    if (value && value !== password) {
-      return lang === "fr"
-        ? "Les mots de passe ne correspondent pas"
-        : lang === "en"
-          ? "Passwords do not match"
-          : "كلمات المرور غير متطابقة";
-    }
-    return "";
-  };
-
-  const handleFieldChange = (
-    field: string,
-    value: string,
-    validator: (v: string) => string,
-    setter: (v: string) => void,
-  ) => {
-    setter(value);
-    const err = validator(value);
-    setFieldErrors((prev) => ({ ...prev, [field]: err }));
-  };
-
   useEffect(() => {
     let mounted = true;
     apiFetch<{ id: string; code: string; nom: string }[]>("/auth/machines")
@@ -140,10 +58,62 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
         setMachines([]);
         setMachineId("");
       });
+
     return () => {
       mounted = false;
     };
   }, []);
+
+  const validateName = (value: string) => {
+    if (value && !/^[\p{L}\s'-]+$/u.test(value)) {
+      return l("Le nom ne doit contenir que des lettres", "Name must contain only letters");
+    }
+    if (value && value.trim().length < 3) {
+      return l("Minimum 3 caracteres", "Minimum 3 characters");
+    }
+    return "";
+  };
+
+  const validateEmail = (value: string) => {
+    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
+      return l("Email invalide", "Invalid email");
+    }
+    return "";
+  };
+
+  const validatePassword = (value: string) => {
+    if (!value) return "";
+    if (value.length < 8) return l("Minimum 8 caracteres", "Minimum 8 characters");
+    if (!/[A-Z]/.test(value)) return l("Une majuscule requise", "One uppercase letter required");
+    if (!/[a-z]/.test(value)) return l("Une minuscule requise", "One lowercase letter required");
+    if (!/[0-9]/.test(value)) return l("Un chiffre requis", "One digit required");
+    return "";
+  };
+
+  const validateConfirm = (value: string) => {
+    if (value && value !== password) {
+      return l("Les mots de passe ne correspondent pas", "Passwords do not match");
+    }
+    return "";
+  };
+
+  const handleFieldChange = (
+    field: string,
+    value: string,
+    validator: (nextValue: string) => string,
+    setter: (nextValue: string) => void,
+  ) => {
+    setter(value);
+    setFieldErrors((prev) => ({ ...prev, [field]: validator(value) }));
+  };
+
+  const passwordToggleLabel = showPassword
+    ? l("Masquer le mot de passe", "Hide password")
+    : l("Afficher le mot de passe", "Show password");
+
+  const confirmPasswordToggleLabel = showConfirmPassword
+    ? l("Masquer le mot de passe", "Hide password")
+    : l("Afficher le mot de passe", "Show password");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,7 +126,10 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
       confirmPassword: validateConfirm(confirmPassword),
     };
     setFieldErrors(errors);
-    if (Object.values(errors).some((value) => value)) return;
+
+    if (Object.values(errors).some(Boolean)) {
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError(t("auth.passwordMismatch"));
@@ -164,13 +137,7 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
     }
 
     if (role === "user" && !machineId) {
-      setError(
-        lang === "fr"
-          ? "Impossible de charger la liste des machines."
-          : lang === "en"
-            ? "Unable to load the machine list."
-            : "تعذر تحميل قائمة الآلات.",
-      );
+      setError(l("Impossible de charger la liste des machines.", "Unable to load the machine list."));
       return;
     }
 
@@ -186,60 +153,35 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
 
       if (!result.success) {
         setError(result.error || t("auth.registrationError"));
-      } else {
-        if (isAdminCreateMode) {
-          toast.success(
-            lang === "fr"
-              ? "Utilisateur créé. Retour à l'administration pour validation."
-              : lang === "en"
-                ? "User created. Returning to administration for validation."
-                : "ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙˆØ§Ù„Ø¹ÙˆØ¯Ø© Ø¥Ù„Ù‰ Ø§Ù„Ø¥Ø¯Ø§Ø±Ø© Ù„Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©.",
-          );
-          onNavigate("/administration");
-        } else {
-          onNavigate("/pending");
-        }
+        return;
       }
+
+      if (isAdminCreateMode) {
+        toast.success(
+          l(
+            "Utilisateur cree. Retour a l'administration pour validation.",
+            "User created. Returning to administration for validation.",
+          ),
+        );
+        onNavigate("/administration");
+        return;
+      }
+
+      onNavigate("/pending");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const passwordToggleLabel =
-    showPassword
-      ? lang === "fr"
-        ? "Masquer le mot de passe"
-        : lang === "en"
-          ? "Hide password"
-          : "إخفاء كلمة المرور"
-      : lang === "fr"
-        ? "Afficher le mot de passe"
-        : lang === "en"
-          ? "Show password"
-          : "إظهار كلمة المرور";
-
-  const confirmPasswordToggleLabel =
-    showConfirmPassword
-      ? lang === "fr"
-        ? "Masquer le mot de passe"
-        : lang === "en"
-          ? "Hide password"
-          : "إخفاء كلمة المرور"
-      : lang === "fr"
-        ? "Afficher le mot de passe"
-        : lang === "en"
-          ? "Show password"
-          : "إظهار كلمة المرور";
-
   return (
     <div className="min-h-screen flex flex-col items-center bg-background p-4 pt-10 relative">
       <div className="absolute top-4 right-4 flex items-center gap-2">
         <button
-          onClick={() => setLang(lang === "fr" ? "en" : lang === "en" ? "ar" : "fr")}
+          onClick={() => setLang(lang === "fr" ? "en" : "fr")}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all text-xs font-semibold"
         >
           <Globe className="w-3.5 h-3.5" />
-          {lang === "fr" ? "FR" : lang === "en" ? "EN" : "AR"}
+          {lang === "fr" ? "FR" : "EN"}
         </button>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -257,45 +199,34 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
             className="h-20 max-w-full object-contain animate-float"
           />
           <p className="text-sm text-muted-foreground mt-3 text-center">
-            {lang === "fr"
-              ? "Plateforme PrediTeq de maintenance prédictive"
-              : lang === "en"
-                ? "PrediTeq predictive maintenance platform"
-                : "منصة SaaS للصيانة التنبؤية بالذكاء الاصطناعي"}
+            {l("Plateforme PrediTeq de maintenance predictive", "PrediTeq predictive maintenance platform")}
           </p>
         </div>
 
         <div
           className="relative rounded-2xl p-[1px] auth-card-shadow"
           style={{
-            backgroundImage: theme === "dark"
-              ? "linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))"
-              : "linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)",
+            backgroundImage:
+              theme === "dark"
+                ? "linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))"
+                : "linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)",
           }}
         >
           <div className="bg-card rounded-2xl p-8 space-y-5">
             <div className="text-center">
               <h1 className="text-lg font-semibold text-foreground">
-                {isAdminCreateMode
-                  ? lang === "fr"
-                    ? "Ajouter un utilisateur"
-                    : lang === "en"
-                      ? "Add a user"
-                      : "Ø¥Ø¶Ø§ÙØ© Ù…Ø³ØªØ®Ø¯Ù…"
-                  : t("auth.createAccount")}
+                {isAdminCreateMode ? l("Ajouter un utilisateur", "Add a user") : t("auth.createAccount")}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {isAdminCreateMode
-                  ? lang === "fr"
-                    ? "Créer un compte qui reviendra dans le circuit d'administration"
-                    : lang === "en"
-                      ? "Create an account that returns to the admin workflow"
-                      : "إنشاء حساب يعود إلى مسار الإدارة"
-                  : lang === "fr"
-                    ? "Demandez l'accès : le compte restera en attente jusqu'à validation"
-                    : lang === "en"
-                      ? "Request access: the account stays pending until approval"
-                      : "اطلب الوصول: يبقى الحساب معلقًا حتى الموافقة"}
+                  ? l(
+                      "Creer un compte qui reviendra dans le circuit d'administration",
+                      "Create an account that returns to the admin workflow",
+                    )
+                  : l(
+                      "Demandez l'acces : le compte restera en attente jusqu'a validation",
+                      "Request access: the account stays pending until approval",
+                    )}
               </p>
             </div>
 
@@ -329,7 +260,7 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                   className={`w-full h-12 rounded-xl border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
                     fieldErrors.email ? "border-destructive focus:ring-destructive/40" : "border-input focus:ring-ring"
                   }`}
-                  placeholder="votre@email.com"
+                  placeholder={l("votre@email.com", "name@example.com")}
                 />
                 {fieldErrors.email && <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>}
               </div>
@@ -351,11 +282,7 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                             ...prev,
                             confirmPassword:
                               e.target.value !== confirmPassword
-                                ? lang === "fr"
-                                  ? "Les mots de passe ne correspondent pas"
-                                  : lang === "en"
-                                    ? "Passwords do not match"
-                                    : "كلمات المرور غير متطابقة"
+                                ? l("Les mots de passe ne correspondent pas", "Passwords do not match")
                                 : "",
                           }));
                         }
@@ -387,7 +314,9 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                       type={showConfirmPassword ? "text" : "password"}
                       required
                       value={confirmPassword}
-                      onChange={(e) => handleFieldChange("confirmPassword", e.target.value, validateConfirm, setConfirmPassword)}
+                      onChange={(e) =>
+                        handleFieldChange("confirmPassword", e.target.value, validateConfirm, setConfirmPassword)
+                      }
                       className={`w-full h-12 rounded-xl border bg-background px-4 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
                         fieldErrors.confirmPassword ? "border-destructive focus:ring-destructive/40" : "border-input focus:ring-ring"
                       }`}
@@ -403,40 +332,43 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                       {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {fieldErrors.confirmPassword && <p className="text-xs text-destructive mt-1">{fieldErrors.confirmPassword}</p>}
+                  {fieldErrors.confirmPassword && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.confirmPassword}</p>
+                  )}
                 </div>
               </div>
 
               {!isAdminCreateMode && (
                 <div>
-                <label className="block text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
-                  {t("auth.role")}
-                </label>
-                <div className="flex gap-3">
-                  {(["user", "admin"] as UserRole[]).map((itemRole) => (
-                    <button
-                      key={itemRole}
-                      type="button"
-                      onClick={() => setRole(itemRole)}
-                      className={`flex-1 h-12 rounded-xl text-sm font-medium border transition-all btn-premium ${
-                        role === itemRole
-                          ? "text-white"
-                          : "bg-background text-foreground border-input hover:bg-muted"
-                      }`}
-                      style={
-                        role === itemRole
-                          ? {
-                              backgroundColor: theme === "dark" ? "hsl(191, 50%, 42%)" : undefined,
-                              backgroundImage: theme !== "dark" ? "linear-gradient(to right, #0f766e, #14b8a6)" : undefined,
-                              borderColor: theme === "dark" ? "hsl(191, 50%, 42%)" : "#0f766e",
-                            }
-                          : undefined
-                      }
-                    >
-                      {itemRole === "user" ? t("auth.user") : t("auth.administrator")}
-                    </button>
-                  ))}
-                </div>
+                  <label className="block text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
+                    {t("auth.role")}
+                  </label>
+                  <div className="flex gap-3">
+                    {(["user", "admin"] as UserRole[]).map((itemRole) => (
+                      <button
+                        key={itemRole}
+                        type="button"
+                        onClick={() => setRole(itemRole)}
+                        className={`flex-1 h-12 rounded-xl text-sm font-medium border transition-all btn-premium ${
+                          role === itemRole
+                            ? "text-white"
+                            : "bg-background text-foreground border-input hover:bg-muted"
+                        }`}
+                        style={
+                          role === itemRole
+                            ? {
+                                backgroundColor: theme === "dark" ? "hsl(191, 50%, 42%)" : undefined,
+                                backgroundImage:
+                                  theme !== "dark" ? "linear-gradient(to right, #0f766e, #14b8a6)" : undefined,
+                                borderColor: theme === "dark" ? "hsl(191, 50%, 42%)" : "#0f766e",
+                              }
+                            : undefined
+                        }
+                      >
+                        {itemRole === "user" ? t("auth.user") : t("auth.administrator")}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -453,13 +385,15 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
                     className="w-full h-12 rounded-xl border border-input bg-background px-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
                   >
                     {machines.length === 0 ? (
-                      <option value="">
-                        {lang === "fr" ? "Chargement indisponible" : lang === "en" ? "Unable to load machines" : "تعذر تحميل الآلات"}
-                      </option>
+                      <option value="">{l("Chargement indisponible", "Unable to load machines")}</option>
                     ) : (
                       machines.map((machine) => (
                         <option key={machine.id} value={machine.id}>
-                          {getMachinePublicLabel({ id: machine.code, name: machine.nom })}
+                          {getMachinePublicLabel({
+                            id: machine.id,
+                            code: machine.code,
+                            name: machine.nom,
+                          })}
                         </option>
                       ))
                     )}
@@ -476,25 +410,27 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
               <button
                 type="submit"
                 disabled={submitting}
-                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === "dark" ? "bg-primary hover:bg-primary/90" : "shadow-lg"}`}
-                style={theme !== "dark" ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" } : undefined}
+                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${
+                  theme === "dark" ? "bg-primary hover:bg-primary/90" : "shadow-lg"
+                }`}
+                style={
+                  theme !== "dark"
+                    ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" }
+                    : undefined
+                }
               >
                 <UserPlus className="w-4 h-4" />
                 {submitting
                   ? "..."
                   : isAdminCreateMode
-                    ? lang === "fr"
-                      ? "Créer l'utilisateur"
-                      : lang === "en"
-                        ? "Create user"
-                        : "Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…"
+                    ? l("Creer l'utilisateur", "Create user")
                     : t("auth.createBtn")}
               </button>
             </form>
 
             <div className="flex items-center gap-4">
               <div className="section-divider flex-1" />
-              <span className="text-xs text-muted-foreground">{lang === "fr" ? "ou" : lang === "en" ? "or" : "أو"}</span>
+              <span className="text-xs text-muted-foreground">{l("ou", "or")}</span>
               <div className="section-divider flex-1" />
             </div>
 
@@ -511,9 +447,15 @@ export function SignupPage({ onNavigate }: SignupPageProps) {
         </div>
 
         <div className="flex items-center justify-center gap-6 mt-6">
-          <span className="trust-badge"><Shield className="w-3 h-3" /> {lang === "fr" ? "Validation admin" : lang === "en" ? "Admin approval" : "موافقة المسؤول"}</span>
-          <span className="trust-badge"><Lock className="w-3 h-3" /> {lang === "fr" ? "Affectation machine" : lang === "en" ? "Machine assignment" : "تعيين الآلة"}</span>
-          <span className="trust-badge"><Award className="w-3 h-3" /> {lang === "fr" ? "Rôles admin / user" : lang === "en" ? "Admin / user roles" : "أدوار مسؤول / مستخدم"}</span>
+          <span className="trust-badge">
+            <Shield className="w-3 h-3" /> {l("Validation admin", "Admin approval")}
+          </span>
+          <span className="trust-badge">
+            <Lock className="w-3 h-3" /> {l("Affectation machine", "Machine assignment")}
+          </span>
+          <span className="trust-badge">
+            <Award className="w-3 h-3" /> {l("Roles admin / user", "Admin / user roles")}
+          </span>
         </div>
       </div>
     </div>

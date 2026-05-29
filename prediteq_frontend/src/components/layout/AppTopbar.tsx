@@ -28,8 +28,8 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
 
   const L = useMemo(() => {
     const m: Record<string, Record<string, string>> = {
-      "g.machines": { fr: "Machines", en: "Machines", ar: "Machines" },
-      "g.pages": { fr: "Pages", en: "Pages", ar: "Pages" },
+      "g.machines": { fr: "Machines", en: "Machines" },
+      "g.pages": { fr: "Pages", en: "Pages" },
     };
     return (key: string) => m[key]?.[lang] ?? m[key]?.fr ?? key;
   }, [lang]);
@@ -135,7 +135,7 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
   }, [machines]);
 
   const latestUpdateLabel = latestUpdate
-    ? latestUpdate.toLocaleString(lang === "fr" ? "fr-FR" : lang === "ar" ? "ar-TN" : "en-US", {
+    ? latestUpdate.toLocaleString(lang === "fr" ? "fr-FR" : "en-US", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -241,14 +241,13 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
       <label className="relative flex items-center gap-1.5 rounded-xl border border-border bg-surface-3 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-primary/30">
         <Globe className="w-3.5 h-3.5" />
         <select
-          aria-label="Langue"
+          aria-label={t("settings.language")}
           value={lang}
           onChange={(event) => setLang(event.target.value as typeof lang)}
           className="appearance-none bg-transparent pr-4 text-xs font-semibold text-foreground outline-none"
         >
           <option value="fr">FR</option>
           <option value="en">EN</option>
-          <option value="ar">AR</option>
         </select>
         <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       </label>
@@ -274,10 +273,10 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
         </div>
         <div className="hidden lg:block">
           <div className="text-sm font-semibold text-foreground leading-tight">
-            {currentUser?.fullName ?? "Utilisateur"}
+            {currentUser?.fullName ?? t("auth.user")}
           </div>
           <div className="text-[0.6rem] text-primary uppercase tracking-wider font-semibold">
-            {currentUser?.role ?? "user"}
+            {currentUser?.role === "admin" ? t("auth.administrator") : t("auth.user")}
           </div>
         </div>
       </div>

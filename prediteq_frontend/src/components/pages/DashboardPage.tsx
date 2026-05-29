@@ -67,6 +67,7 @@ import {
 } from "@/lib/demoScenario";
 import { inferComponentFocus } from "@/lib/componentInference";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import { replaceMachineCodesForDisplay } from "@/lib/machinePresentation";
 import {
   describeAudienceUsageRegime,
   formatAudienceAxisLabel,
@@ -138,6 +139,21 @@ function buildSensorWindowTitle(
   );
 }
 
+function compactText(value: string | null | undefined, maxLength = 120) {
+  const normalized = replaceMachineCodesForDisplay(
+    repairText((value ?? "").replace(/\s+/g, " ").trim()),
+  );
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+
+  const sentenceCutoff = normalized.lastIndexOf(". ", maxLength);
+  if (sentenceCutoff >= Math.floor(maxLength * 0.55)) {
+    return normalized.slice(0, sentenceCutoff + 1);
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 export function DashboardPage() {
   const { t, lang } = useApp();
   const { currentUser } = useAuth();
@@ -166,15 +182,15 @@ export function DashboardPage() {
     critical: { label: l("Critique", "Critical", "Ø­Ø±Ø¬"), tone: "text-destructive", bar: "bg-destructive" },
   } as const;
   const localizedStressAxes: Record<string, string> = {
-    thermal: l("Temperature", "Temperature", "Ø­Ø±Ø§Ø±Ø©"),
+    thermal: l("Température", "Temperature", "Ø­Ø±Ø§Ø±Ø©"),
     vibration: l("Vibration", "Vibration", "Ø§Ù‡ØªØ²Ø§Ø²"),
     load: l("Charge", "Load", "Ø­Ù…ÙˆÙ„Ø©"),
-    variability: l("Regime instable", "Unstable pattern", "Ù†Ù…Ø· ØºÙŠØ± Ù…Ø³ØªÙ‚Ø±"),
+    variability: l("Régime instable", "Unstable pattern", "Ù†Ù…Ø· ØºÙŠØ± Ù…Ø³ØªÙ‚Ø±"),
   };
   const localizedConfidenceBadges = {
     high: l("Lecture solide", "Solid reading", "Ù‚Ø±Ø§Ø¡Ø© Ù…ØªÙŠÙ†Ø©"),
     medium: l("Lecture utilisable", "Usable reading", "Ù‚Ø±Ø§Ø¡Ø© Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…"),
-    low: l("A confirmer sur site", "Confirm on site", "ÙŠØ¬Ø¨ ØªØ£ÙƒÙŠØ¯Ù‡ Ø¹Ù„Ù‰ Ø§Ù„Ù…ÙˆÙ‚Ø¹"),
+    low: l("À confirmer sur site", "Confirm on site", "ÙŠØ¬Ø¨ ØªØ£ÙƒÙŠØ¯Ù‡ Ø¹Ù„Ù‰ Ø§Ù„Ù…ÙˆÙ‚Ø¹"),
   } as const;
   const getReadableFeatureLabel = (feature: string | null | undefined) => {
     if (!feature) {
@@ -433,12 +449,12 @@ export function DashboardPage() {
       )
     : isReferenceMode
       ? l(
-          "Ces facteurs continuent d'orienter la projection interne du modèle, même si l'interface garde encore une référence stable.",
+          "Facteurs suivis pendant la référence stable.",
           "These factors still drive the model's internal projection even while the interface keeps a stable reference.",
           "These factors still drive the model's internal projection even while the interface keeps a stable reference.",
         )
       : l(
-          "Ces facteurs serviront à stabiliser la première lecture live dès que l'historique sera suffisant.",
+          "Facteurs utilisés pour préparer le premier RUL live.",
           "These factors will stabilize the first live reading once enough history is available.",
           "These factors will stabilize the first live reading once enough history is available.",
         );
@@ -457,7 +473,7 @@ export function DashboardPage() {
     hasLivePrediction
       ? selectedInsight?.summary ??
           l(
-            "La priorite combine duree restante, santé observée, pression actuelle et contexte d'usage pour aider la decision terrain.",
+            "Priorité issue du RUL, du HI, du stress et du contexte.",
             "Priority combines remaining life, observed health, current pressure, and usage context to support field decisions.",
             "Priority combines remaining life, observed health, current pressure, and usage context to support field decisions.",
           )
@@ -550,7 +566,7 @@ export function DashboardPage() {
           : l("Flux en attente", "Waiting for stream", "Flux en attente");
   const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
   const demoPipelineNote = l(
-    "Lecture issue d'un replay demo calibre. En exploitation reelle, la meme chaine utilisera les vraies mesures vibration, puissance, temperature et humidite.",
+    "Lecture issue du replay démo. Même chaîne prévue avec mesures réelles.",
     "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
     "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
   );
@@ -588,7 +604,7 @@ export function DashboardPage() {
     selectedInsight?.recommendedAction ??
       maintenanceWindow ??
       l(
-        "Confirmer la lecture terrain avant d'engager une action lourde.",
+        "Confirmer sur site avant action lourde.",
         "Confirm the field reading before launching heavy work.",
         "Confirm the field reading before launching heavy work.",
       ),
@@ -606,44 +622,44 @@ export function DashboardPage() {
     ? dominantAxisLabel
       ? `${stressStyle.label} - ${dominantAxisLabel}`
       : stressStyle.label
-    : l("Stress indisponible", "Stress unavailable", "Stress unavailable");
+    : l("Stress instantané indisponible", "Instant stress unavailable", "Instant stress unavailable");
   const hiCardDescription = l(
-    "Etat de sante cumule observe sur l'historique recent.",
+    "État de santé cumulé observé sur l'historique récent.",
     "Observed cumulative health state across recent history.",
     "Observed cumulative health state across recent history.",
   );
   const hiCardSub = `${l("Lecture actuelle", "Current reading", "Current reading")}: ${cfg.label}`;
   const rulCardDescription = hasLivePrediction
     ? l(
-        "Marge restante estimee par le modele a partir de la derive observee.",
+        "Marge restante estimée par le modèle à partir de la dérive observée.",
         "Remaining margin estimated by the model from the observed drift.",
         "Remaining margin estimated by the model from the observed drift.",
       )
     : isReferenceMode
       ? l(
-          "Reference de duree de vie affichee seulement quand le pronostic live n'est pas encore disponible.",
+          "Référence de durée de vie affichée seulement quand le pronostic live n'est pas encore disponible.",
           "Lifetime reference shown only when the live prognosis is not available yet.",
           "Lifetime reference shown only when the live prognosis is not available yet.",
         )
       : l(
-          "Lecture de duree de vie en preparation pendant la phase de calibration.",
+          "Lecture de durée de vie en préparation pendant la phase de calibration.",
           "Lifetime reading still warming up during calibration.",
           "Lifetime reading still warming up during calibration.",
         );
   const stressCardDescription = l(
-    "Pression instantanee du regime d'exploitation.",
-    "Instant pressure of the current operating regime.",
-    "Instant pressure of the current operating regime.",
+    "Pression instantanée du régime d'exploitation, pas l'usure cumulée.",
+    "Instant pressure of the current operating regime, not cumulative wear.",
+    "Instant pressure of the current operating regime, not cumulative wear.",
   );
   const zoneCardDescription = l(
-    "Premiere cible de controle issue des signaux dominants et des regles expertes.",
-    "First inspection target derived from dominant signals and expert rules.",
-    "First inspection target derived from dominant signals and expert rules.",
+    "Première cible probable de contrôle issue des signaux dominants et des règles expertes.",
+    "First probable inspection target derived from dominant signals and expert rules.",
+    "First probable inspection target derived from dominant signals and expert rules.",
   );
   const dashboardTrustNote = l(
-    "Lecture a confirmer sur le terrain avant toute intervention lourde ou arret machine.",
-    "Reading to confirm in the field before any major intervention or machine stop.",
-    "Reading to confirm in the field before any major intervention or machine stop.",
+    "Lecture et hypothèses à confirmer sur site avant action lourde ou arrêt machine.",
+    "Reading and hypotheses to confirm in the field before any major intervention or machine stop.",
+    "Reading and hypotheses to confirm in the field before any major intervention or machine stop.",
   );
   const selectedScenario = getSurfaceableMachineDemoScenario(selected);
   const localizedScenarioUsageCase = describeAudienceScenarioUsageCase(selectedScenario, l);
@@ -652,27 +668,27 @@ export function DashboardPage() {
     : repairText(
         selectedDecision?.technicalStory ??
           l(
-            "Cette vue decrit le regime d'usage et les contraintes qui alimentent la lecture du dashboard.",
+            "Contexte d'usage de la machine.",
             "This panel describes the operating regime and constraints feeding the dashboard reading.",
             "This panel describes the operating regime and constraints feeding the dashboard reading.",
           ),
       );
   const scenarioProfileLabel =
     {
-      A_linear: l("Lineaire progressive", "Progressive linear", "Progressive linear"),
+      A_linear: l("Linéaire progressive", "Progressive linear", "Progressive linear"),
       B_quadratic: l("Quadratique", "Quadratic", "Quadratic"),
       C_stepwise: l("Par paliers", "Stepwise", "Stepwise"),
-      D_noisy_linear: l("Lineaire bruitee", "Noisy linear", "Noisy linear"),
+      D_noisy_linear: l("Linéaire bruitée", "Noisy linear", "Noisy linear"),
     }[selectedScenario?.profile ?? ""] ?? repairText(selectedScenario?.profile ?? l("Indisponible", "Unavailable", "Unavailable"));
   const scenarioLoadPatternLabel =
     {
       light_to_medium: l(
-        "Charges legeres a moyennes",
+        "Charges légères à moyennes",
         "Light-to-medium loads",
         "Light-to-medium loads",
       ),
       mixed_half_load: l(
-        "Demi-charge recurrente",
+        "Demi-charge récurrente",
         "Recurring half-load cycles",
         "Recurring half-load cycles",
       ),
@@ -684,7 +700,7 @@ export function DashboardPage() {
     }[selectedScenario?.load_pattern ?? ""] ??
     (selectedScenario?.load_band_kg
       ? `${selectedScenario.load_band_kg[0]}-${selectedScenario.load_band_kg[1]} kg`
-      : l("Charge non detaillee", "Load not detailed", "Load not detailed"));
+      : l("Charge non détaillée", "Load not detailed", "Load not detailed"));
   const typicalLoadKg =
     typeof selectedScenario?.base_load_kg === "number"
       ? selectedScenario.base_load_kg
@@ -695,32 +711,32 @@ export function DashboardPage() {
     if (typeof value !== "number" || !Number.isFinite(value)) {
       return l("Indisponible", "Unavailable", "Unavailable");
     }
-    if (value < 0.2) return l("Tres faible", "Very low", "Very low");
+    if (value < 0.2) return l("Très faible", "Very low", "Very low");
     if (value < 0.4) return l("Faible", "Low", "Low");
-    if (value < 0.65) return l("Moderee", "Moderate", "Moderate");
-    if (value < 0.8) return l("Elevee", "High", "High");
-    return l("Tres elevee", "Very high", "Very high");
+    if (value < 0.65) return l("Modérée", "Moderate", "Moderate");
+    if (value < 0.8) return l("Élevée", "High", "High");
+    return l("Très élevée", "Very high", "Very high");
   };
   const describeCadence = (cycles?: number | null) => {
     if (typeof cycles !== "number" || !Number.isFinite(cycles)) {
-      return l("Cadence non detaillee", "Cadence not detailed", "Cadence not detailed");
+      return l("Cadence non détaillée", "Cadence not detailed", "Cadence not detailed");
     }
-    if (cycles >= 550) return l("Trafic soutenu sur la journee", "Sustained traffic during the day", "Sustained traffic during the day");
-    if (cycles >= 420) return l("Cadence reguliere avec charge moderee", "Regular cadence with moderate load", "Regular cadence with moderate load");
-    return l("Cadence plus faible mais cycles plus exigeants", "Lower cadence but more demanding cycles", "Lower cadence but more demanding cycles");
+    if (cycles >= 550) return l("Trafic soutenu", "Sustained traffic", "Sustained traffic");
+    if (cycles >= 420) return l("Cadence régulière", "Regular cadence", "Regular cadence");
+    return l("Cadence faible, cycles exigeants", "Lower cadence, demanding cycles", "Lower cadence, demanding cycles");
   };
   const ambientSummary = (() => {
     const thermal = selectedScenario?.thermal_stress;
     const humidity = selectedScenario?.humidity_stress;
     if (typeof thermal !== "number" && typeof humidity !== "number") {
-      return l("Ambiance non detaillee", "Environment not detailed", "Environment not detailed");
+      return l("Ambiance non détaillée", "Environment not detailed", "Environment not detailed");
     }
     const thermalPart =
       typeof thermal === "number"
         ? thermal < 0.3
-          ? l("plutot fraiche", "rather cool", "rather cool")
+          ? l("plutôt fraîche", "rather cool", "rather cool")
           : thermal < 0.6
-            ? l("moderee", "moderate", "moderate")
+            ? l("modérée", "moderate", "moderate")
             : l("plus chaude", "warmer", "warmer")
         : l("neutre", "neutral", "neutral");
     const humidityPart =
@@ -728,14 +744,14 @@ export function DashboardPage() {
         ? humidity < 0.3
           ? l("peu humide", "low humidity", "low humidity")
           : humidity < 0.6
-            ? l("humidité moderee", "moderate humidity", "moderate humidity")
-            : l("humidité elevee", "high humidity", "high humidity")
-        : l("humidite neutre", "neutral humidity", "neutral humidity");
+            ? l("humidité modérée", "moderate humidity", "moderate humidity")
+            : l("humidité élevée", "high humidity", "high humidity")
+        : l("humidité neutre", "neutral humidity", "neutral humidity");
     return `${thermalPart}, ${humidityPart}`;
   })();
   const contextOverviewCards = [
     {
-      label: l("Cadence d'usage", "Usage cadence", "Usage cadence"),
+      label: l("Cadence scénario", "Scenario cadence", "Scenario cadence"),
       value:
         selectedScenario?.cycles_per_day != null
           ? `${Math.round(selectedScenario.cycles_per_day).toLocaleString(numberLocale)} ${l("cycles/jour", "cycles/day", "cycles/day")}`
@@ -747,7 +763,7 @@ export function DashboardPage() {
       value: scenarioLoadPatternLabel,
       detail: selectedScenario?.load_band_kg
         ? `${selectedScenario.load_band_kg[0]}-${selectedScenario.load_band_kg[1]} kg`
-        : l("Plage non detaillee", "Range not detailed", "Range not detailed"),
+        : l("Plage non détaillée", "Range not detailed", "Range not detailed"),
     },
     {
       label: l("Charge typique", "Typical payload", "Typical payload"),
@@ -756,7 +772,7 @@ export function DashboardPage() {
           ? `${Math.round(typicalLoadKg)} kg`
           : l("Indisponible", "Unavailable", "Unavailable"),
       detail: l(
-        "Point d'appui moyen du scenario",
+        "Point d'appui moyen du scénario",
         "Average anchor point of the scenario",
         "Average anchor point of the scenario",
       ),
@@ -765,7 +781,7 @@ export function DashboardPage() {
       label: l("Profil d'usure", "Wear profile", "Wear profile"),
       value: scenarioProfileLabel,
       detail: l(
-        "Forme de degradation retenue par le simulateur",
+        "Forme de dégradation retenue par le simulateur",
         "Degradation shape used by the simulator",
         "Degradation shape used by the simulator",
       ),
@@ -774,7 +790,7 @@ export function DashboardPage() {
       label: l("Ambiance", "Environment", "Environment"),
       value: ambientSummary,
       detail: l(
-        "Contrainte thermique et humidite du scenario",
+        "Contrainte thermique et humidité du scénario",
         "Thermal and humidity constraints of the scenario",
         "Thermal and humidity constraints of the scenario",
       ),
@@ -786,7 +802,7 @@ export function DashboardPage() {
           ? `${selectedScenario.power_avg_30j_kw.toFixed(2)} kW`
           : l("Indisponible", "Unavailable", "Unavailable"),
       detail: l(
-        "Repere energetique du profil simule",
+        "Repère énergétique du profil simulé",
         "Energy cue of the simulated profile",
         "Energy cue of the simulated profile",
       ),
@@ -795,33 +811,33 @@ export function DashboardPage() {
   const contextFactorRows = getDemoScenarioFactors(selectedScenario).map((factor) => {
     const meta = {
       usage_intensity: {
-        label: l("Intensite d'usage", "Usage intensity", "Usage intensity"),
-        hint: l("Frequence et repetitivite des trajets", "Trip frequency and repetition", "Trip frequency and repetition"),
+        label: l("Intensité d'usage", "Usage intensity", "Usage intensity"),
+        hint: l("Fréquence des trajets", "Trip frequency", "Trip frequency"),
         bar: "bg-primary",
       },
       wear_level: {
-        label: l("Usure cumulee", "Wear level", "Wear level"),
-        hint: l("Vieillissement structurel de la machine", "Structural aging of the machine", "Structural aging of the machine"),
+        label: l("Usure cumulée", "Wear level", "Wear level"),
+        hint: l("Usure de base", "Baseline wear", "Baseline wear"),
         bar: "bg-warning",
       },
       thermal_stress: {
         label: l("Stress thermique", "Thermal stress", "Thermal stress"),
-        hint: l("Effort thermique moteur et ambiance", "Motor and ambient thermal strain", "Motor and ambient thermal strain"),
+        hint: l("Chaleur moteur / ambiance", "Motor / ambient heat", "Motor / ambient heat"),
         bar: "bg-destructive",
       },
       humidity_stress: {
-        label: l("Stress humidite", "Humidity stress", "Humidity stress"),
-        hint: l("Sensibilite a l'ambiance humide", "Exposure to humid environment", "Exposure to humid environment"),
+        label: l("Stress humidité", "Humidity stress", "Humidity stress"),
+        hint: l("Humidité ambiante", "Ambient humidity", "Ambient humidity"),
         bar: "bg-sky-500",
       },
       load_variability: {
-        label: l("Variabilite de charge", "Load variability", "Load variability"),
-        hint: l("Ecart entre cycles legers et cycles charges", "Spread between light and loaded cycles", "Spread between light and loaded cycles"),
+        label: l("Variabilité de charge", "Load variability", "Load variability"),
+        hint: l("Écart entre cycles", "Spread between cycles", "Spread between cycles"),
         bar: "bg-amber-500",
       },
       overload_bias: {
         label: l("Exposition surcharge", "Overload exposure", "Overload exposure"),
-        hint: l("Frequence des charges proches de la limite", "Frequency of near-limit payloads", "Frequency of near-limit payloads"),
+        hint: l("Charges proches limite", "Near-limit loads", "Near-limit loads"),
         bar: "bg-rose-500",
       },
     }[factor.key];
@@ -836,23 +852,23 @@ export function DashboardPage() {
     typeof selectedScenario?.wear_level === "number"
       ? selectedScenario.wear_level < 0.25
         ? l(
-            "Usure faible, peu de surcharge et profil progressif : le HI reste naturellement plus confortable.",
+            "Usure faible. HI naturellement plus stable.",
             "Low wear, limited overload, and a progressive profile keep the HI naturally comfortable.",
             "Low wear, limited overload, and a progressive profile keep the HI naturally comfortable.",
           )
         : selectedScenario.wear_level < 0.6
           ? l(
-              "Usure deja installee et charges plus soutenues : le HI descend plus vite et demande davantage de suivi.",
+              "Usure installée. HI à surveiller.",
               "Installed wear and heavier loads make the HI decline faster and require closer follow-up.",
               "Installed wear and heavier loads make the HI decline faster and require closer follow-up.",
             )
           : l(
-              "Usure elevee et contraintes cumulees : l'historique de sante est tire vers le bas.",
+              "Usure élevée. HI tiré vers le bas.",
               "High wear and accumulated constraints drag the health history down.",
               "High wear and accumulated constraints drag the health history down.",
             )
       : l(
-          "Le HI reflète surtout l'usure cumulee et l'historique d'exploitation.",
+          "HI lié à l'usure et à l'historique.",
           "The HI mostly reflects accumulated wear and operating history.",
           "The HI mostly reflects accumulated wear and operating history.",
         );
@@ -862,31 +878,31 @@ export function DashboardPage() {
     typeof selectedScenario?.usage_intensity === "number"
       ? selectedScenario && selectedScenario.load_variability != null && selectedScenario.load_variability >= 0.6
         ? l(
-            "La variabilite de charge du scenario tire davantage la lecture de stress que la cadence seule.",
+            "Variabilité de charge dominante sur le stress.",
             "Load variability drives the stress reading more than cadence alone.",
             "Load variability drives the stress reading more than cadence alone.",
           )
         : selectedScenario && selectedScenario.thermal_stress != null && selectedScenario.thermal_stress >= 0.6
           ? l(
-              "Les contraintes thermiques du scenario poussent la lecture de stress a la hausse.",
+              "Contrainte thermique dominante sur le stress.",
               "Thermal constraints in the scenario push the stress reading upward.",
               "Thermal constraints in the scenario push the stress reading upward.",
             )
           : l(
-              "La cadence et les charges du scenario restent maitrisees, ce qui contient la lecture de stress.",
+              "Cadence et charge encore maîtrisées.",
               "Cadence and loads stay controlled in the scenario, which contains the stress reading.",
               "Cadence and loads stay controlled in the scenario, which contains the stress reading.",
             )
       : l(
-          "Le stress depend d'abord du regime instantane, de la variabilite et de l'ambiance.",
-          "Stress mainly depends on the instantaneous regime, variability, and environment.",
-          "Stress mainly depends on the instantaneous regime, variability, and environment.",
+          "Stress instantané lié au régime, à la variabilité et à l'ambiance.",
+          "Instant stress mainly depends on the operating regime, variability, and environment.",
+          "Instant stress mainly depends on the operating regime, variability, and environment.",
         );
   const rulContextExplanation = hasLivePrediction
     ? l(
         maintenanceWindow
-          ? `Le simulateur publie actuellement un RUL exploitable de ${selectedRulValue} avec une fenetre ${maintenanceWindow.toLowerCase()}.`
-          : `Le simulateur publie actuellement un RUL exploitable de ${selectedRulValue}.`,
+          ? `RUL live : ${selectedRulValue} · ${maintenanceWindow}.`
+          : `RUL live : ${selectedRulValue}.`,
         maintenanceWindow
           ? `The simulator currently publishes a usable RUL of ${selectedRulValue} with a ${maintenanceWindow.toLowerCase()} window.`
           : `The simulator currently publishes a usable RUL of ${selectedRulValue}.`,
@@ -895,24 +911,24 @@ export function DashboardPage() {
           : `The simulator currently publishes a usable RUL of ${selectedRulValue}.`,
       )
     : isReferenceMode
-      ? selectedScenario?.reference_rul_days
+      ? typeof selected?.rulReferenceDays === "number"
         ? l(
-            `Le simulateur garde une reference de ${Math.round(selectedScenario.reference_rul_days)} jours tant que la derive observable n'autorise pas encore un RUL live.`,
-            `The simulator keeps a ${Math.round(selectedScenario.reference_rul_days)}-day reference while observable drift is still insufficient for a live RUL.`,
-            `The simulator keeps a ${Math.round(selectedScenario.reference_rul_days)}-day reference while observable drift is still insufficient for a live RUL.`,
+            `Repère ML actif : ~${Math.round(selected.rulReferenceDays)} jours.`,
+            `The pipeline keeps a ~${Math.round(selected.rulReferenceDays)}-day ML reference while waiting for a reliable live RUL.`,
+            `The pipeline keeps a ~${Math.round(selected.rulReferenceDays)}-day ML reference while waiting for a reliable live RUL.`,
           )
         : l(
-            "Le systeme conserve une reference simple tant qu'aucune derive robuste n'impose un RUL live.",
+            "Référence RUL stable active.",
             "The system keeps a simple reference while no robust drift justifies a live RUL.",
             "The system keeps a simple reference while no robust drift justifies a live RUL.",
           )
       : l(
-          "Le pipeline consolide encore assez d'historique simule avant de publier une premiere lecture RUL fiable.",
+          "RUL live en préparation.",
           "The pipeline is still consolidating enough simulated history before publishing a first reliable RUL reading.",
           "The pipeline is still consolidating enough simulated history before publishing a first reliable RUL reading.",
         );
   const zoneContextExplanation = l(
-    "La zone a verifier du dashboard ne vient pas du contexte seul : elle combine ce contexte d'usage avec les signaux techniques recents et les regles expertes.",
+    "Zone choisie par signaux récents et règles expertes.",
     "The inspection target on the dashboard does not come from context alone: it combines operating context with recent technical signals and expert rules.",
     "The inspection target on the dashboard does not come from context alone: it combines operating context with recent technical signals and expert rules.",
   );
@@ -922,7 +938,7 @@ export function DashboardPage() {
       text: hiContextExplanation,
     },
     {
-      label: "Stress",
+      label: l("Stress instantané", "Instant stress", "Instant stress"),
       text: stressContextExplanation,
     },
     {
@@ -930,16 +946,11 @@ export function DashboardPage() {
       text: rulContextExplanation,
     },
     {
-      label: l("Zone a verifier", "Inspection target", "Inspection target"),
+      label: l("Zone probable à vérifier", "Probable inspection target", "Probable inspection target"),
       text: zoneContextExplanation,
     },
   ];
   const usageRegimeLabel = describeAudienceUsageRegime(selectedScenario, l);
-  const sameFleetPrefix = l(
-    "Meme age de flotte, mais",
-    "Same fleet age, but",
-    "Same fleet age, but",
-  );
   const dashboardActionLead = shortenAudienceAction(
     quickActionLabel,
     componentFocus.familyLabel,
@@ -953,27 +964,57 @@ export function DashboardPage() {
       : usageRegimeLabel;
   const dashboardActionReason =
     hasLivePrediction
-      ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} oriente d'abord le controle vers ${componentFocus.familyLabel.toLowerCase()}, avec un RUL courant a ${selectedRulValue}${maintenanceWindow ? ` et une fenetre ${maintenanceWindow.toLowerCase()}` : ""}.`
+      ? l(
+          `Hypothèse : ${dashboardSignalLabel}. Cible probable : ${componentFocus.familyLabel}. RUL : ${selectedRulValue}${maintenanceWindow ? ` · ${maintenanceWindow}` : ""}.`,
+          `Working hypothesis: ${dashboardSignalLabel}. Probable target: ${componentFocus.familyLabel}. RUL: ${selectedRulValue}${maintenanceWindow ? ` · ${maintenanceWindow}` : ""}.`,
+          `Working hypothesis: ${dashboardSignalLabel}. Probable target: ${componentFocus.familyLabel}. RUL: ${selectedRulValue}${maintenanceWindow ? ` · ${maintenanceWindow}` : ""}.`,
+        )
       : isReferenceMode
-        ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} prepare le prochain controle pendant que le tableau conserve une reference RUL stable.`
-        : `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: ${dashboardSignalLabel.toLowerCase()} est deja surveille, mais le systeme consolide encore l'historique avant de publier un RUL live.`;
+        ? l(
+            `Hypothèse : ${dashboardSignalLabel}. Référence stable active. Contrôle à préparer.`,
+            `Working hypothesis: ${dashboardSignalLabel}. Stable reference active. Prepare the inspection.`,
+            `Working hypothesis: ${dashboardSignalLabel}. Stable reference active. Prepare the inspection.`,
+          )
+        : l(
+            `Hypothèse : ${dashboardSignalLabel}. Lecture en préparation.`,
+            `Working hypothesis: ${dashboardSignalLabel}. Reading in preparation.`,
+            `Working hypothesis: ${dashboardSignalLabel}. Reading in preparation.`,
+          );
   const machineContextIntro = l(
     hasLivePrediction
-      ? "Cette vue relie le contexte simule, les signaux temps reel et le RUL live publie pour cette machine."
+      ? "Contexte scénario, signaux live et RUL de cette machine."
       : isReferenceMode
-        ? "Cette vue relie le contexte simule aux signaux temps reel pendant que le dashboard conserve une reference RUL stable."
-        : "Cette vue relie le contexte simule aux signaux temps reel pendant que le pipeline prepare encore la premiere lecture RUL fiable.",
+        ? "Contexte scénario et signaux live. Référence RUL active."
+        : "Contexte scénario et signaux live. RUL en préparation.",
     hasLivePrediction
-      ? "This panel links the simulated context, real-time signals, and the live RUL published for this machine."
+      ? "This panel links the demo scenario, real-time signals, and the live RUL published for this machine."
       : isReferenceMode
-        ? "This panel links the simulated context to real-time signals while the dashboard keeps a stable RUL reference."
-        : "This panel links the simulated context to real-time signals while the pipeline still prepares the first reliable RUL reading.",
+        ? "This panel links the demo scenario to real-time signals while the dashboard keeps a stable RUL reference."
+        : "This panel links the demo scenario to real-time signals while the pipeline still prepares the first reliable RUL reading.",
     hasLivePrediction
-      ? "This panel links the simulated context, real-time signals, and the live RUL published for this machine."
+      ? "This panel links the demo scenario, real-time signals, and the live RUL published for this machine."
       : isReferenceMode
-        ? "This panel links the simulated context to real-time signals while the dashboard keeps a stable RUL reference."
-        : "This panel links the simulated context to real-time signals while the pipeline still prepares the first reliable RUL reading.",
+        ? "This panel links the demo scenario to real-time signals while the dashboard keeps a stable RUL reference."
+      : "This panel links the demo scenario to real-time signals while the pipeline still prepares the first reliable RUL reading.",
   );
+  const compactScenarioUsageCase =
+    compactText(localizedScenarioUsageCase, 96) ?? localizedScenarioUsageCase;
+  const compactScenarioExplanation =
+    compactText(localizedScenarioExplanation, 110) ?? localizedScenarioExplanation;
+  const compactMachineContextIntro =
+    compactText(machineContextIntro, 96) ?? machineContextIntro;
+  const compactContextOverviewCards = contextOverviewCards.map((item) => ({
+    ...item,
+    detail: compactText(item.detail, 72) ?? item.detail,
+  }));
+  const compactContextFactorRows = contextFactorRows.map((factor) => ({
+    ...factor,
+    hint: compactText(factor.hint, 82) ?? factor.hint,
+  }));
+  const compactDashboardLinkCards = dashboardLinkCards.map((card) => ({
+    ...card,
+    text: compactText(card.text, 92) ?? card.text,
+  }));
   const diagnosticButtonClass =
     "group rounded-full border border-primary/20 bg-primary text-primary-foreground shadow-[0_18px_42px_-24px_rgba(15,118,110,0.78)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-primary/92 hover:shadow-[0_24px_52px_-24px_rgba(15,118,110,0.88)]";
   const detailsButtonWideClass =
@@ -1026,7 +1067,7 @@ export function DashboardPage() {
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               {l(
-                "Lancez ici le replay demo calibre. Le simulateur alimente ensuite le tableau de bord, les diagnostics et les alertes avec la meme logique que celle prevue sur mesures reelles.",
+                "Lancez le replay démo. Même logique prévue sur mesures réelles.",
                 "Launch the calibrated demo replay here. The simulator then feeds the dashboard, diagnostics, and alerts with the same logic planned for real measurements.",
                 "Launch the calibrated demo replay here. The simulator then feeds the dashboard, diagnostics, and alerts with the same logic planned for real measurements.",
               )}
@@ -1175,9 +1216,9 @@ export function DashboardPage() {
               >
                 <Info className="w-4 h-4" />
                 {l(
-                  "Contexte d'exploitation",
-                  "Operating context",
-                  "Operating context",
+                  "Contexte scénario",
+                  "Scenario context",
+                  "Scenario context",
                 )}
               </Button>
               <span className={`status-pill ${STATUS_CONFIG[selected.status].pillClass}`}>
@@ -1201,7 +1242,7 @@ export function DashboardPage() {
         {isDemoReplay ? (
           <div className="mb-5 rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
             <span className="font-semibold text-foreground">
-              {l("Lecture demo", "Demo reading", "Demo reading")}
+              {l("Lecture démo", "Demo reading", "Demo reading")}
             </span>
             : {demoPipelineNote}
           </div>
@@ -1266,7 +1307,7 @@ export function DashboardPage() {
           )}
           <KpiCard
             icon={<Gauge className="w-5 h-5" />}
-            label={l("Stress", "Stress", "Stress")}
+            label={l("Stress instantané", "Instant stress", "Instant stress")}
             description={stressCardDescription}
             value={
               <>
@@ -1294,7 +1335,7 @@ export function DashboardPage() {
           </KpiCard>
           <KpiCard
             icon={<ShieldAlert className="w-5 h-5" />}
-            label={l("Zone a verifier", "Inspection target", "Inspection target")}
+            label={l("Zone probable à vérifier", "Probable inspection target", "Probable inspection target")}
             description={zoneCardDescription}
             value={
               <span className="text-[1.35rem] leading-tight tracking-tight">
@@ -1312,7 +1353,7 @@ export function DashboardPage() {
 
         <div className="mb-5 rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
           <span className="font-semibold text-foreground">
-            {l("Aide a la decision", "Decision support", "Decision support")}
+            {l("Aide à la décision", "Decision support", "Decision support")}
           </span>
           : {dashboardTrustNote}
         </div>
@@ -1403,7 +1444,7 @@ export function DashboardPage() {
             <div className="mb-4 flex items-center gap-2">
               <Gauge className="w-4 h-4 text-primary" />
               <div className="section-title flex-1">
-                {l("Stress machine", "Machine stress", "Ø¶ØºØ· Ø§Ù„Ø§Ù„Ø©")}
+                {l("Stress instantané", "Instant stress", "Ø¶ØºØ· Ø§Ù„Ø§Ù„Ø©")}
               </div>
             </div>
 
@@ -1458,17 +1499,17 @@ export function DashboardPage() {
 
                 <div className="rounded-xl border border-border bg-surface-3 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
                   {l(
-                    "Stress = pression actuelle. HI = santé cumulée. RUL = marge restante.",
-                    "Stress = current pressure. HI = cumulative health. RUL = remaining margin.",
-                    "Stress = current pressure. HI = cumulative health. RUL = remaining margin.",
+                    "Stress instantané = pression actuelle, pas l'usure cumulée. HI = santé cumulée. RUL = marge restante.",
+                    "Instant stress = current pressure, not cumulative wear. HI = cumulative health. RUL = remaining margin.",
+                    "Instant stress = current pressure, not cumulative wear. HI = cumulative health. RUL = remaining margin.",
                   )}
                 </div>
               </div>
             ) : (
               <div className="rounded-xl border border-border bg-surface-3 px-4 py-6 text-sm text-muted-foreground">
                 {l(
-                  "Stress index indisponible pour cette machine.",
-                  "Stress index unavailable for this machine.",
+                  "Stress instantané indisponible pour cette machine.",
+                  "Instant stress is unavailable for this machine.",
                   "Ù…Ø¤Ø´Ø± Ø§Ù„Ø¶ØºØ· ØºÙŠØ± Ù…ØªØ§Ø­ Ù„Ù‡Ø°Ù‡ Ø§Ù„Ø§Ù„Ø©.",
                 )}
               </div>
@@ -1539,7 +1580,7 @@ export function DashboardPage() {
                   <div className="rounded-xl bg-surface-3 p-4">
                     <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <ShieldAlert className="h-3.5 w-3.5" />
-                      {l("Priorite terrain", "Field priority", "Field priority")}
+                      {l("Priorité terrain", "Field priority", "Field priority")}
                     </div>
                     <div className="text-sm font-semibold text-foreground">
                       {dashboardActionLead}
@@ -1548,17 +1589,17 @@ export function DashboardPage() {
                       {dashboardActionReason}
                     </div>
                     <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                      {l("Contexte", "Context", "Context")}:{" "}
+                      {l("Contexte scénario", "Scenario context", "Scenario context")}:{" "}
                       <span className="font-semibold text-foreground">
                         {dashboardContextLabel}
                       </span>
                     </div>
                     <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {l("Signal dominant", "Main signal", "Main signal")}:{" "}
+                      {l("Hypothèse dominante", "Leading hypothesis", "Leading hypothesis")}:{" "}
                       <span className="font-semibold text-foreground">{dashboardSignalLabel}</span>
                     </div>
                     <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {l("Etat machine", "Machine state", "Machine state")}:{" "}
+                      {l("État machine", "Machine state", "Machine state")}:{" "}
                       <span className="font-semibold text-foreground">{dashboardReadingLabel}</span>
                     </div>
                   </div>
@@ -1572,7 +1613,7 @@ export function DashboardPage() {
                     </div>
                   </div>
                   <div className="rounded-xl border border-border bg-surface-3 px-4 py-3">
-                    <div className="industrial-label">{l("Fiabilite lecture", "Reading reliability", "Reading reliability")}</div>
+                    <div className="industrial-label">{l("Fiabilité lecture", "Reading reliability", "Reading reliability")}</div>
                     <div className="mt-1 text-lg font-bold text-foreground">
                       {confidenceLabel ?? l("Lecture en cours", "Reading in progress", "Reading in progress")}
                     </div>
@@ -1588,14 +1629,14 @@ export function DashboardPage() {
                   </div>
                   <div className="text-sm font-semibold text-foreground">
                     {l(
-                      "Le pronostic live n'est pas disponible pour cette lecture, donc le tableau conserve une référence simple et stable.",
+                      "Pronostic live indisponible. Référence stable affichée.",
                       "The live prognosis is not available for this reading, so the dashboard keeps a simple and stable reference.",
                       "The live prognosis is not available for this reading, so the dashboard keeps a simple and stable reference.",
                     )}
                   </div>
                   <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
                     {l(
-                      "Le KPI RUL du haut affiche une référence de durée de vie pour garder un repère lisible sans surcharger la lecture.",
+                      "Le RUL live s'affichera dès que la lecture sera fiable.",
                       "The top RUL KPI shows a lifetime reference to keep a readable cue without overloading the view.",
                       "The top RUL KPI shows a lifetime reference to keep a readable cue without overloading the view.",
                     )}
@@ -1603,7 +1644,7 @@ export function DashboardPage() {
                 </div>
                 <div className="rounded-xl border border-border bg-surface-3 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
                   {l(
-                    "Dès qu'un pronostic live exploitable sera disponible, ce panneau affichera un RUL chiffré avec son intervalle de confiance.",
+                    "Un RUL chiffré apparaîtra dès que la lecture sera fiable.",
                     "As soon as a usable live prognosis is available, this panel will show a numeric RUL with its confidence interval.",
                     "As soon as a usable live prognosis is available, this panel will show a numeric RUL with its confidence interval.",
                   )}
@@ -1617,22 +1658,14 @@ export function DashboardPage() {
                     {l("RUL en préparation", "RUL in preparation", "RUL in preparation")}
                   </div>
                   <div className="text-lg font-bold text-foreground">
-                    {rulDisplay.source === "demo_reference"
-                      ? l("Référence démo active", "Demo reference active", "مرجع العرض نشط")
-                      : l("Initialisation RUL", "RUL warm-up", "تهيئة العمر المتبقي")}
+                    {l("Initialisation RUL", "RUL warm-up", "تهيئة العمر المتبقي")}
                   </div>
                   <div className="mt-2 text-sm text-secondary-foreground">
-                    {rulDisplay.source === "demo_reference"
-                      ? l(
-                          "Référence démo affichée en attendant le RUL live.",
-                          "Demo reference shown while waiting for the live RUL.",
-                          "Demo reference shown while waiting for the live RUL.",
-                        )
-                      : l(
-                          "Le pipeline attend encore assez d'historique HI.",
-                          "The pipeline is still waiting for enough HI history.",
-                          "The pipeline is still waiting for enough HI history.",
-                        )}
+                    {l(
+                      "Le pipeline attend encore assez d'historique HI.",
+                      "The pipeline is still waiting for enough HI history.",
+                      "The pipeline is still waiting for enough HI history.",
+                    )}
                   </div>
                 </div>
                 <div className="rounded-xl bg-surface-3 p-4">
@@ -1641,22 +1674,18 @@ export function DashboardPage() {
                     {l("État actuel", "Current state", "Current state")}
                   </div>
                   <div className="text-sm font-semibold text-foreground">
-                    {rulDisplay.source === "demo_reference"
-                      ? selectedRulValue
-                      : l(
-                          "Stabilisation des données",
-                          "Data stabilization",
-                          "Data stabilization",
-                        )}
+                    {l(
+                      "Stabilisation des données",
+                      "Data stabilization",
+                      "Data stabilization",
+                    )}
                   </div>
                   <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    {rulDisplay.source === "demo_reference"
-                      ? rulSub
-                      : l(
-                          "Le HI, l'usage et la confiance sont encore observés.",
-                          "HI, usage and confidence are still being observed.",
-                          "HI, usage and confidence are still being observed.",
-                        )}
+                    {l(
+                      "HI et usage encore en observation.",
+                      "HI, usage and confidence are still being observed.",
+                      "HI, usage and confidence are still being observed.",
+                    )}
                   </div>
                 </div>
               </div>
@@ -1682,25 +1711,25 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl bg-surface-3 p-4">
-                  <div className="industrial-label">{l("Ce qui pese le plus", "Main pressure point", "Main pressure point")}</div>
+                  <div className="industrial-label">{l("Facteur dominant du pronostic", "Leading prognosis factor", "Leading prognosis factor")}</div>
                   <div className="mt-1 text-lg font-bold text-foreground">
                     {topDriverLabel ?? l("Non disponible", "Unavailable", "ØºÙŠØ± Ù…ØªØ§Ø­")}
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
                     {hasLivePrediction
                       ? l(
-                          "Les signaux qui raccourcissent ou rallongent le plus la marge restante.",
+                          "Signaux qui pèsent le plus sur le RUL.",
                           "The signals that shorten or extend the remaining margin the most.",
                           "The signals that shorten or extend the remaining margin the most.",
                         )
                       : isReferenceMode
                         ? l(
-                            "Les signaux que le modele surveille pendant que le dashboard garde une reference stable.",
+                            "Signaux suivis pendant la référence stable.",
                             "The signals the model keeps watching while the dashboard stays on a stable reference.",
                             "The signals the model keeps watching while the dashboard stays on a stable reference.",
                           )
                         : l(
-                            "Les signaux qui servent a preparer la premiere lecture RUL fiable.",
+                            "Signaux utilisés pour préparer le premier RUL live.",
                             "The signals helping prepare the first reliable RUL reading.",
                             "The signals helping prepare the first reliable RUL reading.",
                           )}
@@ -1775,9 +1804,9 @@ export function DashboardPage() {
           <SheetHeader className="border-b border-border px-6 py-5">
             <SheetTitle>
               {l(
-                "Contexte d'exploitation",
-                "Operating context",
-                "Operating context",
+                "Contexte scénario",
+                "Scenario context",
+                "Scenario context",
               )}
             </SheetTitle>
             <SheetDescription>
@@ -1802,21 +1831,21 @@ export function DashboardPage() {
                   </span>
                 </div>
                 <div className="mt-4 text-sm font-semibold leading-relaxed text-foreground">
-                  {localizedScenarioUsageCase}
+                  {compactScenarioUsageCase}
                 </div>
                 <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
-                  {localizedScenarioExplanation}
+                  {compactScenarioExplanation}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
                   <span>
                     {l("Site", "Site", "Site")}: {repairText(selectedScenario?.site ?? selected.city)}
                   </span>
                   <span>
-                    {l("Derniere lecture", "Latest reading", "Latest reading")}: {freshnessLabel}
+                    {l("Dernière lecture", "Latest reading", "Latest reading")}: {freshnessLabel}
                   </span>
                 </div>
                 <div className="mt-4 rounded-xl border border-primary/10 bg-primary/[0.05] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
-                  {machineContextIntro}
+                  {compactMachineContextIntro}
                 </div>
               </div>
 
@@ -1830,13 +1859,13 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                   {l(
-                    "Charges, cadence, profil de degradation et ambiance: voici le contexte qui alimente la lecture de cette machine.",
-                    "Loads, cadence, degradation profile, and environment: this is the context feeding the machine reading.",
-                    "Loads, cadence, degradation profile, and environment: this is the context feeding the machine reading.",
+                    "Charges, cadence, profil d'usure et ambiance qui cadrent la lecture.",
+                    "Loads, cadence, wear profile, and environment framing the reading.",
+                    "Loads, cadence, wear profile, and environment framing the reading.",
                   )}
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {contextOverviewCards.map((item) => (
+                  {compactContextOverviewCards.map((item) => (
                     <div
                       key={`${item.label}-${item.value}`}
                       className="rounded-xl border border-border bg-surface-3 px-4 py-3"
@@ -1865,14 +1894,14 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                   {l(
-                    "Ces niveaux viennent directement du scenario simule. Ils expliquent pourquoi la machine evolue comme elle le fait avant meme de regarder le detail des signaux.",
-                    "These levels come directly from the simulated scenario. They explain why the machine evolves this way even before looking at detailed signals.",
-                    "These levels come directly from the simulated scenario. They explain why the machine evolves this way even before looking at detailed signals.",
+                    "Niveaux issus du scénario simulé pour expliquer la dérive générale.",
+                    "Levels taken from the simulated scenario to explain the overall drift.",
+                    "Levels taken from the simulated scenario to explain the overall drift.",
                   )}
                 </div>
-                {contextFactorRows.length > 0 ? (
+                {compactContextFactorRows.length > 0 ? (
                   <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {contextFactorRows.map((factor) => (
+                    {compactContextFactorRows.map((factor) => (
                       <div
                         key={factor.label}
                         className="rounded-xl border border-border bg-surface-3 px-4 py-4"
@@ -1905,7 +1934,7 @@ export function DashboardPage() {
                 ) : (
                   <div className="mt-4 rounded-xl border border-border bg-surface-3 px-4 py-5 text-sm text-muted-foreground">
                     {l(
-                      "Le scenario detaille de cette machine n'est pas disponible pour le moment.",
+                      "Le scénario détaillé de cette machine n'est pas disponible pour le moment.",
                       "Detailed scenario data is not available for this machine yet.",
                       "Detailed scenario data is not available for this machine yet.",
                     )}
@@ -1923,13 +1952,13 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                   {l(
-                    "Le contexte explique une partie des lectures. Les signaux temps reel et les regles expertes completent ensuite la decision.",
-                    "Context explains part of the readings. Real-time signals and expert rules then complete the decision.",
-                    "Context explains part of the readings. Real-time signals and expert rules then complete the decision.",
+                    "Le contexte cadre la lecture ; les signaux temps réel finalisent la décision.",
+                    "Context frames the reading; real-time signals finalize the decision.",
+                    "Context frames the reading; real-time signals finalize the decision.",
                   )}
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {dashboardLinkCards.map((card) => (
+                  {compactDashboardLinkCards.map((card) => (
                     <div
                       key={card.label}
                       className="rounded-xl border border-border bg-surface-3 px-4 py-4"
@@ -1946,16 +1975,16 @@ export function DashboardPage() {
                 <div className="mt-3 rounded-xl border border-primary/10 bg-primary/5 px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
                   <span className="font-semibold text-foreground">
                     {l(
-                      "Portee de cette vue",
+                      "Portée de cette vue",
                       "Scope of this view",
                       "Scope of this view",
                     )}
                   </span>
                   :{" "}
                   {l(
-                    "ce panneau explique le contexte d'exploitation. Le detail des signaux, des alertes et des controles terrain reste dans Diagnostic avance.",
-                    "this panel explains the operating context. Signal details, alerts, and field checks remain in Advanced diagnostics.",
-                    "this panel explains the operating context. Signal details, alerts, and field checks remain in Advanced diagnostics.",
+                    "ce panneau explique le contexte. Le détail technique reste dans Diagnostic avancé.",
+                    "this panel explains the context. Technical detail stays in Advanced diagnostics.",
+                    "this panel explains the context. Technical detail stays in Advanced diagnostics.",
                   )}
                 </div>
               </div>
@@ -1966,9 +1995,9 @@ export function DashboardPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-muted-foreground">
                 {l(
-                  "Pour le detail technique complet, ouvrir le diagnostic avance.",
-                  "Open advanced diagnostics for the full technical detail.",
-                  "Open advanced diagnostics for the full technical detail.",
+                  "Pour le détail complet, ouvrez le diagnostic avancé.",
+                  "Open advanced diagnostics for the full detail.",
+                  "Open advanced diagnostics for the full detail.",
                 )}
               </div>
               <Button
@@ -1980,7 +2009,7 @@ export function DashboardPage() {
                 }}
               >
                 {l(
-                  "Ouvrir le diagnostic avance",
+                  "Ouvrir le diagnostic avancé",
                   "Open advanced diagnostics",
                   "Open advanced diagnostics",
                 )}
@@ -1995,7 +2024,7 @@ export function DashboardPage() {
         <DialogContent className="max-w-4xl border-border bg-card p-0 sm:rounded-2xl">
           <DialogHeader className="border-b border-border px-6 py-5">
             <DialogTitle className="text-xl text-foreground">
-              {explainDialogTitle}: {selected.id}
+              {explainDialogTitle}: {getMachinePublicLabel(selected)}
             </DialogTitle>
             <DialogDescription>
               {explainDialogDescription}

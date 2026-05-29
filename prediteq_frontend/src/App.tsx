@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "@/contexts/AppContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ResilienceProvider } from "@/contexts/ResilienceContext";
 import Index from "./pages/Index.tsx";
 import { LandingPage } from "./components/pages/LandingPage.tsx";
 
@@ -83,17 +84,19 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AppProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/landing" element={<LandingPage />} />
-                <Route path="/*" element={<Index />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
+          <ResilienceProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/landing" element={<LandingPage />} />
+                  <Route path="/*" element={<Index />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </ResilienceProvider>
         </AppProvider>
       </AuthProvider>
     </QueryClientProvider>

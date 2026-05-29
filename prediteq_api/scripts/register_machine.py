@@ -3,7 +3,7 @@ One-shot utility to create or update a real machine row for live MQTT ingestion.
 
 Usage:
     cd prediteq_api
-    python scripts/register_machine.py ARO-01 --name "Machine reelle" --region "Ben Arous"
+    python scripts/register_machine.py ARO-01 --name "Machine AroTeq" --region "Ben Arous"
 
 Why this exists:
     The MQTT listener ignores unknown machine codes. This script makes sure the

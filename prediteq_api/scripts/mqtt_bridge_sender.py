@@ -14,7 +14,7 @@ Source modes included:
 
 Example:
     cd prediteq_api
-    python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine reelle" --scenario surveillance
+    python scripts/setup_real_machine_demo.py --machine-id ARO-01 --name "Machine AroTeq" --scenario surveillance
     python scripts/mqtt_bridge_sender.py --mode mock --machine-id ARO-01
 """
 

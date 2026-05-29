@@ -7,7 +7,8 @@ import logging
 import asyncio
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Header
+from fastapi import Depends, HTTPException, Header, Request
+from core.config import settings
 from core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,49 @@ class CurrentUser:
     @property
     def is_approved(self) -> bool:
         return self.status == "approved"
+
+
+def _normalize_client_host(value: str | None) -> str:
+    host = str(value or "").strip().lower()
+    if host.startswith("::ffff:"):
+        host = host[7:]
+    return host
+
+
+def _is_loopback_host(value: str | None) -> bool:
+    return _normalize_client_host(value) in {"127.0.0.1", "::1", "localhost"}
+
+
+def _build_local_demo_admin() -> CurrentUser:
+    return CurrentUser(
+        id="local-demo-controller",
+        email="local-demo@localhost",
+        role="admin",
+        status="approved",
+        machine_id=None,
+    )
+
+
+def _require_approved_account(user: CurrentUser) -> CurrentUser:
+    if not user.is_approved:
+        raise HTTPException(403, "Account not approved")
+    if not user.is_admin and not user.machine_id:
+        raise HTTPException(403, "No machine assigned to this account")
+    return user
+
+
+def _require_admin_account(user: CurrentUser) -> CurrentUser:
+    if not user.is_admin:
+        raise HTTPException(403, "Admin access required")
+    return user
+
+
+def _is_local_demo_control_request(request: Request | None) -> bool:
+    app_mode = str(settings.APP_MODE).strip().lower()
+    if app_mode == "prod":
+        return False
+    client_host = request.client.host if request and request.client else ""
+    return _is_loopback_host(client_host)
 
 
 def _metadata_value(user: object, *keys: str) -> Optional[str]:
@@ -130,18 +174,24 @@ async def _get_user_from_token(
 
 async def require_auth(user: CurrentUser = Depends(_get_user_from_token)) -> CurrentUser:
     """Dependency: requires approved account."""
-    if not user.is_approved:
-        raise HTTPException(403, "Account not approved")
-    if not user.is_admin and not user.machine_id:
-        raise HTTPException(403, "No machine assigned to this account")
-    return user
+    return _require_approved_account(user)
 
 
 async def require_admin(user: CurrentUser = Depends(require_auth)) -> CurrentUser:
     """Dependency: requires approved admin account."""
-    if not user.is_admin:
-        raise HTTPException(403, "Admin access required")
-    return user
+    return _require_admin_account(user)
+
+
+async def require_admin_or_local_demo(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> CurrentUser:
+    """Allow localhost simulator control in demo mode, otherwise require admin."""
+    if _is_local_demo_control_request(request):
+        return _build_local_demo_admin()
+
+    user = await _get_user_from_token(authorization)
+    return _require_admin_account(_require_approved_account(user))
 
 
 def get_machine_filter(user: CurrentUser) -> Optional[str]:

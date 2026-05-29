@@ -40,7 +40,7 @@ This remains the internal machine code for MQTT and backend routing.
 
 In the app, this machine is now shown publicly as:
 
-- `Machine reelle`
+- `Machine AroTeq`
 
 ## Preconditions
 
@@ -147,7 +147,7 @@ Before rerunning the test:
 - stop the old sender on `PC2` with `Ctrl + C`
 - keep only the required terminals open
 - refresh the app page on `PC1`
-- make sure you will watch `Machine reelle` in the UI, not the raw code
+- make sure you will watch `Machine AroTeq` in the UI, not the raw code
 
 ### Step 1
 
@@ -171,7 +171,7 @@ Start the fake sender on PC2.
 
 ### Step 5
 
-On PC1, open machine `Machine reelle`.
+On PC1, open machine `Machine AroTeq`.
 
 ### Step 6
 
@@ -189,7 +189,7 @@ The test is considered successful if all of these are true:
 
 1. PC2 is sending messages continuously
 2. PC1 backend stays connected to MQTT
-3. `Machine reelle` is visible in the app
+3. `Machine AroTeq` is visible in the app
 4. live values change in the app
 5. HI is displayed in the app
 
@@ -224,7 +224,7 @@ Important:
 
 ### 3. Screenshot
 
-PC1 app showing `Machine reelle` with live values and HI
+PC1 app showing `Machine AroTeq` with live values and HI
 
 Important:
 
@@ -247,7 +247,7 @@ One photo or short video showing both PCs at the same time
 
 You can describe the test like this:
 
-> Une validation fonctionnelle de bout en bout a ete realisee a l'aide de deux postes. Le premier poste hebergeait le backend PrediTeq et le frontend web. Le second poste jouait le role d'une source externe et publiait, via MQTT, des mesures simulees pour la machine de code interne ARO-01, affichee publiquement dans l'application sous le nom Machine reelle. Ce test n'avait pas pour objectif de valider une acquisition industrielle reelle, mais de verifier la chaine complete d'ingestion live. Les messages publies par le second poste ont ete recus par le backend, puis repercutes dans l'interface web, ou Machine reelle affichait des valeurs capteurs et un indice de sante mis a jour. Cette etape confirme donc la faisabilite du schema source externe -> MQTT -> backend -> application.
+> Une validation fonctionnelle de bout en bout a ete realisee a l'aide de deux postes. Le premier poste hebergeait le backend PrediTeq et le frontend web. Le second poste jouait le role d'une source externe et publiait, via MQTT, des mesures simulees pour la machine de code interne ARO-01, affichee publiquement dans l'application sous le nom Machine AroTeq. Ce test n'avait pas pour objectif de valider une acquisition industrielle reelle, mais de verifier la chaine complete d'ingestion live. Les messages publies par le second poste ont ete recus par le backend, puis repercutes dans l'interface web, ou Machine AroTeq affichait des valeurs capteurs et un indice de sante mis a jour. Cette etape confirme donc la faisabilite du schema source externe -> MQTT -> backend -> application.
 
 Add this honest limit:
 

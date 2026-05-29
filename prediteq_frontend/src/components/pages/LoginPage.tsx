@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { Award, Eye, EyeOff, Globe, Lock, Moon, Shield, Sun } from "lucide-react";
+
 import { useApp } from "@/contexts/AppContext";
-import { Sun, Moon, Globe, Shield, Lock, Award, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LoginPageProps {
   onNavigate: (route: string) => void;
@@ -16,37 +17,26 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
+  const l = (fr: string, en: string) => (lang === "en" ? en : fr);
 
   const validateEmail = (value: string) => {
     if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
-      return lang === "fr"
-        ? "Email invalide"
-        : lang === "en"
-          ? "Invalid email"
-          : "بريد إلكتروني غير صالح";
+      return l("Email invalide", "Invalid email");
     }
     return "";
   };
 
-  const togglePasswordLabel =
-    showPassword
-      ? lang === "fr"
-        ? "Masquer le mot de passe"
-        : lang === "en"
-          ? "Hide password"
-          : "إخفاء كلمة المرور"
-      : lang === "fr"
-        ? "Afficher le mot de passe"
-        : lang === "en"
-          ? "Show password"
-          : "إظهار كلمة المرور";
+  const togglePasswordLabel = showPassword
+    ? l("Masquer le mot de passe", "Hide password")
+    : l("Afficher le mot de passe", "Show password");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (validateEmail(email)) {
-      setFieldErrors({ email: validateEmail(email) });
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setFieldErrors({ email: emailError });
       return;
     }
 
@@ -68,11 +58,11 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
       <div className="absolute top-4 right-4 flex items-center gap-2">
         <button
-          onClick={() => setLang(lang === "fr" ? "en" : lang === "en" ? "ar" : "fr")}
+          onClick={() => setLang(lang === "fr" ? "en" : "fr")}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all text-xs font-semibold"
         >
           <Globe className="w-3.5 h-3.5" />
-          {lang === "fr" ? "FR" : lang === "en" ? "EN" : "AR"}
+          {lang === "fr" ? "FR" : "EN"}
         </button>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -90,33 +80,27 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
             className="h-20 max-w-full object-contain animate-float"
           />
           <p className="text-sm text-muted-foreground mt-3 text-center">
-            {lang === "fr"
-              ? "Plateforme PrediTeq de maintenance prédictive"
-              : lang === "en"
-                ? "PrediTeq predictive maintenance platform"
-                : "منصة SaaS للصيانة التنبؤية بالذكاء الاصطناعي"}
+            {l("Plateforme PrediTeq de maintenance predictive", "PrediTeq predictive maintenance platform")}
           </p>
         </div>
 
         <div
           className="relative rounded-2xl p-[1px] auth-card-shadow"
           style={{
-            backgroundImage: theme === "dark"
-              ? "linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))"
-              : "linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)",
+            backgroundImage:
+              theme === "dark"
+                ? "linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--primary) / 0.2), hsl(var(--border)))"
+                : "linear-gradient(to bottom right, rgba(15,118,110,0.6), rgba(20,184,166,0.2), #e5e7eb)",
           }}
         >
           <div className="bg-card rounded-2xl p-8 space-y-6">
             <div className="text-center">
-              <h1 className="text-lg font-semibold text-foreground">
-                {lang === "fr" ? "Connexion" : lang === "en" ? "Sign In" : "تسجيل الدخول"}
-              </h1>
+              <h1 className="text-lg font-semibold text-foreground">{l("Connexion", "Sign In")}</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {lang === "fr"
-                  ? "Accédez à votre espace PrediTeq après validation du compte"
-                  : lang === "en"
-                    ? "Access your PrediTeq workspace once the account is approved"
-                    : "الوصول إلى منصة SaaS للصيانة التنبؤية"}
+                {l(
+                  "Accedez a votre espace PrediTeq apres validation du compte",
+                  "Access your PrediTeq workspace once the account is approved",
+                )}
               </p>
             </div>
 
@@ -136,7 +120,7 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
                   className={`w-full h-12 rounded-xl border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
                     fieldErrors.email ? "border-destructive focus:ring-destructive/40" : "border-input focus:ring-ring"
                   }`}
-                  placeholder="votre@email.com"
+                  placeholder={l("votre@email.com", "name@example.com")}
                 />
                 {fieldErrors.email && <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>}
               </div>
@@ -175,8 +159,14 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
               <button
                 type="submit"
                 disabled={submitting}
-                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${theme === "dark" ? "bg-primary hover:bg-primary/90" : "shadow-lg"}`}
-                style={theme !== "dark" ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" } : undefined}
+                className={`w-full h-12 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all btn-premium ${
+                  theme === "dark" ? "bg-primary hover:bg-primary/90" : "shadow-lg"
+                }`}
+                style={
+                  theme !== "dark"
+                    ? { backgroundImage: "linear-gradient(to right, #0f766e, #14b8a6)" }
+                    : undefined
+                }
               >
                 {submitting ? "..." : t("auth.signInBtn")}
               </button>
@@ -185,15 +175,17 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
             <div className="text-center">
               <button
                 onClick={() => onNavigate("/forgot-password")}
-                className={`text-xs hover:underline ${theme === "dark" ? "text-primary/80 hover:text-primary" : "text-teal-600 hover:text-teal-800"}`}
+                className={`text-xs hover:underline ${
+                  theme === "dark" ? "text-primary/80 hover:text-primary" : "text-teal-600 hover:text-teal-800"
+                }`}
               >
-                {lang === "fr" ? "Mot de passe oublié ?" : lang === "en" ? "Forgot password?" : "نسيت كلمة المرور؟"}
+                {l("Mot de passe oublie ?", "Forgot password?")}
               </button>
             </div>
 
             <div className="flex items-center gap-4">
               <div className="section-divider flex-1" />
-              <span className="text-xs text-muted-foreground">{lang === "fr" ? "ou" : lang === "en" ? "or" : "أو"}</span>
+              <span className="text-xs text-muted-foreground">{l("ou", "or")}</span>
               <div className="section-divider flex-1" />
             </div>
 
@@ -210,9 +202,15 @@ export function LoginPage({ onNavigate }: LoginPageProps) {
         </div>
 
         <div className="flex items-center justify-center gap-6 mt-6">
-          <span className="trust-badge"><Shield className="w-3 h-3" /> {lang === "fr" ? "Compte approuvé" : lang === "en" ? "Approved account" : "حساب معتمد"}</span>
-          <span className="trust-badge"><Lock className="w-3 h-3" /> {lang === "fr" ? "Accès par machine" : lang === "en" ? "Machine-scoped access" : "وصول مرتبط بالآلة"}</span>
-          <span className="trust-badge"><Award className="w-3 h-3" /> {lang === "fr" ? "Rôles admin / user" : lang === "en" ? "Admin / user roles" : "أدوار مسؤول / مستخدم"}</span>
+          <span className="trust-badge">
+            <Shield className="w-3 h-3" /> {l("Compte approuve", "Approved account")}
+          </span>
+          <span className="trust-badge">
+            <Lock className="w-3 h-3" /> {l("Acces par machine", "Machine-scoped access")}
+          </span>
+          <span className="trust-badge">
+            <Award className="w-3 h-3" /> {l("Roles admin / user", "Admin / user roles")}
+          </span>
         </div>
       </div>
     </div>

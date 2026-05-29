@@ -51,6 +51,15 @@ class MachineUpdateRequest(BaseModel):
     rul: float | None = None
 
 
+class MachinePrepareLiveRequest(BaseModel):
+    scenario: Literal["healthy", "surveillance", "critical"] | None = None
+    profile: str | None = None
+    duration_s: int = Field(default=3600, ge=600, le=86_400)
+    seed: int = Field(default=99, ge=0)
+    source: str | None = None
+    persist_machine_metrics: bool = True
+
+
 def _strict_machine_code_or_400(machine_code: str) -> str:
     normalized = machine_code.strip().upper()
     if not _MACHINE_CODE_RE.match(normalized):
@@ -99,6 +108,63 @@ def _sync_machine_cache(manager, machine: dict) -> None:
         **manager.machine_cache.get(code, {}),
         **machine,
     }
+
+
+def _load_machine_record(machine_code: str, manager) -> dict:
+    cached = dict(manager.machine_cache.get(machine_code) or {})
+    if cached:
+        return cached
+
+    try:
+        result = (
+            get_supabase()
+            .table("machines")
+            .select("*")
+            .eq("code", machine_code)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.warning("Could not load machine %s for live bootstrap inference: %s", machine_code, exc)
+        return {}
+
+    rows = result.data or []
+    if not rows:
+        return {}
+
+    machine = dict(rows[0])
+    _sync_machine_cache(manager, machine)
+    return machine
+
+
+def _infer_prepare_live_scenario(machine_code: str, machine: dict, manager) -> str:
+    demo_scenario = get_surfaceable_demo_scenario(machine_code) or {}
+    demo_health_state = str(demo_scenario.get("health_state") or "").strip().lower()
+    if demo_health_state in {"healthy", "surveillance", "critical"}:
+        return demo_health_state
+
+    live = dict(manager.last_results.get(machine_code) or {})
+    hi = live.get("hi_smooth")
+    if hi is None:
+        hi = machine.get("hi_courant")
+    try:
+        hi_value = float(hi) if hi is not None else None
+    except (TypeError, ValueError):
+        hi_value = None
+
+    statut = str(live.get("zone") or machine.get("statut") or "").strip().lower()
+    if statut == "critical":
+        return "critical"
+    if statut in {"degraded", "maintenance", "good"}:
+        return "surveillance"
+
+    if hi_value is None:
+        return "surveillance"
+    if hi_value <= 0.30:
+        return "critical"
+    if hi_value < 0.80:
+        return "surveillance"
+    return "healthy"
 
 
 def _attach_calibrated_rul_summary(manager, machine: dict) -> None:
@@ -393,6 +459,45 @@ async def delete_machine(
 
     log_audit(user.id, user.email, "machine.delete", {"machine_code": machine_code})
     return {"status": "ok", "machine_code": machine_code}
+
+
+@router.post("/{machine_code}/prepare-live")
+async def prepare_machine_for_live_runtime(
+    machine_code: str,
+    body: MachinePrepareLiveRequest,
+    user: CurrentUser = Depends(require_admin),
+):
+    machine_code = _strict_machine_code_or_400(machine_code)
+
+    from routers.live_ingest import bootstrap_live_machine
+
+    manager = get_manager()
+    machine = _load_machine_record(machine_code, manager)
+    resolved_scenario = body.scenario or _infer_prepare_live_scenario(machine_code, machine, manager)
+
+    payload = bootstrap_live_machine(
+        machine_code,
+        scenario=resolved_scenario,
+        profile=body.profile,
+        duration_s=int(body.duration_s),
+        seed=int(body.seed),
+        source=body.source or "admin_prepare_live",
+        persist_machine_metrics=bool(body.persist_machine_metrics),
+    )
+
+    log_audit(
+        user.id,
+        user.email,
+        "machine.prepare_live",
+        {
+            "machine_code": machine_code,
+            "scenario": resolved_scenario,
+            "profile": body.profile,
+            "duration_s": int(body.duration_s),
+            "seed": int(body.seed),
+        },
+    )
+    return payload
 
 
 @router.get("/{machine_code}")

@@ -31,6 +31,7 @@ import { useMachines } from "@/hooks/useMachines";
 import { inferComponentFocus } from "@/lib/componentInference";
 import { getSurfaceableMachineDemoScenario } from "@/lib/demoScenario";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import { replaceMachineCodesForDisplay } from "@/lib/machinePresentation";
 import {
   describeAudienceUsageRegime,
   formatAudienceAxisLabel,
@@ -134,6 +135,22 @@ function formatNumber(value: number | null | undefined, digits = 1) {
   });
 }
 
+function compactText(value: string | null | undefined, maxLength = 140) {
+  const cleaned = replaceMachineCodesForDisplay(
+    repairText(value ?? "").replace(/\s+/g, " ").trim(),
+  );
+  if (!cleaned) return null;
+  if (cleaned.length <= maxLength) return cleaned;
+
+  const sentenceCutoff = cleaned.lastIndexOf(". ", maxLength);
+  if (sentenceCutoff >= Math.floor(maxLength * 0.55)) {
+    return cleaned.slice(0, sentenceCutoff + 1);
+  }
+
+  const clipped = cleaned.slice(0, maxLength).replace(/[,:;\s-]+$/u, "");
+  return `${clipped}...`;
+}
+
 function MiniMetric({
   label,
   value,
@@ -173,16 +190,22 @@ function DiagnosisItem({
       : severity === "warning"
         ? "border-l-warning bg-warning/5"
         : "border-l-primary bg-primary/5";
+  const detailText = compactText(detail, 110) ?? repairText(detail);
+  const actionText = compactText(action, 96) ?? repairText(action);
 
   return (
     <div className={`rounded-xl border border-border border-l-4 px-4 py-4 ${tone}`}>
       <div className="text-sm font-semibold text-foreground">{title}</div>
-      <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">{detail}</div>
-      <div className="mt-3 text-sm leading-relaxed text-secondary-foreground">
-        <span className="font-semibold text-foreground">Action terrain :</span> {action}
+      <div className="mt-3 space-y-2 text-sm leading-relaxed text-secondary-foreground">
+        <div>
+          <span className="font-semibold text-foreground">Constat :</span> {detailText}
+        </div>
+        <div>
+          <span className="font-semibold text-foreground">Action :</span> {actionText}
+        </div>
       </div>
       {refs.length > 0 ? (
-        <div className="mt-3 text-xs text-muted-foreground">{refs.join(" | ")}</div>
+        <div className="mt-3 text-xs text-muted-foreground">Réf. : {refs.join(" | ")}</div>
       ) : null}
     </div>
   );
@@ -276,9 +299,9 @@ export function DiagnosticsPage() {
   const prediction = calibratedRul?.prediction ?? null;
   const maintenanceWindow =
     repairText(
-      calibratedRul?.maintenance_window ??
-        selectedInsight?.maintenanceWindow ??
+      selectedInsight?.maintenanceWindow ??
         selected?.decision?.maintenanceWindow ??
+        calibratedRul?.maintenance_window ??
         null,
     ) || null;
   const topDriver =
@@ -346,7 +369,7 @@ export function DiagnosticsPage() {
           : l("Flux en attente", "Waiting for stream", "Waiting for stream");
   const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
   const demoPipelineNote = l(
-    "Lecture issue d'un replay demo calibre. En exploitation reelle, la meme chaine utilisera les vraies mesures vibration, puissance, temperature et humidite.",
+    "Lecture issue du replay démo. Même chaîne prévue avec mesures réelles.",
     "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
     "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
   );
@@ -424,14 +447,14 @@ export function DiagnosticsPage() {
     : actionText;
   const decisionSummaryText = needsExpertEscalation
     ? l(
-        "Une alerte experte critique est active. La machine sort du simple suivi de routine jusqu'à vérification terrain.",
+        "Une alerte experte critique est active. La machine sort du suivi normal jusqu'à vérification terrain.",
         "A critical expert alert is active. The machine should leave routine follow-up until the field check is done.",
         "A critical expert alert is active. The machine should leave routine follow-up until the field check is done.",
       )
     : summaryText;
   const decisionReasonText =
     needsExpertEscalation && expertDiagnosis
-      ? `${l("Signal expert dominant", "Dominant expert signal", "Dominant expert signal")}: ${repairText(
+      ? `${l("Hypothèse experte dominante", "Leading expert hypothesis", "Leading expert hypothesis")}: ${repairText(
           expertDiagnosis.cause,
         )}. ${repairText(expertDiagnosis.detail)}`
       : reasonText;
@@ -476,6 +499,7 @@ export function DiagnosticsPage() {
 
   const cleanedEvidence = (selectedInsight?.evidence ?? []).map((item) => repairText(item));
   const cleanedFieldChecks = (selectedInsight?.fieldChecks ?? []).map((item) => repairText(item));
+  const compactFieldChecks = cleanedFieldChecks.map((item) => compactText(item, 96) ?? item);
   const componentFocus = inferComponentFocus(
     {
       diagnoses,
@@ -494,47 +518,42 @@ export function DiagnosticsPage() {
     new Set([...componentFocus.evidence, ...cleanedEvidence.slice(0, 3)]),
   ).slice(0, 5);
   const usageRegimeLabel = describeAudienceUsageRegime(selectedScenario, l);
-  const sameFleetPrefix = l(
-    "Meme age de flotte, mais",
-    "Same fleet age, but",
-    "Same fleet age, but",
-  );
   const componentFamilyToken = normalizeAudienceToken(componentFocus.familyLabel);
   const dominantCueLabel = repairText(expertDiagnosis?.cause ?? topDriverLabel ?? componentFocus.primarySignal);
   const decisionActionLead = shortenAudienceAction(decisionActionText, componentFocus.familyLabel, l);
   const decisionSummaryPlain =
     selected.status === "critical"
-      ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: la marge restante est courte et l'intervention ne doit pas attendre trop longtemps.`
+      ? `${usageRegimeLabel}. À traiter sans attendre.`
       : selected.status === "degraded"
-        ? `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: la machine reste exploitable, mais la marge se reduit.`
-        : `${sameFleetPrefix} ${usageRegimeLabel.toLowerCase()}: l'etat reste compatible avec une exploitation normale.`;
+        ? `${usageRegimeLabel}. Contrôle à planifier.`
+        : `${usageRegimeLabel}. Suivi normal.`;
   const decisionReasonPlain = needsExpertEscalation
-    ? `${dominantCueLabel} reste le signal le plus fort et justifie un controle prioritaire.`
+    ? `Hypothèse critique : ${dominantCueLabel}. Contrôle prioritaire.`
     : selected.status === "critical"
-      ? `${dominantCueLabel} oriente d'abord le controle vers ${componentFocus.familyLabel.toLowerCase()}.`
+      ? `Hypothèse dominante : ${dominantCueLabel}. Cible probable : ${componentFocus.familyLabel.toLowerCase()}.`
       : selected.status === "degraded"
-        ? `${dominantCueLabel} et ${dominantAxisLabel?.toLowerCase() ?? l("les signaux recents", "recent signals", "recent signals")} demandent un controle cible.`
+        ? `Hypothèse dominante : ${dominantCueLabel}. Contrôle ciblé sur ${componentFocus.familyLabel.toLowerCase()}.`
         : l(
-            "Les signaux recents restent contenus, avec une surveillance normale.",
+            "Pas de dérive critique.",
             "Recent signals remain contained, with routine follow-up.",
             "Recent signals remain contained, with routine follow-up.",
           );
   const decisionWindowShort = shortenAudienceWindow(decisionWindowValue, selected.status, l);
   const decisionInterventionShort =
     componentFamilyToken.includes("moteur") || componentFamilyToken.includes("alimentation")
-      ? l("Controle moteur cible", "Targeted motor check", "Targeted motor check")
+      ? l("Contrôle moteur ciblé", "Targeted motor check", "Targeted motor check")
       : componentFamilyToken.includes("roulement") || componentFamilyToken.includes("transmission")
-        ? l("Controle mecanique cible", "Targeted mechanical check", "Targeted mechanical check")
+        ? l("Contrôle mécanique ciblé", "Targeted mechanical check", "Targeted mechanical check")
         : componentFamilyToken.includes("echauff") || componentFamilyToken.includes("refroid")
-          ? l("Controle thermique cible", "Targeted thermal check", "Targeted thermal check")
-          : l("Controle cible", "Targeted check", "Targeted check");
+          ? l("Contrôle thermique ciblé", "Targeted thermal check", "Targeted thermal check")
+          : l("Contrôle ciblé", "Targeted check", "Targeted check");
   const decisionStatusShort = needsExpertEscalation
-    ? l("Priorite terrain", "Field priority", "Field priority")
+    ? l("Priorité terrain", "Field priority", "Field priority")
     : hasLivePrediction
       ? confidenceLabel ?? l("Lecture en cours", "Reading in progress", "Reading in progress")
       : isReferenceMode
-        ? l("Reference stable", "Stable reference", "Stable reference")
-        : l("Lecture en preparation", "Reading in preparation", "Reading in preparation");
+        ? l("Référence stable", "Stable reference", "Stable reference")
+        : l("Lecture en préparation", "Reading in preparation", "Reading in preparation");
 
   if (isLoadingMachines && !selected) {
     return (
@@ -578,7 +597,7 @@ export function DiagnosticsPage() {
             <div className="section-title">{l("Diagnostic avancé", "Advanced diagnostics", "Advanced diagnostics")}</div>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-secondary-foreground">
               {l(
-                "Vue detaillee : quoi verifier, pourquoi, et sous quel delai. En demo, la lecture vient d'un replay calibre; en exploitation, la meme chaine lira les mesures terrain.",
+                "Vue de contrôle : action, cible, délai et mesures.",
                 "Detailed view: what to check, why, and how soon. In demo mode, the reading comes from a calibrated replay; in operation, the same pipeline will read field measurements.",
                 "Detailed view: what to check, why, and how soon. In demo mode, the reading comes from a calibrated replay; in operation, the same pipeline will read field measurements.",
               )}
@@ -610,11 +629,11 @@ export function DiagnosticsPage() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="text-xl font-bold text-foreground">{selected.id}</div>
+                <div className="text-xl font-bold text-foreground">{getMachinePublicLabel(selected)}</div>
                 <span className={`status-pill ${cfg.pillClass}`}>{statusLabel}</span>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {repairText(selected.name)} - {repairText(selected.city)}
+                {repairText(selected.city) || repairText(selected.name)}
               </div>
             </div>
 
@@ -637,7 +656,7 @@ export function DiagnosticsPage() {
       {isDemoReplay ? (
         <div className="rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
           <span className="font-semibold text-foreground">
-            {l("Lecture demo", "Demo reading", "Demo reading")}
+            {l("Lecture démo", "Demo reading", "Demo reading")}
           </span>
           : {demoPipelineNote}
         </div>
@@ -712,7 +731,7 @@ export function DiagnosticsPage() {
               }
             />
             <MiniMetric
-              label={l("Stress", "Stress", "Stress")}
+              label={l("Stress instantané", "Instant stress", "Instant stress")}
               value={
                 stress && stressMeta
                   ? `${Math.round(stress.value * 100)}%`
@@ -737,15 +756,15 @@ export function DiagnosticsPage() {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <MiniMetric
-              label={l("Cible", "Target", "Target")}
+              label={l("Cible probable", "Probable target", "Probable target")}
               value={componentFocus.familyLabel}
             />
             <MiniMetric
-              label={l("Signal", "Signal", "Signal")}
+              label={l("Hypothèse", "Hypothesis", "Hypothesis")}
               value={componentFocus.primarySignal}
             />
             <MiniMetric
-              label={l("Niveau", "Level", "Level")}
+              label={l("Niveau de confiance", "Confidence level", "Confidence level")}
               value={componentFocus.confidenceLabel}
             />
           </div>
@@ -763,6 +782,13 @@ export function DiagnosticsPage() {
             </div>
             <div className="mt-3 text-sm leading-relaxed text-secondary-foreground">
               {componentFocus.summary}
+            </div>
+            <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {l(
+                "Hypothèse issue des signaux et des règles expertes, à confirmer sur site.",
+                "Hypothesis derived from signals and expert rules, to confirm in the field.",
+                "Hypothesis derived from signals and expert rules, to confirm in the field.",
+              )}
             </div>
           </div>
 
@@ -809,7 +835,15 @@ export function DiagnosticsPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
           <div className="mb-4 flex items-center gap-2">
             <Wrench className="h-4 w-4 text-primary" />
-            <div className="section-title">{l("Justification technique", "Technical rationale", "Technical rationale")}</div>
+            <div className="section-title">{l("Hypothèses techniques", "Technical hypotheses", "Technical hypotheses")}</div>
+          </div>
+
+          <div className="mb-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+            {l(
+              "Les causes listées sont des hypothèses expertes basées sur les seuils et règles du diagnostic. Elles ne remplacent pas la vérification terrain.",
+              "The listed causes are expert hypotheses based on diagnostic thresholds and rules. They do not replace a field check.",
+              "The listed causes are expert hypotheses based on diagnostic thresholds and rules. They do not replace a field check.",
+            )}
           </div>
 
           {isLoadingDiagnostics && !diagnostics ? (
@@ -874,7 +908,7 @@ export function DiagnosticsPage() {
               value={`${formatNumber(latestSensorPoint?.temp ?? selected.temp, 1)} C`}
             />
             <MiniMetric
-              label={l("Cadence de service", "Service pace", "Service pace")}
+              label={l("Cadence scénario", "Scenario cadence", "Scenario cadence")}
               value={
                 selectedScenario?.cycles_per_day != null
                   ? `${Math.round(selectedScenario.cycles_per_day).toLocaleString(numberLocale)} ${l("cycles/jour", "cycles/day", "cycles/day")}`
@@ -889,7 +923,7 @@ export function DiagnosticsPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
-                    {l("Stress machine", "Operational stress", "Operational stress")}
+                    {l("Stress instantané", "Instant stress", "Instant stress")}
                   </div>
                   <div className={`mt-1 text-2xl font-bold ${stressMeta.tone}`}>
                     {Math.round(stress.value * 100)}%
@@ -914,9 +948,9 @@ export function DiagnosticsPage() {
             </div>
           </div>
 
-          {cleanedFieldChecks.length > 0 ? (
+          {compactFieldChecks.length > 0 ? (
             <div className="space-y-2">
-              {cleanedFieldChecks.slice(0, 3).map((item) => (
+              {compactFieldChecks.slice(0, 3).map((item) => (
                 <div
                   key={item}
                   className="rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm leading-relaxed text-secondary-foreground"
@@ -928,9 +962,9 @@ export function DiagnosticsPage() {
           ) : (
             <div className="rounded-xl border border-border bg-surface-3 px-4 py-4 text-sm leading-relaxed text-secondary-foreground">
               {repairText(
-                selectedInsight?.trustNote ||
+                compactText(selectedInsight?.trustNote, 96) ||
                   l(
-                    "Aucun contrôle supplémentaire publié pour cette machine.",
+                    "Aucun contrôle terrain supplémentaire.",
                     "No extra field check is published for this machine.",
                     "No extra field check is published for this machine.",
                   ),

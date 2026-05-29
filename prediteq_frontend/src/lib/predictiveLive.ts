@@ -1,6 +1,7 @@
 import type { PredictiveInsight, PredictiveUrgencyBand } from "@/hooks/useFleetPredictiveInsights";
 import type { TacheType } from "@/hooks/useGmaoTaches";
 import { getBudgetReferenceCost } from "@/lib/costModel";
+import { getUiLang, getUiLocale } from "@/lib/i18n";
 
 const URGENCY_TONE = {
   stable: {
@@ -33,8 +34,20 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatCompactNumber(value: number, locale = "fr-FR", maximumFractionDigits = 1) {
-  return new Intl.NumberFormat(locale, {
+function resolveLocale(locale?: string) {
+  return locale || getUiLocale();
+}
+
+function resolveLanguage(locale?: string) {
+  if (locale) {
+    return locale.toLowerCase().startsWith("en") ? "en" : "fr";
+  }
+  return getUiLang();
+}
+
+function formatCompactNumber(value: number, locale?: string, maximumFractionDigits = 1) {
+  const activeLocale = resolveLocale(locale);
+  return new Intl.NumberFormat(activeLocale, {
     maximumFractionDigits,
     minimumFractionDigits: value < 10 && value % 1 !== 0 ? 1 : 0,
   }).format(value);
@@ -44,41 +57,55 @@ export function getUrgencyTone(band: PredictiveUrgencyBand) {
   return URGENCY_TONE[band];
 }
 
-export function formatHiPercent(hi: number | null, locale = "fr-FR") {
-  if (typeof hi !== "number") return "Indisponible";
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(hi * 100))}%`;
+export function formatHiPercent(hi: number | null, locale?: string) {
+  const activeLocale = resolveLocale(locale);
+  if (typeof hi !== "number") {
+    return resolveLanguage(locale) === "en" ? "Unavailable" : "Indisponible";
+  }
+  return `${new Intl.NumberFormat(activeLocale, { maximumFractionDigits: 0 }).format(Math.round(hi * 100))}%`;
 }
 
-export function formatPredictiveRul(insight: PredictiveInsight, locale = "fr-FR") {
+export function formatPredictiveRul(insight: PredictiveInsight, locale?: string) {
+  const activeLocale = resolveLocale(locale);
+  const isEnglish = resolveLanguage(locale) === "en";
+  const dayUnit = isEnglish ? "d" : "j";
+  const yearUnit = isEnglish ? "y" : "a";
+
   if (insight.predictionMode === "reference_only") {
-    if (typeof insight.machine.referenceLifetimeYears === "number") {
-      return `Ref. ${formatCompactNumber(insight.machine.referenceLifetimeYears, locale, 1)} a`;
+    if (typeof insight.machine.rulReferenceDays === "number") {
+      return `~${formatCompactNumber(insight.machine.rulReferenceDays, activeLocale, 0)} ${dayUnit}`;
     }
-    return "Référence stable";
+    if (typeof insight.machine.referenceLifetimeYears === "number") {
+      return `Ref. ${formatCompactNumber(insight.machine.referenceLifetimeYears, activeLocale, 1)} ${yearUnit}`;
+    }
+    return isEnglish ? "Stable reference" : "Reference stable";
   }
 
   if (typeof insight.rulDays === "number") {
-    return `${formatCompactNumber(insight.rulDays, locale, 1)} j`;
+    return `${formatCompactNumber(insight.rulDays, activeLocale, 1)} ${dayUnit}`;
   }
 
   if (typeof insight.machine.rul === "number") {
-    return `~${formatCompactNumber(insight.machine.rul, locale, 1)} j`;
+    return `~${formatCompactNumber(insight.machine.rul, activeLocale, 1)} ${dayUnit}`;
   }
 
   if (typeof insight.machine.rulReferenceDays === "number") {
-    return `~${formatCompactNumber(insight.machine.rulReferenceDays, locale, 0)} j`;
+    return `~${formatCompactNumber(insight.machine.rulReferenceDays, activeLocale, 0)} ${dayUnit}`;
   }
 
   if (insight.predictionMode === "initializing") {
-    return "Initialisation RUL";
+    return isEnglish ? "RUL initialization" : "Initialisation RUL";
   }
 
-  return "Indisponible";
+  return isEnglish ? "Unavailable" : "Indisponible";
 }
 
-export function formatStressValue(value: number | null, locale = "fr-FR") {
-  if (typeof value !== "number") return "Indisponible";
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(value * 100))}%`;
+export function formatStressValue(value: number | null, locale?: string) {
+  const activeLocale = resolveLocale(locale);
+  if (typeof value !== "number") {
+    return resolveLanguage(locale) === "en" ? "Unavailable" : "Indisponible";
+  }
+  return `${new Intl.NumberFormat(activeLocale, { maximumFractionDigits: 0 }).format(Math.round(value * 100))}%`;
 }
 
 export function getLiveCostProjection(

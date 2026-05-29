@@ -38,7 +38,7 @@ def _parse_args() -> argparse.Namespace:
         description="Ensure one real machine exists and warm the live runtime for demo use."
     )
     parser.add_argument("--machine-id", default="ARO-01", help="Machine code, for example ARO-01")
-    parser.add_argument("--name", default="Machine reelle", help="Public machine name")
+    parser.add_argument("--name", default="Machine AroTeq", help="Public machine name")
     parser.add_argument("--region", default="Ben Arous", help="Machine region / city")
     parser.add_argument("--location", default="Usine Aroteq - Ben Arous", help="Machine location label")
     parser.add_argument("--model", default="", help="Optional machine model")
@@ -84,6 +84,18 @@ def _parse_args() -> argparse.Namespace:
         "--source",
         default="labview_demo_bootstrap",
         help="Source label stored on the warmup samples",
+    )
+    parser.add_argument(
+        "--cycles-per-day",
+        type=float,
+        default=None,
+        help="Optional commissioning/demo override for displayed cycles/day",
+    )
+    parser.add_argument(
+        "--power-avg-30j-kw",
+        type=float,
+        default=None,
+        help="Optional commissioning/demo override for displayed 30-day ascent power",
     )
     return parser.parse_args()
 
@@ -162,6 +174,12 @@ def _call_bootstrap(args: argparse.Namespace) -> dict:
         "seed": int(args.seed),
         "source": str(args.source),
         "persist_machine_metrics": True,
+        "cycles_per_day_override": (
+            float(args.cycles_per_day) if args.cycles_per_day is not None else None
+        ),
+        "power_avg_30j_override": (
+            float(args.power_avg_30j_kw) if args.power_avg_30j_kw is not None else None
+        ),
     }
     body = {key: value for key, value in body.items() if value is not None}
 

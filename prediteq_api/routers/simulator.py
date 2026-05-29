@@ -26,7 +26,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.config import settings
-from core.auth import CurrentUser, require_admin, require_auth
+from core.auth import CurrentUser, require_admin_or_local_demo
 from core.email_client import build_urgence_html, send_alert_email_detailed
 from core.email_history import append_email_event
 from core.demo_context import (
@@ -74,7 +74,7 @@ _state: dict = {
     "machines": {},
 }
 
-# All 3 machines participate in the simulation
+# All 3 demo machines participate in the simulation
 MACHINE_CODES = get_demo_machine_codes()
 
 # ─── Cumulative degradation ──────────────────────────────────────────────────
@@ -216,6 +216,44 @@ def _persisted_status_from_zone(zone: str | None, hi: float | None = None) -> st
     if hi >= 0.3:
         return "degraded"
     return "critical"
+
+
+def _refresh_demo_machine_cache(manager) -> list[str]:
+    """Refresh demo-machine UUIDs from Supabase before a replay starts."""
+    try:
+        sb = get_supabase()
+    except Exception as exc:
+        logger.warning("Simulator: demo machine cache refresh skipped (%s)", exc)
+        return []
+
+    refreshed: list[str] = []
+    for code in MACHINE_CODES:
+        try:
+            result = (
+                sb.table("machines")
+                .select("*")
+                .eq("code", code)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning("Simulator: could not refresh machine cache for %s: %s", code, exc)
+            continue
+
+        row = (result.data or [None])[0]
+        if row is None:
+            logger.warning("Simulator: demo fleet is missing machine row %s", code)
+            continue
+
+        manager.machine_cache[code] = {
+            **manager.machine_cache.get(code, {}),
+            **row,
+        }
+        refreshed.append(code)
+
+    if refreshed:
+        logger.info("Simulator: refreshed demo machine cache for %s", ", ".join(refreshed))
+    return refreshed
 
 
 def _clamp_demo_trajectory_slice(
@@ -511,7 +549,7 @@ def _generate_trajectory(profile: str, load_kg: float,
 
 
 def _generate_all_trajectories(reset: bool = False) -> dict[str, pd.DataFrame]:
-    """Generate fresh trajectories for all 3 machines with cumulative degradation.
+    """Generate fresh trajectories for all 3 demo machines with cumulative degradation.
 
     Reads the last known HI from Supabase, generates a full trajectory,
     finds the point matching that HI, and plays one session (SESSION_FRAC)
@@ -928,16 +966,13 @@ def _send_demo_critical_notifications(manager) -> dict:
         html = build_urgence_html(machine_nom, code, hi, rul_result, [])
 
         try:
-            rul_note = ""
-            if rul_result and rul_result.get("rul_days") is not None:
-                rul_note = f", RUL = {float(rul_result['rul_days']):.1f} jours"
             sb.table("alertes").insert({
                 "machine_id": machine_uuid,
                 "type": "hi",
                 "titre": f"Machine critique au lancement du replay - {code}",
                 "description": (
-                    f"Replay demo demarre avec HI = {hi:.4f}{rul_note}. "
-                    "Notification email declenchee vers les destinataires relies a cette machine."
+                    "Replay démo démarré sur scénario critique. "
+                    "Notification email déclenchée vers les destinataires reliés à cette machine."
                 ),
                 "severite": "urgence",
             }).execute()
@@ -987,7 +1022,10 @@ def _send_demo_critical_notifications(manager) -> dict:
     }
 
 
-def _prepare_demo_critical_notifications_non_blocking(manager) -> tuple[dict, list[dict]]:
+def _prepare_demo_critical_notifications_non_blocking(
+    manager,
+    email_notifications: bool = True,
+) -> tuple[dict, list[dict]]:
     """Prepare critical alerts synchronously, defer SMTP sending to the background."""
     try:
         sb = get_supabase()
@@ -1025,6 +1063,9 @@ def _prepare_demo_critical_notifications_non_blocking(manager) -> tuple[dict, li
         machine_info = manager.get_machine_info(code) or {}
         machine_uuid = str(machine_info.get("id") or manager.get_uuid(code) or "")
         machine_nom = str(machine_info.get("nom") or code)
+        if not email_notifications:
+            logger.info("Simulator demo email notifications disabled for %s", code)
+            continue
         recipients = get_alert_recipients(machine_uuid or None)
         if not recipients:
             logger.warning(
@@ -1058,16 +1099,13 @@ def _prepare_demo_critical_notifications_non_blocking(manager) -> tuple[dict, li
         html = build_urgence_html(machine_nom, code, hi, rul_result, [])
 
         try:
-            rul_note = ""
-            if rul_result and rul_result.get("rul_days") is not None:
-                rul_note = f", RUL = {float(rul_result['rul_days']):.1f} jours"
             sb.table("alertes").insert({
                 "machine_id": machine_uuid,
                 "type": "hi",
                 "titre": f"Machine critique au lancement du replay - {code}",
                 "description": (
-                    f"Replay demo demarre avec HI = {hi:.4f}{rul_note}. "
-                    "Notification email declenchee vers les destinataires relies a cette machine."
+                    "Replay démo démarré sur scénario critique. "
+                    "Notification email déclenchée vers les destinataires reliés à cette machine."
                 ),
                 "severite": "urgence",
             }).execute()
@@ -1185,7 +1223,12 @@ def _track_background_task(task: asyncio.Task, label: str) -> None:
 
 # ─── Replay loop ──────────────────────────────────────────────────────────────
 
-async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
+async def _replay_loop(
+    speed: int,
+    reset: bool = False,
+    demo_mode: bool = True,
+    email_notifications: bool = True,
+):
     """Background loop: feeds one row per machine every (1/speed) seconds."""
     global _state
     try:
@@ -1217,7 +1260,9 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
             }
 
             notification_summary, notification_jobs = await asyncio.to_thread(
-                _prepare_demo_critical_notifications_non_blocking, manager
+                _prepare_demo_critical_notifications_non_blocking,
+                manager,
+                email_notifications,
             )
             if notification_summary["attempted_codes"]:
                 notification_task = asyncio.create_task(
@@ -1379,7 +1424,8 @@ async def _replay_loop(speed: int, reset: bool = False, demo_mode: bool = True):
 @router.post("/start")
 async def start_simulator(speed: int = 60, reset: bool = False,
                           demo_mode: bool = True,
-                          admin: CurrentUser = Depends(require_admin)):
+                          email_notifications: bool = True,
+                          admin: CurrentUser = Depends(require_admin_or_local_demo)):
     """
     Start simulator.
 
@@ -1408,6 +1454,7 @@ async def start_simulator(speed: int = 60, reset: bool = False,
 
     # Reset engines for all machines
     manager = get_manager()
+    _refresh_demo_machine_cache(manager)
     for code in MACHINE_CODES:
         manager.reset(code)
 
@@ -1431,7 +1478,9 @@ async def start_simulator(speed: int = 60, reset: bool = False,
             logger.warning("Could not reset Supabase HI: %s", e)
 
     _state = {"running": True, "speed": speed, "tick": 0, "machines": {}}
-    _task = asyncio.create_task(_replay_loop(speed, reset, demo_mode))
+    _task = asyncio.create_task(
+        _replay_loop(speed, reset, demo_mode, email_notifications)
+    )
 
     def _on_done(t: asyncio.Task):
         exc = t.exception() if not t.cancelled() else None
@@ -1444,6 +1493,7 @@ async def start_simulator(speed: int = 60, reset: bool = False,
         "speed": speed,
         "reset": reset,
         "demo_mode": demo_mode,
+        "email_notifications": email_notifications,
         "machines": MACHINE_CODES,
         "message": (
             f"{'Reset + ' if reset else ''}"
@@ -1453,7 +1503,7 @@ async def start_simulator(speed: int = 60, reset: bool = False,
 
 
 @router.post("/stop")
-async def stop_simulator(admin: CurrentUser = Depends(require_admin)):
+async def stop_simulator(admin: CurrentUser = Depends(require_admin_or_local_demo)):
     """Stop the running simulator."""
     global _task, _state
     if not _state["running"]:
@@ -1470,7 +1520,7 @@ async def stop_simulator(admin: CurrentUser = Depends(require_admin)):
 
 
 @router.get("/status")
-async def simulator_status(admin: CurrentUser = Depends(require_admin)):
+async def simulator_status(admin: CurrentUser = Depends(require_admin_or_local_demo)):
     """Get current simulator state (admin only)."""
     _schedule_demo_prewarm()
     manager = get_manager()

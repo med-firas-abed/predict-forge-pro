@@ -272,17 +272,6 @@ async function mockMachines(page: Page) {
 async function mockPlannerCalendarFlow(page: Page) {
   const today = new Date().toISOString().slice(0, 10);
   const repeatedTaskTitle = "Intervention corrective ASC-C3 - Vibration moteur - reprise";
-  const plannerTask = {
-    machine_code: "ASC-C3",
-    titre: repeatedTaskTitle,
-    type: "corrective",
-    priorite: "haute",
-    date_planifiee: today,
-    cout_estime: 480,
-    description:
-      "Action: Intervention immediate. Etat: HI 12%, RUL 4 j, zone Critical, score 93/100, signal dominant Vibration moteur. Contexte calendrier: 1 tache deja ouverte.",
-    technicien: "",
-  } as const;
 
   const taskStore = [
     {
@@ -308,7 +297,7 @@ async function mockPlannerCalendarFlow(page: Page) {
         generated_at: `${today}T09:00:00.000Z`,
         focus_machine: null,
         markdown: "Synthese planner backend pour la machine critique ASC-C3.",
-        tasks: [plannerTask],
+        tasks: [],
         fleet: [
           {
             machine_code: "ASC-C3",
@@ -335,10 +324,10 @@ async function mockPlannerCalendarFlow(page: Page) {
             delayed_cost: 560,
             delay_penalty: 80,
             task_context:
-              "Contexte calendrier: 1 tache de intervention corrective est deja ouverte sur cette machine.",
+              "Contexte calendrier: 1 tache de intervention corrective est deja ouverte sur cette machine; aucune nouvelle suggestion calendrier n'est emise tant qu'elles ne sont pas cloturees.",
             similar_open_tasks: 1,
             recent_completed_tasks: 2,
-            task_suggestion: plannerTask,
+            task_suggestion: null,
           },
         ],
       }),
@@ -346,7 +335,15 @@ async function mockPlannerCalendarFlow(page: Page) {
   });
 
   await page.route("**/planner/approve", async (route) => {
-    const body = route.request().postDataJSON() as typeof plannerTask;
+    const body = route.request().postDataJSON() as {
+      machine_code: string;
+      titre: string;
+      type: string;
+      technicien?: string;
+      date_planifiee?: string;
+      cout_estime?: number;
+      description?: string;
+    };
     taskStore.push({
       id: `approved-task-${taskStore.length + 1}`,
       machineId: "uuid-c3",
@@ -368,8 +365,7 @@ async function mockPlannerCalendarFlow(page: Page) {
         status: "ok",
         message: `Tache '${body.titre}' creee pour ${body.machine_code}`,
         machine_code: body.machine_code,
-        repeat_note:
-          "Relance planner autorisee: 1 tache au meme titre est deja ouverte; la nouvelle insertion reste permise.",
+        repeat_note: null,
       }),
     });
   });
@@ -1183,7 +1179,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByRole("button", { name: /D[ée]marrer/i })).toBeVisible();
   });
 
-  test("lets admins approve a repeated AI action and see it in the maintenance calendar", async ({ page }) => {
+  test("shows already scheduled AI actions without proposing a duplicate approval", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
     await mockAlertsData(page);
@@ -1195,18 +1191,15 @@ test.describe("Authenticated app flows", () => {
     await page.getByRole("button", { name: /Lancer le plan d'action/i }).click();
 
     await expect(page.getByText("Synthese planner backend pour la machine critique ASC-C3.")).toBeVisible();
-    await expect(page.getByText(repeatedTaskTitle)).toBeVisible();
-    await expect(page.getByText(/1 relance\(s\) ouverte\(s\)/i)).toBeVisible();
     await expect(page.getByText(/2 action\(s\) recente\(s\)/i)).toBeVisible();
-
-    await page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i }).click();
-    await expect(page.getByText(/Relance planner autorisee/i)).toBeVisible();
+    await expect(
+      page.getByText(/aucune nouvelle suggestion calendrier n'est emise tant qu'elles ne sont pas cloturees/i),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i })).toHaveCount(0);
 
     await page.goto("/maintenance");
     await expect(page.getByText(/Calendrier des actions validees apres pronostic/i)).toBeVisible();
     await expect(page.getByText(repeatedTaskTitle).first()).toBeVisible();
-    expect(await page.getByText(repeatedTaskTitle).count()).toBeGreaterThan(1);
   });
 
   test("keeps the selected machine stable when switching on the dashboard", async ({ page }) => {

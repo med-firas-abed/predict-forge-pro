@@ -109,6 +109,22 @@ SCENARIOS = {
 
 PROFILE_NAMES = ("A_linear", "B_quadratic", "C_stepwise", "D_noisy_linear")
 
+# Ben Arous is a new Aroteq machine still under commissioning. Its demo replay
+# should therefore stay clearly in the healthy zone instead of mimicking the
+# harsher simulator machines used for the jury story.
+MACHINE_SCENARIO_OVERRIDES = {
+    "ARO-01": {
+        "healthy": {
+            "start_hi": 0.995,
+            "end_hi": 0.965,
+            "load_target": 60.0,
+            "load_spread": 30.0,
+            "noise_mult": 0.85,
+            "default_profile": "A_linear",
+        }
+    }
+}
+
 
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
@@ -207,8 +223,17 @@ def current_for_power(power_kw: float) -> float:
     return (power_kw * 1000.0) / MOTOR_SQRT3_V_COSPHI
 
 
-def _resolve_profile(scenario: str, profile: str | None) -> str:
-    scenario_cfg = SCENARIOS[scenario]
+def _resolve_scenario_config(machine_id: str, scenario: str) -> dict[str, float | str]:
+    scenario_cfg = dict(SCENARIOS[scenario])
+    machine_cfg = MACHINE_SCENARIO_OVERRIDES.get(str(machine_id).strip().upper(), {})
+    override = machine_cfg.get(scenario)
+    if override:
+        scenario_cfg.update(override)
+    return scenario_cfg
+
+
+def _resolve_profile(machine_id: str, scenario: str, profile: str | None) -> str:
+    scenario_cfg = _resolve_scenario_config(machine_id, scenario)
     return profile or str(scenario_cfg["default_profile"])
 
 
@@ -224,12 +249,13 @@ def build_labview_demo_samples(
     if scenario not in SCENARIOS:
         raise ValueError(f"Unsupported scenario: {scenario}")
 
-    resolved_profile = _resolve_profile(scenario, profile)
+    machine_code = str(machine_id).strip().upper()
+    scenario_cfg = _resolve_scenario_config(machine_code, scenario)
+    resolved_profile = _resolve_profile(machine_code, scenario, profile)
     if resolved_profile not in PROFILE_NAMES:
         raise ValueError(f"Unsupported profile: {resolved_profile}")
 
     rng = random.Random(seed)
-    scenario_cfg = SCENARIOS[scenario]
     noise_mult = float(scenario_cfg["noise_mult"]) * (
         3.0 if resolved_profile == "D_noisy_linear" else 1.0
     )
@@ -243,7 +269,6 @@ def build_labview_demo_samples(
         rng=rng,
     )
 
-    machine_code = str(machine_id).strip().upper()
     temp_c = 24.5
     humidity_rh = 60.0
     samples: list[dict] = []

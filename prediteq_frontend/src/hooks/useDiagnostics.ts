@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { safeStorageGetJson, safeStorageSet } from "@/lib/browserStorage";
 import { repairTextDeep } from "@/lib/repairText";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -239,6 +240,7 @@ export function getCalibratedRulWarmupDetail(
 }
 
 const DIAGNOSTICS_REFETCH_MS = 5_000;
+const DIAGNOSTICS_CACHE_KEY_PREFIX = "prediteq-diagnostics-cache-v1";
 
 export interface DiagnosticsQueryOptions {
   includeInterval?: boolean;
@@ -267,14 +269,49 @@ function buildDiagnosticsAllUrl(
   return query ? `${base}?${query}` : base;
 }
 
+function buildDiagnosticsCacheKey(
+  machineCode: string,
+  options?: DiagnosticsQueryOptions,
+) {
+  return [
+    DIAGNOSTICS_CACHE_KEY_PREFIX,
+    machineCode,
+    options?.includeInterval !== false ? "interval" : "no-interval",
+    options?.includeDiagnose !== false ? "diagnose" : "no-diagnose",
+    options?.includeExplain !== false ? "explain" : "no-explain",
+  ].join(":");
+}
+
+function readCachedDiagnostics(
+  machineCode: string,
+  options?: DiagnosticsQueryOptions,
+): DiagnosticsAll | null {
+  return safeStorageGetJson<DiagnosticsAll | null>(
+    buildDiagnosticsCacheKey(machineCode, options),
+    null,
+  );
+}
+
 export async function fetchDiagnosticsAll(
   machineCode: string,
   options?: DiagnosticsQueryOptions,
 ): Promise<DiagnosticsAll> {
-  const payload = await apiFetch<DiagnosticsAll>(
-    buildDiagnosticsAllUrl(machineCode, options)
-  );
-  return repairTextDeep(payload);
+  const cacheKey = buildDiagnosticsCacheKey(machineCode, options);
+
+  try {
+    const payload = await apiFetch<DiagnosticsAll>(
+      buildDiagnosticsAllUrl(machineCode, options)
+    );
+    const repairedPayload = repairTextDeep(payload);
+    safeStorageSet(cacheKey, JSON.stringify(repairedPayload));
+    return repairedPayload;
+  } catch (error) {
+    const cached = readCachedDiagnostics(machineCode, options);
+    if (cached) {
+      return repairTextDeep(cached);
+    }
+    throw error;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -299,6 +336,7 @@ export function useDiagnostics(
       if (!machineCode) throw new Error("machineCode required");
       return fetchDiagnosticsAll(machineCode, options);
     },
+    initialData: machineCode ? readCachedDiagnostics(machineCode, options) ?? undefined : undefined,
     refetchInterval: DIAGNOSTICS_REFETCH_MS,
     staleTime: 10_000,
     retry: 1,

@@ -1,7 +1,8 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { Clock, Globe, Moon, Sun } from "lucide-react";
+
 import { useApp } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
-import { Clock, Sun, Moon, Globe } from "lucide-react";
 
 interface PendingPageProps {
   onNavigate: (route: string) => void;
@@ -10,22 +11,28 @@ interface PendingPageProps {
 export function PendingPage({ onNavigate }: PendingPageProps) {
   const { currentUser, logout, allUsers } = useAuth();
   const { lang, setLang, theme, setTheme, t } = useApp();
+  const l = (fr: string, en: string) => (lang === "en" ? en : fr);
 
-  const pendingUser = currentUser || allUsers.filter(u => u.status === "pending").sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  const assignedMachineLabel = pendingUser && (pendingUser.machineId || pendingUser.machineCode || pendingUser.machineName)
-    ? getMachinePublicLabel({ code: pendingUser.machineCode, name: pendingUser.machineName })
-    : null;
+  const pendingUser =
+    currentUser ||
+    allUsers
+      .filter((user) => user.status === "pending")
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0];
+
+  const assignedMachineLabel =
+    pendingUser && (pendingUser.machineId || pendingUser.machineCode || pendingUser.machineName)
+      ? getMachinePublicLabel({ code: pendingUser.machineCode, name: pendingUser.machineName })
+      : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
-      {/* Top-right controls */}
       <div className="absolute top-4 right-4 flex items-center gap-2">
         <button
-          onClick={() => setLang(lang === "fr" ? "en" : lang === "en" ? "ar" : "fr")}
+          onClick={() => setLang(lang === "fr" ? "en" : "fr")}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all text-xs font-semibold"
         >
           <Globe className="w-3.5 h-3.5" />
-          {lang === "fr" ? "FR" : lang === "en" ? "EN" : "AR"}
+          {lang === "fr" ? "FR" : "EN"}
         </button>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -36,10 +43,9 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
       </div>
 
       <div className="w-full max-w-lg">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img
-            src={theme === 'dark' ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
+            src={theme === "dark" ? "/logo-dark-removebg-preview.png" : "/logo-light.svg"}
             alt="PrediTeq"
             className="h-20 object-contain animate-float mb-3"
           />
@@ -50,19 +56,13 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
 
         <div className="relative rounded-xl p-[1px] bg-gradient-to-br from-primary/60 via-primary/20 to-border auth-card-shadow">
           <div className="bg-card rounded-xl p-8 text-center">
-            {/* Icon */}
             <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-6">
               <Clock className="w-8 h-8 text-primary" />
             </div>
 
-            <h1 className="text-xl font-semibold text-foreground mb-2">
-              {t("pending.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground mb-6">
-              {t("pending.message")}
-            </p>
+            <h1 className="text-xl font-semibold text-foreground mb-2">{t("pending.title")}</h1>
+            <p className="text-sm text-muted-foreground mb-6">{t("pending.message")}</p>
 
-            {/* Summary card */}
             {pendingUser && (
               <div className="bg-muted/50 border border-border rounded-lg p-4 mb-6 text-left space-y-2">
                 <div className="flex justify-between text-sm">
@@ -76,14 +76,12 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{t("pending.requestedRole")}</span>
                   <span className="text-xs font-semibold uppercase px-2 py-0.5 rounded bg-primary/10 text-primary">
-                    {pendingUser.role === "admin"
-                      ? t("auth.administrator")
-                      : t("auth.user")}
+                    {pendingUser.role === "admin" ? t("auth.administrator") : t("auth.user")}
                   </span>
                 </div>
                 {pendingUser.role === "user" && assignedMachineLabel && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Machine</span>
+                    <span className="text-muted-foreground">{l("Machine", "Machine")}</span>
                     <span className="text-foreground font-medium">{assignedMachineLabel}</span>
                   </div>
                 )}
@@ -95,7 +93,10 @@ export function PendingPage({ onNavigate }: PendingPageProps) {
             </p>
 
             <button
-              onClick={async () => { await logout(); onNavigate("/signup"); }}
+              onClick={async () => {
+                await logout();
+                onNavigate("/signup");
+              }}
               className="text-sm text-primary hover:underline font-medium"
             >
               {t("pending.signOut")}

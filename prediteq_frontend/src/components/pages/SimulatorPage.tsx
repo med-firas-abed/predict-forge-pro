@@ -6,6 +6,7 @@ import type { DemoScenario, Machine } from "@/data/machines";
 import { useMachines } from "@/hooks/useMachines";
 import { useSimulatorController } from "@/hooks/useSimulatorController";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
+import { replaceMachineCodesForDisplay } from "@/lib/machinePresentation";
 import {
   describeAudienceScenarioExplanation,
   describeAudienceScenarioUsageCase,
@@ -94,6 +95,21 @@ function getZoneTone(zone?: string | null, hi?: number | null) {
   }
 
   return "bg-success/10 text-success";
+}
+
+function compactText(value?: string | null, maxLength = 120) {
+  const normalized = replaceMachineCodesForDisplay(
+    repairText((value ?? "").replace(/\s+/g, " ").trim()),
+  );
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+
+  const sentenceCutoff = normalized.lastIndexOf(". ", maxLength);
+  if (sentenceCutoff >= Math.floor(maxLength * 0.55)) {
+    return normalized.slice(0, sentenceCutoff + 1);
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 export function SimulatorPage() {
@@ -302,9 +318,9 @@ export function SimulatorPage() {
 
         <p className="mb-5 text-sm text-muted-foreground">
           {l(
-            "Ici, on lance un replay demo calibre puis on suit, pour chaque machine, l'etat de sante, le niveau de risque et la marge restante.",
-            "Start the calibrated demo replay here, then follow each machine's health, risk level, and remaining margin.",
-            "Start the calibrated demo replay here, then follow each machine's health, risk level, and remaining margin.",
+            "Lancez le replay puis suivez HI, RUL et action conseillée pour chaque machine.",
+            "Start the replay, then follow HI, RUL, and the suggested action for each machine.",
+            "Start the replay, then follow HI, RUL, and the suggested action for each machine.",
           )}
         </p>
 
@@ -314,9 +330,9 @@ export function SimulatorPage() {
           </span>
           :{" "}
           {l(
-            "Aujourd'hui, la lecture vient d'un replay demo calibre. En exploitation reelle, la meme chaine utilisera les vraies mesures vibration, puissance, temperature et humidite remontees par les machines.",
-            "Today, the reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity data sent by the machines.",
-            "Today, the reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity data sent by the machines.",
+            "Aujourd'hui : replay démo. Demain : même pipeline sur mesures réelles.",
+            "Today: calibrated demo replay. Later: the same pipeline with live measurements.",
+            "Today: calibrated demo replay. Later: the same pipeline with live measurements.",
           )}
         </div>
 
@@ -347,9 +363,9 @@ export function SimulatorPage() {
             </div>
             <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
               {l(
-                "Ces raccourcis sélectionnent trois profils réels pour explorer une lecture stable, sous surveillance ou critique.",
-                "These shortcuts select three real profiles to explore a stable, watch, or critical reading.",
-                "These shortcuts select three real profiles to explore a stable, watch, or critical reading.",
+                "Raccourcis : stable, surveillance, critique.",
+                "Three shortcuts: stable, watch, critical.",
+                "Three shortcuts: stable, watch, critical.",
               )}
             </div>
           </div>
@@ -466,9 +482,9 @@ export function SimulatorPage() {
           {isBootstrapping && (
             <div className="mt-3 text-xs font-semibold text-primary">
               {l(
-                "Le contexte en direct se stabilise. Les indicateurs temps réel et le RUL apparaissent au fur et à mesure.",
-                "The live context is stabilizing. Runtime KPIs and RUL will appear progressively.",
-                "The live context is stabilizing. Runtime KPIs and RUL will appear progressively.",
+                "Contexte en stabilisation. HI et RUL arrivent.",
+                "The context is stabilizing. HI and RUL will appear progressively.",
+                "The context is stabilizing. HI and RUL will appear progressively.",
               )}
             </div>
           )}
@@ -476,9 +492,9 @@ export function SimulatorPage() {
           {simulator.isActive && !isBootstrapping && (
             <div className="mt-3 text-xs font-semibold text-success">
               {l(
-                "Simulation active : les commandes de démarrage restent verrouillées jusqu'à la fin ou une mise en pause.",
-                "Simulation active: start controls stay locked until the run ends or is paused.",
-                "Simulation active: start controls stay locked until the run ends or is paused.",
+                "Simulation active. Pausez ou attendez la fin pour relancer.",
+                "Simulation active. Pause or wait for the end before restarting.",
+                "Simulation active. Pause or wait for the end before restarting.",
               )}
             </div>
           )}
@@ -486,9 +502,9 @@ export function SimulatorPage() {
           {resetRequested && !simulator.isActive && (
             <div className="mt-3 text-xs font-semibold text-amber-600">
               {l(
-                "Réinitialisation armée : le prochain démarrage repartira de l'état initial.",
-                "Reset armed: the next start will relaunch from the initial state.",
-                "Reset armed: the next start will relaunch from the initial state.",
+                "Reset armé : le prochain démarrage repart de l'état initial.",
+                "Reset armed: the next start restarts from the initial state.",
+                "Reset armed: the next start restarts from the initial state.",
               )}
             </div>
           )}
@@ -496,9 +512,9 @@ export function SimulatorPage() {
           {!simulator.isActive && !resetRequested && !isBootstrapping && (simStatus?.tick ?? 0) > 0 && (
             <div className="mt-3 text-xs font-medium text-muted-foreground">
               {l(
-                `Dernière session arrêtée au pas ${simStatus?.tick ?? 0}. Vous pouvez relancer ou réinitialiser avant le prochain départ.`,
-                `Last session stopped at tick ${simStatus?.tick ?? 0}. You can relaunch or reset before the next start.`,
-                `Last session stopped at tick ${simStatus?.tick ?? 0}. You can relaunch or reset before the next start.`,
+                `Session arrêtée au pas ${simStatus?.tick ?? 0}. Relancez ou réinitialisez.`,
+                `Session stopped at tick ${simStatus?.tick ?? 0}. Relaunch or reset.`,
+                `Session stopped at tick ${simStatus?.tick ?? 0}. Relaunch or reset.`,
               )}
             </div>
           )}
@@ -519,9 +535,9 @@ export function SimulatorPage() {
 
         <p className="mb-5 text-sm text-muted-foreground">
           {l(
-            "Cette zone résume, pour chaque machine, l'état de santé, la durée de vie restante, l'action conseillée et le contexte d'usage.",
-            "This area summarizes each machine's health, remaining life, suggested action, and usage context.",
-            "This area summarizes each machine's health, remaining life, suggested action, and usage context.",
+            "Résumé rapide par machine : HI, RUL, zone et action.",
+            "Quick per-machine summary: HI, RUL, zone, and action.",
+            "Quick per-machine summary: HI, RUL, zone, and action.",
           )}
         </p>
 
@@ -556,18 +572,17 @@ export function SimulatorPage() {
               const pct = total && tick != null ? Math.round((tick / total) * 100) : 0;
               const maintenanceWindow = runtimeMachine?.decision?.maintenanceWindow ?? null;
               const decisionSummary = runtimeMachine?.decision?.summary ?? null;
+              const usageCaseShort = compactText(usageCase, 92);
+              const explanationShort = compactText(explanation, 126);
+              const decisionSummaryShort = compactText(decisionSummary, 150);
               const rulDisplay = buildRulDisplay({
                 machine: runtimeMachine,
                 predictionMode:
                   runtimeMachine?.rulMode ?? runtimeMachine?.decision?.predictionMode ?? null,
                 prediction: buildMachinePrediction(runtimeMachine),
                 referenceLifetimeYears: runtimeMachine?.referenceLifetimeYears ?? null,
-                referenceDays:
-                  runtimeMachine?.rulReferenceDays ??
-                  scenario?.reference_rul_days ??
-                  null,
+                referenceDays: runtimeMachine?.rulReferenceDays ?? null,
                 localize: l,
-                allowDemoReference: true,
               });
 
               return (
@@ -611,11 +626,11 @@ export function SimulatorPage() {
                         )}
                       </div>
 
-                      {usageCase && (
-                        <div className="mb-2 text-xs text-secondary-foreground">{usageCase}</div>
+                      {usageCaseShort && (
+                        <div className="mb-2 text-xs text-secondary-foreground">{usageCaseShort}</div>
                       )}
-                      {explanation && (
-                        <div className="mb-3 text-xs text-muted-foreground">{explanation}</div>
+                      {explanationShort && (
+                        <div className="mb-3 text-xs text-muted-foreground">{explanationShort}</div>
                       )}
 
                       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -677,17 +692,17 @@ export function SimulatorPage() {
                             {currentLoad != null
                               ? `${l("Charge instantanée", "Live load", "Live load")}: ${currentLoad.toFixed(0)} kg`
                               : l(
-                                  "La fenêtre se précise dès que le moteur publie la décision machine.",
-                                  "The window becomes more precise as soon as the runtime publishes the machine decision.",
-                                  "The window becomes more precise as soon as the runtime publishes the machine decision.",
+                                  "La decision se precise quand le runtime publie la lecture.",
+                                  "The decision becomes clearer when the runtime publishes the reading.",
+                                  "The decision becomes clearer when the runtime publishes the reading.",
                                 )}
                           </div>
                         </div>
                       </div>
 
-                      {decisionSummary && (
+                      {decisionSummaryShort && (
                         <div className="mb-3 rounded-xl border border-border bg-surface-3 px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
-                          {decisionSummary}
+                          {decisionSummaryShort}
                         </div>
                       )}
 
@@ -695,9 +710,9 @@ export function SimulatorPage() {
                         <div className="mb-3 rounded-xl border border-border bg-surface-3 p-3">
                           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                             {l(
-                              "Facteurs du scénario qui influencent les capteurs et les indicateurs",
-                              "Scenario factors influencing sensors and indicators",
-                              "Scenario factors influencing sensors and indicators",
+                              "Facteurs du scénario",
+                              "Scenario factors",
+                              "Scenario factors",
                             )}
                           </div>
                           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">

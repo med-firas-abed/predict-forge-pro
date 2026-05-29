@@ -54,7 +54,7 @@ export function getMachineDemoStoryState(
     .trim()
     .toLowerCase();
 
-  if (["good", "ok", "stable", "operational"].includes(token)) {
+  if (["good", "healthy", "ok", "stable", "operational"].includes(token)) {
     return "stable";
   }
 
@@ -76,6 +76,9 @@ export function getDemoStoryMachines<
   const byState: Partial<Record<DemoStoryState, T>> = {};
 
   for (const machine of machines) {
+    if (!machine.demoScenario) {
+      continue;
+    }
     const state = getMachineDemoStoryState(machine);
     if (!state || byState[state]) continue;
     byState[state] = machine;
