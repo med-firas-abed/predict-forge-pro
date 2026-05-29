@@ -320,7 +320,7 @@ describe("AlertsPage", () => {
 
     const reviewSection = screen.getByTestId("review-alert-section");
     expect(within(reviewSection).getByText("Machine 1")).toBeInTheDocument();
-    expect(within(reviewSection).getByText(/signal à requalifier/i)).toBeInTheDocument();
+    expect(within(reviewSection).getByText(/ancien signal ouvert/i)).toBeInTheDocument();
 
     const prioritizedSection = screen.getByTestId("prioritized-alert-section");
     expect(within(prioritizedSection).getByText("Machine 2")).toBeInTheDocument();

@@ -418,7 +418,7 @@ export function AlertsPage() {
             <div>
               <div className="section-title">Signaux ouverts à relire</div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Traces ouvertes, mais plus prioritaires dans la lecture machine actuelle.
+                Anciens signaux encore ouverts, à vérifier avant clôture.
               </p>
             </div>
             <div className="rounded-full bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
@@ -432,10 +432,10 @@ export function AlertsPage() {
               const isExpanded = Boolean(expandedMachines[row.machineId]);
               const reviewReason =
                 compactText(
-                  `Le signal ouvert date du ${formatAlertTimestamp(row.latestTimestamp)}, mais la lecture machine actuelle est revenue stable. Relire ce cas avant acquittement.`,
+                  "Un ancien signal reste ouvert alors que la machine est revenue à un état stable. Vérifiez sur site, puis clôturez si le retour à la normale est confirmé.",
                   170,
                 ) ??
-                "Le signal reste ouvert alors que la machine est revenue sur une lecture stable.";
+                "Un ancien signal reste ouvert alors que la machine est revenue à un état stable.";
 
               return (
                 <div
@@ -447,16 +447,13 @@ export function AlertsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-bold text-foreground">{row.machineName}</span>
                         <span className="rounded-full bg-card px-2.5 py-1 text-[0.65rem] font-semibold text-foreground">
-                          Signal à requalifier
+                          Ancien signal ouvert
                         </span>
                         <span className="rounded-full bg-success/10 px-2.5 py-1 text-[0.65rem] font-semibold text-success">
-                          État courant stable
+                          Machine stable maintenant
                         </span>
                         <span className="rounded-full bg-card px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
                           {row.openSignalCount} signal{row.openSignalCount > 1 ? "aux" : ""} encore ouvert{row.openSignalCount > 1 ? "s" : ""}
-                        </span>
-                        <span className="text-[0.7rem] text-muted-foreground">
-                          {formatAlertTimestamp(row.latestTimestamp)}
                         </span>
                       </div>
 
@@ -466,7 +463,7 @@ export function AlertsPage() {
 
                       <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_0.9fr]">
                         <div className="rounded-xl border border-border bg-card/80 p-4">
-                          <div className="industrial-label">Pourquoi ce cas sort du prioritaire</div>
+                          <div className="industrial-label">Signal concerné</div>
                           <div className="mt-2 text-sm font-semibold text-foreground">
                             {replaceMachineCodesForDisplay(leadSignal?.title ?? "Signal à relire")}
                           </div>
@@ -476,12 +473,12 @@ export function AlertsPage() {
                         </div>
 
                         <div className="rounded-xl border border-border bg-card/80 p-4">
-                          <div className="industrial-label">Action conseillée</div>
+                          <div className="industrial-label">Action terrain</div>
                           <div className="mt-2 text-sm font-semibold text-foreground">
-                            Relire puis acquitter si le terrain confirme le retour a la normale.
+                            Vérifier puis clôturer si le retour à la normale est confirmé.
                           </div>
                           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                            La trace reste visible pour audit.
+                            Garder la trace seulement si vous avez besoin d'historique.
                           </p>
                         </div>
                       </div>
@@ -518,7 +515,7 @@ export function AlertsPage() {
                         <div>
                           <div className="industrial-label">Signaux actifs</div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Ouverts dans la trace, hors priorite immediate.
+                            Encore ouverts, sans urgence immédiate.
                           </p>
                         </div>
                         {isAdmin ? (
@@ -551,9 +548,6 @@ export function AlertsPage() {
                                     {replaceMachineCodesForDisplay(signal.title)}
                                   </span>
                                 </div>
-                                <span className="text-[0.7rem] text-muted-foreground">
-                                  {formatAlertTimestamp(signal.latestTimestamp)}
-                                </span>
                               </div>
 
                               {signal.message && signal.message !== signal.title ? (
