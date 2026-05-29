@@ -19,7 +19,7 @@ import sys
 import os
 import time
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,7 @@ from core.demo_context import (
     get_demo_scenario,
     iter_demo_calibration_seeds,
 )
+from core.labview_demo import build_labview_demo_samples
 from core.supabase_client import get_supabase
 from ml.engine_manager import get_manager
 from routers.seuils import get_alert_recipients
@@ -71,6 +72,7 @@ _state: dict = {
     "running": False,
     "speed": 60,
     "tick": 0,
+    "demo_mode": True,
     "machines": {},
 }
 
@@ -148,6 +150,62 @@ DEMO_STAGE_CONFIG = _build_demo_stage_config()
 
 DEMO_SEED_BASE = 20260427
 
+# ARO-01 stays the product's future real machine, but simulator mode can feed
+# it with LabVIEW-style telemetry so the live runtime exposes the same pages
+# and derived metrics during the demo.
+REAL_MACHINE_SIM_STAGE_CONFIG: dict[str, dict[str, object]] = {
+    "ARO-01": {
+        "machine_name": "Machine AroTeq",
+        "site": "Ben Arous",
+        "scenario_name": "surveillance",
+        "profile": "B_quadratic",
+        "base_load_kg": 90,
+        "load_band_kg": (0, 180),
+        "bootstrap_ticks": 3600,
+        "public_ticks": 7200,
+        "seed": DEMO_SEED_BASE + 17,
+        "target_runtime_hi": 0.62,
+        "cycles_per_day": 360.0,
+        "power_avg_30j_kw": 1.38,
+        "scenario": {
+            "site": "Ben Arous",
+            "health_state": "surveillance",
+            "health_label": "Sous surveillance",
+            "usage_case": (
+                "Telemetrie CSV representative du futur flux PLC / LabVIEW vers la "
+                "machine AroTeq."
+            ),
+            "explanation": (
+                "La simulation alimente ARO-01 avec le meme type de mesures que le "
+                "relais CSV prevu, afin d'afficher capteurs, HI, RUL et facteurs "
+                "sur le meme parcours produit."
+            ),
+            "profile": "B_quadratic",
+            "base_load_kg": 90,
+            "load_pattern": "csv_bridge_surveillance",
+            "load_band_kg": (0, 180),
+            "target_hi": 0.62,
+            "public_ticks": 7200,
+            "cycles_per_day": 360.0,
+            "power_avg_30j_kw": 1.38,
+            "temp_bias_c": 1.2,
+            "humidity_bias_rh": 6.0,
+            "usage_intensity": 0.48,
+            "wear_level": 0.38,
+            "thermal_stress": 0.34,
+            "humidity_stress": 0.32,
+            "load_variability": 0.30,
+            "vibration_bias_mms": 0.18,
+            "overload_bias": 0.14,
+            "reference_rul_days": 126,
+        },
+    }
+}
+
+SIMULATOR_DEMO_MODE_CODES = MACHINE_CODES + [
+    code for code in REAL_MACHINE_SIM_STAGE_CONFIG if code not in MACHINE_CODES
+]
+
 # Calibrated replay starts expressed in trajectory ticks.
 #
 # These are not UI placeholders: they are the points where the public replay
@@ -218,16 +276,46 @@ def _persisted_status_from_zone(zone: str | None, hi: float | None = None) -> st
     return "critical"
 
 
-def _refresh_demo_machine_cache(manager) -> list[str]:
-    """Refresh demo-machine UUIDs from Supabase before a replay starts."""
+def _get_simulator_machine_codes(*, demo_mode: bool) -> list[str]:
+    return list(SIMULATOR_DEMO_MODE_CODES if demo_mode else MACHINE_CODES)
+
+
+def _get_simulator_stage_config(
+    code: str,
+) -> dict[str, float | int | str | tuple[int, int]] | None:
+    cfg = DEMO_STAGE_CONFIG.get(code)
+    if cfg is not None:
+        return cfg
+
+    extra_cfg = REAL_MACHINE_SIM_STAGE_CONFIG.get(code)
+    if extra_cfg is None:
+        return None
+
+    return {
+        "profile": str(extra_cfg["profile"]),
+        "base_load_kg": int(extra_cfg["base_load_kg"]),
+        "load_band_kg": tuple(extra_cfg["load_band_kg"]),  # type: ignore[arg-type]
+        "target_hi": float(extra_cfg["target_runtime_hi"]),
+        "public_ticks": int(extra_cfg["public_ticks"]),
+        "cycles_per_day": float(extra_cfg["cycles_per_day"]),
+        "power_avg_30j_kw": float(extra_cfg["power_avg_30j_kw"]),
+    }
+
+
+def _get_simulator_display_scenario(code: str):
+    return get_demo_scenario(code) or REAL_MACHINE_SIM_STAGE_CONFIG.get(code, {}).get("scenario")
+
+
+def _refresh_simulator_machine_cache(manager, *, demo_mode: bool) -> list[str]:
+    """Refresh simulator-machine UUIDs from Supabase before a replay starts."""
     try:
         sb = get_supabase()
     except Exception as exc:
-        logger.warning("Simulator: demo machine cache refresh skipped (%s)", exc)
+        logger.warning("Simulator: machine cache refresh skipped (%s)", exc)
         return []
 
     refreshed: list[str] = []
-    for code in MACHINE_CODES:
+    for code in _get_simulator_machine_codes(demo_mode=demo_mode):
         try:
             result = (
                 sb.table("machines")
@@ -252,7 +340,7 @@ def _refresh_demo_machine_cache(manager) -> list[str]:
         refreshed.append(code)
 
     if refreshed:
-        logger.info("Simulator: refreshed demo machine cache for %s", ", ".join(refreshed))
+        logger.info("Simulator: refreshed machine cache for %s", ", ".join(refreshed))
     return refreshed
 
 
@@ -697,6 +785,72 @@ def _get_demo_trajectories() -> dict[str, dict]:
         return generated
 
 
+def _build_real_machine_simulator_trajectories() -> dict[str, dict]:
+    """Build deterministic replay slices for real-machine demo slots."""
+    scenarios: dict[str, dict] = {}
+
+    for code, cfg in REAL_MACHINE_SIM_STAGE_CONFIG.items():
+        bootstrap_ticks = int(cfg["bootstrap_ticks"])
+        public_ticks = int(cfg["public_ticks"])
+        total_ticks = bootstrap_ticks + public_ticks
+        samples = build_labview_demo_samples(
+            machine_id=code,
+            scenario=str(cfg["scenario_name"]),
+            profile=str(cfg["profile"]),
+            duration_s=total_ticks,
+            seed=int(cfg["seed"]),
+            source="simulator_demo",
+        )
+        if not samples:
+            continue
+
+        warmup_samples = samples[:bootstrap_ticks]
+        public_samples = samples[bootstrap_ticks:]
+        warmup_df = pd.DataFrame(warmup_samples)
+        public_df = pd.DataFrame(public_samples)
+
+        for frame in (warmup_df, public_df):
+            if frame.empty:
+                continue
+            frame["rms_mms"] = frame["vibration_mm_s"].astype(float)
+            frame["power_kw"] = frame["motor_power"].astype(float)
+            frame["temp_c"] = frame["temperature"].astype(float)
+            frame["humidity_rh"] = frame["humidity"].astype(float)
+            frame["load_kg"] = frame["charge"].astype(float)
+            frame["current_a"] = frame["current"].astype(float)
+            frame["status"] = frame["state"].astype(str)
+
+        if not warmup_df.empty:
+            warmup_end = datetime.now(timezone.utc)
+            warmup_start = warmup_end - timedelta(seconds=max(len(warmup_df) - 1, 0))
+            warmup_df["observed_at"] = [
+                (warmup_start + timedelta(seconds=idx)).isoformat()
+                for idx in range(len(warmup_df))
+            ]
+
+        scenarios[code] = {
+            "warmup": warmup_df,
+            "public": public_df,
+            "profile": str(cfg["profile"]),
+            "load_kg": int(cfg["base_load_kg"]),
+            "bootstrap_start_tick": 0,
+            "start_tick": bootstrap_ticks,
+            "target_runtime_hi": float(cfg["target_runtime_hi"]),
+            "scenario": _get_simulator_display_scenario(code),
+            "rul_seed_hi_history": [],
+        }
+
+        logger.info(
+            "  %s: LabVIEW-style replay, bootstrap %d s, public %d s, target HI %.3f",
+            code,
+            bootstrap_ticks,
+            public_ticks,
+            float(cfg["target_runtime_hi"]),
+        )
+
+    return scenarios
+
+
 def _schedule_demo_prewarm() -> None:
     global _demo_prewarm_task
 
@@ -759,14 +913,54 @@ def _shape_demo_raw(prev_raw: dict | None, row) -> dict:
     }
 
 
-def _bootstrap_demo_histories(manager) -> tuple[dict[str, dict], dict[str, dict | None]]:
-    """Prepare deterministic demo scenarios and seed recent engine context.
+def _shape_labview_real_machine_raw(prev_raw: dict | None, row) -> dict:
+    """Keep the future PLC/LabVIEW replay smooth for the runtime engine."""
+    observed_at = str(row.get("observed_at") or datetime.now(timezone.utc).isoformat())
+    current_a = float(row.get("current_a", row.get("current", 0.0)) or 0.0)
+    raw = {
+        "rms_mms": float(row["rms_mms"]),
+        "power_kw": float(row["power_kw"]),
+        "temp_c": float(row["temp_c"]),
+        "humidity_rh": float(row["humidity_rh"]),
+        "load_kg": float(row.get("load_kg", row.get("charge", 0.0))),
+        "current_a": current_a,
+        "vibration_rms": float(row.get("vibration_rms", row["rms_mms"])),
+        "status": str(row.get("status", "SIMULATED")),
+        "source": "simulator_demo",
+        "observed_at": observed_at,
+    }
+    if prev_raw is None:
+        return raw
+
+    prev_current = float(prev_raw.get("current_a", current_a))
+    return {
+        "rms_mms": prev_raw["rms_mms"] + float(np.clip(raw["rms_mms"] - prev_raw["rms_mms"], -0.22, 0.22)),
+        "power_kw": prev_raw["power_kw"] + float(np.clip(raw["power_kw"] - prev_raw["power_kw"], -0.25, 0.25)),
+        "temp_c": prev_raw["temp_c"] + float(np.clip(raw["temp_c"] - prev_raw["temp_c"], -0.12, 0.12)),
+        "humidity_rh": prev_raw["humidity_rh"] + float(np.clip(raw["humidity_rh"] - prev_raw["humidity_rh"], -0.75, 0.75)),
+        "load_kg": raw["load_kg"],
+        "current_a": prev_current + float(np.clip(current_a - prev_current, -0.20, 0.20)),
+        "vibration_rms": raw["vibration_rms"],
+        "status": raw["status"],
+        "source": "simulator_demo",
+        "observed_at": observed_at,
+    }
+
+
+def _shape_simulator_raw(prev_raw: dict | None, row) -> dict:
+    if "vibration_mm_s" in row or "motor_power" in row:
+        return _shape_labview_real_machine_raw(prev_raw, row)
+    return _shape_demo_raw(prev_raw, row)
+
+
+def _bootstrap_simulator_histories(manager) -> tuple[dict[str, dict], dict[str, dict | None]]:
+    """Prepare deterministic simulator scenarios and seed recent engine context.
 
     The engine only remembers a bounded recent history, so we bootstrap that
     finite context instead of replaying full trajectories from tick 0. This
     keeps the ML computation path intact while making demo startup practical.
     """
-    scenarios = _get_demo_trajectories()
+    scenarios = {**_get_demo_trajectories(), **_build_real_machine_simulator_trajectories()}
     prev_raw_by_code: dict[str, dict | None] = {}
 
     logger.info("Simulator: seeding engines from recent pre-start telemetry")
@@ -777,7 +971,7 @@ def _bootstrap_demo_histories(manager) -> tuple[dict[str, dict], dict[str, dict 
         raw_history: list[dict] = []
         prev_raw = None
         for row in info["warmup"].to_dict("records"):
-            raw = _shape_demo_raw(prev_raw, row)
+            raw = _shape_simulator_raw(prev_raw, row)
             prev_raw = raw
             raw_history.append(raw)
 
@@ -802,7 +996,7 @@ def _bootstrap_demo_histories(manager) -> tuple[dict[str, dict], dict[str, dict 
                     if code in manager.last_results:
                         manager.last_results[code]["buffer_hi_len"] = len(engine.buffer_hi_smooth)
             warmup_df = info["warmup"]
-            if len(warmup_df) > 0:
+            if code in DEMO_STAGE_CONFIG and len(warmup_df) > 0 and "simulated_hi" in warmup_df.columns:
                 _apply_demo_display_override(
                     manager,
                     code,
@@ -812,25 +1006,31 @@ def _bootstrap_demo_histories(manager) -> tuple[dict[str, dict], dict[str, dict 
         else:
             prev_raw_by_code[code] = None
 
-        cfg = DEMO_STAGE_CONFIG[code]
-        manager.set_cycles_per_day_override(code, float(cfg["cycles_per_day"]))
+        cfg = _get_simulator_stage_config(code) or {}
+        cycles_per_day = cfg.get("cycles_per_day")
+        power_avg = cfg.get("power_avg_30j_kw")
+        if cycles_per_day is not None:
+            manager.set_cycles_per_day_override(code, float(cycles_per_day))
         cached = manager.machine_cache.setdefault(code, {})
-        cached["power_avg_30j"] = float(cfg["power_avg_30j_kw"])
-        cached["cycles_avg_7j"] = float(cfg["cycles_per_day"])
+        if power_avg is not None:
+            cached["power_avg_30j"] = float(power_avg)
+        if cycles_per_day is not None:
+            cached["cycles_avg_7j"] = float(cycles_per_day)
 
-        logger.info(
-            "  Demo seed for %s: seeded %d context ticks, cycles/day=%.0f, P_avg_30j=%.2f kW",
-            code,
-            len(raw_history),
-            float(cfg["cycles_per_day"]),
-            float(cfg["power_avg_30j_kw"]),
-        )
+        if cycles_per_day is not None and power_avg is not None:
+            logger.info(
+                "  Replay seed for %s: seeded %d context ticks, cycles/day=%.0f, P_avg_30j=%.2f kW",
+                code,
+                len(raw_history),
+                float(cycles_per_day),
+                float(power_avg),
+            )
 
     return scenarios, prev_raw_by_code
 
 
-def _persist_demo_machine_snapshots(manager) -> None:
-    """Persist the calibrated demo-stage state so DB-backed views stay coherent."""
+def _persist_simulator_machine_snapshots(manager) -> None:
+    """Persist simulator-stage state so DB-backed views stay coherent."""
     try:
         sb = get_supabase()
     except Exception as exc:
@@ -848,12 +1048,12 @@ def _persist_demo_machine_snapshots(manager) -> None:
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    for code in MACHINE_CODES:
+    for code in SIMULATOR_DEMO_MODE_CODES:
         machine_uuid = manager.get_uuid(code)
         if not machine_uuid:
             continue
 
-        cfg = DEMO_STAGE_CONFIG.get(code) or {}
+        cfg = _get_simulator_stage_config(code) or {}
         last = manager.last_results.get(code) or {}
         hi = last.get("hi_smooth")
         zone = last.get("zone")
@@ -1241,9 +1441,9 @@ async def _replay_loop(
 
         if demo_mode:
             scenarios, prev_raw_by_code = await asyncio.to_thread(
-                _bootstrap_demo_histories, manager
+                _bootstrap_simulator_histories, manager
             )
-            await asyncio.to_thread(_persist_demo_machine_snapshots, manager)
+            await asyncio.to_thread(_persist_simulator_machine_snapshots, manager)
 
             max_len = max(len(info["public"]) for info in scenarios.values())
             _state["machines"] = {
@@ -1287,18 +1487,22 @@ async def _replay_loop(
                         continue
 
                     row = public_df.iloc[tick].to_dict()
-                    raw = _shape_demo_raw(prev_raw_by_code.get(code), row)
+                    raw = _shape_simulator_raw(prev_raw_by_code.get(code), row)
                     prev_raw_by_code[code] = raw
                     manager.ingest(code, raw, allow_extreme=True)
-                    _apply_demo_display_override(
-                        manager,
-                        code,
-                        float(row["simulated_hi"]),
-                    )
+                    if code in DEMO_STAGE_CONFIG and row.get("simulated_hi") is not None:
+                        _apply_demo_display_override(
+                            manager,
+                            code,
+                            float(row["simulated_hi"]),
+                        )
 
                     _state["machines"][code]["current"] = tick
-                    _state["machines"][code]["simulated_hi"] = float(row["simulated_hi"])
-                    _state["machines"][code]["current_load_kg"] = float(row["load_kg"])
+                    if row.get("simulated_hi") is not None:
+                        _state["machines"][code]["simulated_hi"] = float(row["simulated_hi"])
+                    _state["machines"][code]["current_load_kg"] = float(
+                        row.get("load_kg", row.get("charge", 0.0))
+                    )
 
                 _state["tick"] = tick
 
@@ -1308,7 +1512,7 @@ async def _replay_loop(
                     await asyncio.sleep(0)
 
             _state["running"] = False
-            for code in MACHINE_CODES:
+            for code in scenarios:
                 manager.clear_cycles_per_day_override(code)
             manager.rul_overrides.clear()
             logger.info("Simulator demo replay complete — %d ticks", tick + 1)
@@ -1454,8 +1658,9 @@ async def start_simulator(speed: int = 60, reset: bool = False,
 
     # Reset engines for all machines
     manager = get_manager()
-    _refresh_demo_machine_cache(manager)
-    for code in MACHINE_CODES:
+    simulator_codes = _get_simulator_machine_codes(demo_mode=demo_mode)
+    _refresh_simulator_machine_cache(manager, demo_mode=demo_mode)
+    for code in simulator_codes:
         manager.reset(code)
 
     # If resetting, write INITIAL_HI to Supabase so next reads are consistent
@@ -1477,7 +1682,13 @@ async def start_simulator(speed: int = 60, reset: bool = False,
         except Exception as e:
             logger.warning("Could not reset Supabase HI: %s", e)
 
-    _state = {"running": True, "speed": speed, "tick": 0, "machines": {}}
+    _state = {
+        "running": True,
+        "speed": speed,
+        "tick": 0,
+        "demo_mode": demo_mode,
+        "machines": {},
+    }
     _task = asyncio.create_task(
         _replay_loop(speed, reset, demo_mode, email_notifications)
     )
@@ -1494,7 +1705,7 @@ async def start_simulator(speed: int = 60, reset: bool = False,
         "reset": reset,
         "demo_mode": demo_mode,
         "email_notifications": email_notifications,
-        "machines": MACHINE_CODES,
+        "machines": simulator_codes,
         "message": (
             f"{'Reset + ' if reset else ''}"
             f"{'Demo-stage ' if demo_mode else 'Cumulative '}run at {speed}x speed"
@@ -1526,9 +1737,10 @@ async def simulator_status(admin: CurrentUser = Depends(require_admin_or_local_d
     manager = get_manager()
     result = dict(_state)
 
-    for code in MACHINE_CODES:
+    demo_mode = bool(result.get("demo_mode", True))
+    for code in _get_simulator_machine_codes(demo_mode=demo_mode):
         result["machines"].setdefault(code, {})
-        result["machines"][code]["scenario"] = get_demo_scenario(code)
+        result["machines"][code]["scenario"] = _get_simulator_display_scenario(code)
         last = manager.last_results.get(code)
         if last:
             result["machines"][code]["hi_smooth"] = last.get("hi_smooth")

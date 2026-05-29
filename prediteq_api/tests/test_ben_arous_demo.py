@@ -14,6 +14,12 @@ from core.auth import require_admin_or_local_demo
 from core.config import settings
 from core.labview_demo import _resolve_scenario_config, build_labview_demo_samples
 from routers.live_ingest import _apply_bootstrap_metric_overrides
+from routers.simulator import (
+    REAL_MACHINE_SIM_STAGE_CONFIG,
+    SIMULATOR_DEMO_MODE_CODES,
+    _build_real_machine_simulator_trajectories,
+    _shape_simulator_raw,
+)
 
 
 class BenArousHealthyDemoTests(unittest.TestCase):
@@ -68,6 +74,27 @@ class BootstrapMetricOverrideTests(unittest.TestCase):
         self.assertEqual(manager.machine_cache["ARO-01"]["cycles_avg_7j"], 160.0)
         self.assertEqual(manager.machine_cache["ARO-01"]["power_avg_30j"], 1.24)
         self.assertIn("metrics_updated", manager.machine_cache["ARO-01"])
+
+
+class AroTeqSimulatorReplayTests(unittest.TestCase):
+    def test_aroteq_real_machine_joins_demo_mode_simulator(self):
+        self.assertIn("ARO-01", SIMULATOR_DEMO_MODE_CODES)
+
+    def test_aroteq_real_machine_replay_has_warmup_and_live_rows(self):
+        trajectories = _build_real_machine_simulator_trajectories()
+        cfg = REAL_MACHINE_SIM_STAGE_CONFIG["ARO-01"]
+        aro = trajectories["ARO-01"]
+
+        self.assertEqual(len(aro["warmup"]), int(cfg["bootstrap_ticks"]))
+        self.assertEqual(len(aro["public"]), int(cfg["public_ticks"]))
+        self.assertEqual(aro["scenario"]["health_state"], "surveillance")
+        self.assertIn("observed_at", aro["warmup"].columns)
+
+        first_public_row = aro["public"].iloc[0].to_dict()
+        raw = _shape_simulator_raw(None, first_public_row)
+        self.assertIn("current_a", raw)
+        self.assertIn("vibration_rms", raw)
+        self.assertEqual(raw["source"], "simulator_demo")
 
 
 def _make_request(client_host: str) -> Request:
