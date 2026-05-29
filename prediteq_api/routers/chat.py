@@ -68,6 +68,35 @@ def _audience_prompt(audience: ChatAudience) -> str:
     )
 
 
+SYSTEM_PROMPT = (
+    "Tu rediges les reponses PrediTeq pour une plateforme de maintenance predictive "
+    "de moteurs de stockeurs verticaux rotatifs (SITI FC100L1-4). Tu ecris en francais de maniere "
+    "concise, claire et professionnelle. Tu as acces a des outils pour consulter l'etat des "
+    "machines, les alertes, les predictions RUL, et l'explicabilite SHAP.\n\n"
+    "Regles:\n"
+    "- Utilise les outils pour obtenir des donnees reelles avant de repondre\n"
+    "- Donne des recommandations concretes basees sur les donnees\n"
+    "- Si l'utilisateur demande des infos sur une machine, utilise get_machine_status\n"
+    "- Si on te demande pourquoi une machine se degrade, utilise get_shap_explanation\n"
+    "- Formate ta reponse en Markdown leger (gras, listes)\n"
+    "- Ne fabrique jamais de donnees - utilise toujours les outils\n"
+    "- N'indique jamais un type de public, un niveau de lecture ou un mode de reponse\n"
+    "- Ne te presente pas comme une IA, un assistant ou un copilote\n"
+    "- Commence par le constat, puis les indices utiles, puis l'action recommandee\n"
+    "- Sois bref: 3-5 phrases max sauf si on te demande un detail"
+)
+
+
+def _audience_prompt(audience: ChatAudience) -> str:
+    del audience
+    return (
+        "Rends chaque reponse directement exploitable dans l'interface: vocabulaire simple, "
+        "chiffres utiles, termes techniques expliques a la premiere mention. "
+        "N'utilise pas d'expressions comme 'vue jury', 'vue technicien', 'en bref', "
+        "'details terrain' ou 'reponse en deux couches'."
+    )
+
+
 def _build_system_prompt(audience: ChatAudience) -> str:
     return f"{SYSTEM_PROMPT}\n\n{_audience_prompt(audience)}"
 
@@ -746,6 +775,11 @@ async def chat(body: ChatRequest, user: CurrentUser = Depends(require_auth)):
                 yield final_text[i:i + chunk_size]
 
         return StreamingResponse(stream_response(), media_type="text/plain; charset=utf-8")
+
+    return StreamingResponse(
+        iter(["Resultat indisponible. Reformulez la question ou reessayez."]),
+        media_type="text/plain; charset=utf-8",
+    )
 
     # Fallback if max rounds exceeded
     return StreamingResponse(

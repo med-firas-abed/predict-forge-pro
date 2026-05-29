@@ -499,9 +499,9 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
             </span>
             :{" "}
             {l(
-              "une seule version claire pour le jury et exploitable pour l'equipe maintenance.",
-              "one clear version for the jury and still usable by the maintenance team.",
-              "نسخة واحدة واضحة لهيئة التحكيم وتبقى قابلة للاستعمال من قبل فريق الصيانة.",
+              "une seule version claire avec l'essentiel, les indicateurs utiles et les actions a retenir.",
+              "one clear version with the essentials, the useful indicators, and the actions to keep in view.",
+              "نسخة واحدة واضحة تتضمن الاساسيات والمؤشرات المفيدة والاجراءات الواجب متابعتها.",
             )}
           </div>
 

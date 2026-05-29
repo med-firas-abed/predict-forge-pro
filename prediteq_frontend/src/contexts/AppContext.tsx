@@ -290,12 +290,12 @@ const TR: Record<string, TranslationEntry> = {
   "meta.diagnostics.sub": { fr: "Lecture dÃ©taillÃ©e de la machine : durÃ©e de vie restante, alertes techniques et facteurs explicatifs", en: "Detailed machine view: remaining life, technical alerts, and explanatory factors", ar: "Ù‚Ø±Ø§Ø¡Ø© Ù…ÙØµÙ„Ø© Ù„Ù„Ø¢Ù„Ø©: Ø§Ù„Ø¹Ù…Ø± Ø§Ù„Ù…ØªØ¨Ù‚ÙŠ ÙˆØ§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª Ø§Ù„ØªÙ‚Ù†ÙŠØ© ÙˆØ§Ù„Ø¹ÙˆØ§Ù…Ù„ Ø§Ù„ØªÙØ³ÙŠØ±ÙŠØ©" },
 
   // Chat widget
-  "chat.title": { fr: "Aide PrediTeq", en: "PrediTeq help", ar: "Ù…Ø³Ø§Ø¹Ø¯Ø© PrediTeq" },
-  "chat.subtitle": { fr: "Questions sur l'etat des machines", en: "Questions about machine status", ar: "Ø£Ø³Ø¦Ù„Ø© Ø­ÙˆÙ„ Ø­Ø§Ù„Ø© Ø§Ù„Ø¢Ù„Ø§Øª" },
-  "chat.greeting": { fr: "Posez une question sur vos machines.", en: "Ask a question about your machines.", ar: "Ø§Ø·Ø±Ø­ Ø³Ø¤Ø§Ù„Ø§ Ø¹Ù† Ø¢Ù„Ø§ØªÙƒ." },
-  "chat.welcome": { fr: "Bonjour. Je peux vous aider a lire l'etat des machines, les alertes et les actions de maintenance.", en: "Hello. I can help you review machine status, alerts, and maintenance actions.", ar: "Ù…Ø±Ø­Ø¨Ø§. ÙŠÙ…ÙƒÙ†Ù†ÙŠ Ù…Ø³Ø§Ø¹Ø¯ØªÙƒ ÙÙŠ Ù‚Ø±Ø§Ø¡Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ø¢Ù„Ø§Øª ÙˆØ§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª ÙˆØ¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„ØµÙŠØ§Ù†Ø©." },
-  "chat.placeholder": { fr: "Tapez votre question...", en: "Type your question...", ar: "Ø§ÙƒØªØ¨ Ø³Ø¤Ø§Ù„Ùƒ..." },
-  "chat.thinking": { fr: "RÃ©flexion...", en: "Thinking...", ar: "Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªÙÙƒÙŠØ±..." },
+  "chat.title": { fr: "Lecture rapide", en: "Quick view", ar: "Ù‚Ø±Ø§Ø¡Ø© Ø³Ø±ÙŠØ¹Ø©" },
+  "chat.subtitle": { fr: "Machines, alertes et actions", en: "Machines, alerts, and actions", ar: "Ø¢Ù„Ø§Øª ÙˆØªÙ†Ø¨ÙŠÙ‡Ø§Øª ÙˆØ¥Ø¬Ø±Ø§Ø¡Ø§Øª" },
+  "chat.greeting": { fr: "Question sur une machine, une alerte ou une action.", en: "Question about a machine, an alert, or an action.", ar: "Ø³Ø¤Ø§Ù„ Ø­ÙˆÙ„ Ø¢Ù„Ø© Ø£Ùˆ ØªÙ†Ø¨ÙŠÙ‡ Ø£Ùˆ Ø¥Ø¬Ø±Ø§Ø¡." },
+  "chat.welcome": { fr: "Etat des machines, alertes et actions disponibles.", en: "Machine status, alerts, and actions available.", ar: "Ø­Ø§Ù„Ø© Ø§Ù„Ø¢Ù„Ø§Øª ÙˆØ§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª ÙˆØ§Ù„Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ù…ØªØ§Ø­Ø©." },
+  "chat.placeholder": { fr: "Question sur une machine ou une alerte...", en: "Question about a machine or an alert...", ar: "Ø³Ø¤Ø§Ù„ Ø­ÙˆÙ„ Ø¢Ù„Ø© Ø£Ùˆ ØªÙ†Ø¨ÙŠÙ‡..." },
+  "chat.thinking": { fr: "Chargement...", en: "Loading...", ar: "Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­Ù…ÙŠÙ„..." },
 
   // Planner
   "planner.title": { fr: "Plan d'action maintenance", en: "Maintenance action plan", ar: "Ø®Ø·Ø© Ø£Ø¹Ù…Ø§Ù„ Ø§Ù„ØµÙŠØ§Ù†Ø©" },

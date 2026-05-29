@@ -39,7 +39,7 @@ export function ResilienceBanner() {
 
   const detail = [
     capabilities.machine_reads === "cached_only" ? "lecture depuis le cache" : null,
-    capabilities.ai_reports === "local_fallback" ? "rapport IA local" : null,
+    capabilities.ai_reports === "local_fallback" ? "rapport local" : null,
     capabilities.planner === "local_fallback" ? "planificateur local" : null,
     capabilities.live_telemetry === "stale_only" ? "telemetrie figee" : null,
   ]

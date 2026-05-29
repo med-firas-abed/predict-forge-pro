@@ -62,6 +62,24 @@ def _audience_label(audience: ReportAudience) -> str:
     }[audience]
 
 
+SYSTEM_PROMPT = (
+    "Tu rediges les rapports PrediTeq de maintenance predictive industrielle. "
+    "Genere un rapport structure en francais avec des titres clairs, des recommandations concretes, "
+    "des donnees chiffrees utiles et un format Markdown lisible. "
+    "N'indique jamais un type de public, un niveau de lecture ou une separation entre version simple et version technique."
+)
+
+
+def _audience_prompt(audience: ReportAudience) -> str:
+    del audience
+    return (
+        "Rends le rapport utile a la lecture immediate comme a l'action: commence par la situation "
+        "actuelle, puis les indicateurs, puis les actions recommandees. "
+        "Explique les acronymes au premier usage et n'utilise pas d'expressions comme "
+        "'vue jury', 'vue technicien', 'resume executif simple' ou 'annexe technique'."
+    )
+
+
 class ReportRequest(BaseModel):
     machine_id: str  # machine code (e.g. ARO-01 or ASC-A1)
     audience: ReportAudience = "dual"
@@ -359,6 +377,7 @@ async def auto_generate_report(body: AutoReportRequest,
         now = datetime.now(timezone.utc)
         machine_part = get_machine_public_label(machine_code) if machine_code else "Toutes les machines"
         period_label = _period_label(body.period, body.lang)
+        body.audience = "dual"
         if body.audience != "dual":
             period_label = f"{period_label} - {_audience_label(body.audience)}"
         titre = f"Rapport {period_label} — {machine_part} — {now.strftime('%d/%m/%Y %H:%M')}"

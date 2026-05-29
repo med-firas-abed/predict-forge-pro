@@ -466,8 +466,6 @@ def generate_report(
         return _t("no_data", lang)
 
     title = f"{_t('title_report', lang)} - {_period_label(period, lang)}"
-    if audience != "dual":
-        title = f"{title} - {_audience_label(audience, lang)}"
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     try:
         thresholds = get_thresholds()
@@ -583,6 +581,11 @@ def generate_report(
             "en": "Simple reading by machine",
             "ar": "Simple reading by machine",
         }[lang]
+        simple_title = {
+            "fr": "Situation par machine",
+            "en": "Machine status overview",
+            "ar": "Machine status overview",
+        }[lang]
         _a(f"## {section_cursor}. {simple_title}\n")
         section_cursor += 1
 
@@ -623,6 +626,11 @@ def generate_report(
             "fr": "Annexe technique",
             "en": "Technical appendix",
             "ar": "Technical appendix",
+        }[lang]
+        appendix_title = {
+            "fr": "Indicateurs detailles",
+            "en": "Detailed indicators",
+            "ar": "Detailed indicators",
         }[lang]
         _a(f"## {section_cursor}. {appendix_title}\n")
         section_cursor += 1
@@ -986,6 +994,11 @@ def _draw_pdf_cover(
         "fr": "Rapport IA exporte avec mise en forme professionnelle pour partage client et jury.",
         "en": "AI report exported with professional client-ready formatting.",
         "ar": "AI report exported with professional client-ready formatting.",
+    }[lang]
+    subtitle = {
+        "fr": "Rapport exporte avec mise en forme professionnelle.",
+        "en": "Report exported with professional formatting.",
+        "ar": "Report exported with professional formatting.",
     }[lang]
     pdf.set_font(font_family, "", 11)
     pdf.set_text_color(71, 85, 105)

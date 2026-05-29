@@ -23,17 +23,21 @@ vi.mock("@/lib/api", () => ({
   apiStream: (...args: unknown[]) => apiStreamMock(...args),
 }));
 
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 describe("ChatWidget", () => {
   beforeEach(() => {
     useAppMock.mockReturnValue({
       lang: "fr",
       t: (key: string) =>
         ({
-          "chat.title": "Aide PrediTeq",
-          "chat.subtitle": "Questions sur l'etat des machines",
-          "chat.welcome": "Bonjour, je peux vous aider.",
-          "chat.thinking": "Reflexion...",
-          "chat.placeholder": "Votre question",
+          "chat.title": "Lecture rapide",
+          "chat.subtitle": "Machines, alertes et actions",
+          "chat.welcome": "Etat des machines, alertes et actions disponibles.",
+          "chat.thinking": "Chargement...",
+          "chat.placeholder": "Question sur une machine ou une alerte...",
         })[key] ?? key,
     });
 
@@ -74,17 +78,17 @@ describe("ChatWidget", () => {
 
     render(<ChatWidget />);
 
-    fireEvent.click(screen.getByRole("button", { name: /aide prediteq/i }));
+    fireEvent.click(screen.getByRole("button", { name: /lecture rapide/i }));
 
-    expect(screen.queryByText(/Machine 2/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Machine prioritaire aujourd'hui/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Explique Machine (3|ARO-01) clairement/i),
+      screen.getByText((content) => /^etat de machine (3|aro-01)$/i.test(normalizeText(content))),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Pourquoi Machine (3|ARO-01) est prioritaire \?/i),
+      screen.getByText(/Cause principale pour Machine (3|ARO-01)/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Resumer .* flotte/i),
+      screen.getByText((content) => /^etat general de la flotte$/i.test(normalizeText(content))),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Technicien" }),
@@ -102,9 +106,9 @@ describe("ChatWidget", () => {
 
       render(<ChatWidget />);
 
-      fireEvent.click(screen.getByRole("button", { name: /aide prediteq/i }));
+      fireEvent.click(screen.getByRole("button", { name: /lecture rapide/i }));
 
-      const input = screen.getByPlaceholderText("Votre question");
+      const input = screen.getByPlaceholderText("Question sur une machine ou une alerte...");
       fireEvent.change(input, { target: { value: "Quelle machine est prioritaire ?" } });
       fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
 
@@ -114,7 +118,7 @@ describe("ChatWidget", () => {
         ).toBeInTheDocument();
       });
 
-      expect(screen.queryByText("Reflexion...")).not.toBeInTheDocument();
+      expect(screen.queryByText("Chargement...")).not.toBeInTheDocument();
     } finally {
       consoleErrorSpy.mockRestore();
     }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Bot, Loader2, Send, Sparkles, User, X } from "lucide-react";
+import { ArrowUpRight, Bot, Loader2, Send, User, X } from "lucide-react";
 import { apiStream } from "@/lib/api";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -147,9 +147,9 @@ export function ChatWidget() {
       if (!assistantText.trim()) {
         upsertAssistantMessage(
           l(
-            "Aucune reponse n'a ete renvoyee. Veuillez reessayer.",
-            "No reply was returned. Please try again.",
-            "No reply was returned. Please try again.",
+            "Aucun resultat disponible. Veuillez reessayer.",
+            "No result available. Please try again.",
+            "No result available. Please try again.",
           ),
         );
       }
@@ -168,43 +168,43 @@ export function ChatWidget() {
   };
 
   const helperText = l(
-    "Reponses claires avec l'essentiel d'abord, puis le detail utile.",
-    "Clear answers with the key point first, then the useful detail.",
-    "Clear answers with the key point first, then the useful detail.",
+    "Flotte, alertes, causes probables et actions recommandees.",
+    "Fleet status, alerts, likely causes, and recommended actions.",
+    "Fleet status, alerts, likely causes, and recommended actions.",
   );
 
   const suggestions = [
     l(
-      "Quelle machine demande de l'attention aujourd'hui ?",
-      "Which machine needs attention today?",
-      "Which machine needs attention today?",
+      "Machine prioritaire aujourd'hui",
+      "Priority machine today",
+      "Priority machine today",
     ),
     primaryMachineLabel
       ? l(
-          `Explique ${primaryMachineLabel} clairement`,
-          `Explain ${primaryMachineLabel} clearly`,
-          `Explain ${primaryMachineLabel} clearly`,
+          `Etat de ${primaryMachineLabel}`,
+          `Status of ${primaryMachineLabel}`,
+          `Status of ${primaryMachineLabel}`,
         )
       : l(
-          "Explique la machine la plus sensible clairement",
-          "Explain the most sensitive machine clearly",
-          "Explain the most sensitive machine clearly",
+          "Etat de la machine la plus sensible",
+          "Status of the most sensitive machine",
+          "Status of the most sensitive machine",
         ),
     l(
-      "Resumer l'etat de la flotte",
-      "Summarize the fleet status",
-      "Summarize the fleet status",
+      "Etat general de la flotte",
+      "Overall fleet status",
+      "Overall fleet status",
     ),
     primaryMachineLabel
       ? l(
-          `Pourquoi ${primaryMachineLabel} est prioritaire ?`,
-          `Why is ${primaryMachineLabel} the priority?`,
-          `Why is ${primaryMachineLabel} the priority?`,
+          `Cause principale pour ${primaryMachineLabel}`,
+          `Main cause for ${primaryMachineLabel}`,
+          `Main cause for ${primaryMachineLabel}`,
         )
       : l(
-          "Pourquoi la machine prioritaire demande de l'attention ?",
-          "Why does the priority machine need attention?",
-          "Why does the priority machine need attention?",
+          "Cause principale de la priorite",
+          "Main cause of the priority",
+          "Main cause of the priority",
         ),
   ];
   const fallbackPriorityLabel = l(
@@ -240,9 +240,8 @@ export function ChatWidget() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full border border-primary/12 bg-primary/10 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary">
-                  <Sparkles className="h-3 w-3" />
-                  Guide PrediTeq
+                <span className="inline-flex items-center rounded-full border border-primary/12 bg-primary/10 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary">
+                  PrediTeq
                 </span>
               </div>
               <div className="truncate text-sm font-semibold text-foreground">
@@ -269,9 +268,8 @@ export function ChatWidget() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <div className="text-[0.96rem] font-semibold text-foreground">{t("chat.title")}</div>
-                <span className="inline-flex items-center gap-1 rounded-full border border-primary/12 bg-primary/10 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary">
-                  <Sparkles className="h-3 w-3" />
-                  Guide PrediTeq
+                <span className="inline-flex items-center rounded-full border border-primary/12 bg-primary/10 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary">
+                  PrediTeq
                 </span>
               </div>
               <div className="mt-0.5 text-[0.76rem] leading-5 text-muted-foreground">{t("chat.subtitle")}</div>
@@ -279,7 +277,7 @@ export function ChatWidget() {
             </div>
             <button
               onClick={() => setOpen(false)}
-              aria-label="Fermer le chat"
+              aria-label="Fermer le panneau"
               className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
@@ -291,7 +289,7 @@ export function ChatWidget() {
               <div className="space-y-4">
                 <div className="rounded-[1.35rem] border border-primary/10 bg-[linear-gradient(135deg,rgba(15,118,110,0.08),rgba(255,255,255,0.02))] px-5 py-4 text-left shadow-sm">
                   <div className="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-primary/80">
-                    Guide PrediTeq
+                    PrediTeq
                   </div>
                   <p className="text-[0.95rem] leading-7 text-foreground/88">{t("chat.welcome")}</p>
                   <p className="mt-3 text-[0.82rem] leading-6 text-muted-foreground">{helperText}</p>
@@ -325,7 +323,7 @@ export function ChatWidget() {
                 )}
                 <div className={`flex max-w-[86%] flex-col gap-1.5 ${message.role === "user" ? "items-end" : "items-start"}`}>
                   <div className="px-1 text-[0.68rem] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
-                    {message.role === "user" ? "Vous" : "Guide PrediTeq"}
+                    {message.role === "user" ? "Vous" : "PrediTeq"}
                   </div>
                   <div
                     className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-[0.95rem] leading-7 ${
@@ -357,7 +355,7 @@ export function ChatWidget() {
                 </div>
                 <div className="flex max-w-[86%] flex-col gap-1.5">
                   <div className="px-1 text-[0.68rem] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
-                    Guide PrediTeq
+                    PrediTeq
                   </div>
                   <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/90 px-4 py-3 text-[0.92rem] leading-6 text-muted-foreground shadow-sm">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
