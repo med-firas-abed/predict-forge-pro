@@ -312,34 +312,34 @@ export function SimulatorPage() {
         <div className="mb-5 flex items-center gap-3">
           <Activity className="h-5 w-5 text-primary" />
           <h2 className="section-title">
-            {l("Piloter la démo", "Simulator control", "Simulator control")}
+            {l("Pilotage du simulateur", "Simulator control", "Simulator control")}
           </h2>
         </div>
 
         <p className="mb-5 text-sm text-muted-foreground">
           {l(
-            "Lancez le replay puis suivez HI, RUL et action conseillée pour chaque machine.",
-            "Start the replay, then follow HI, RUL, and the suggested action for each machine.",
-            "Start the replay, then follow HI, RUL, and the suggested action for each machine.",
+            "Demarrez la simulation puis suivez HI, RUL et l'action recommandee pour chaque machine.",
+            "Start the simulation, then follow HI, RUL, and the recommended action for each machine.",
+            "Start the simulation, then follow HI, RUL, and the recommended action for each machine.",
           )}
         </p>
 
         <div className="mb-5 rounded-xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
           <span className="font-semibold text-foreground">
-            {l("Logique de calcul", "Computation logic", "Computation logic")}
+            {l("Source des valeurs", "Displayed source", "Displayed source")}
           </span>
           :{" "}
           {l(
-            "Aujourd'hui : replay démo. Demain : même pipeline sur mesures réelles.",
-            "Today: calibrated demo replay. Later: the same pipeline with live measurements.",
-            "Today: calibrated demo replay. Later: the same pipeline with live measurements.",
+            "Les indicateurs affiches proviennent de la simulation en cours pour chaque machine.",
+            "The displayed indicators come from the current simulation for each machine.",
+            "The displayed indicators come from the current simulation for each machine.",
           )}
         </div>
 
         {demoStoryMachines.length > 0 && (
           <div className="mb-5 rounded-xl border border-border bg-surface-3 p-4">
             <div className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
-              {l("Scénarios guidés", "Guided scenarios", "Guided scenarios")}
+              {l("Profils machines", "Machine profiles", "Machine profiles")}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {demoStoryMachines.map((story) => {
@@ -363,9 +363,9 @@ export function SimulatorPage() {
             </div>
             <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
               {l(
-                "Raccourcis : stable, surveillance, critique.",
-                "Three shortcuts: stable, watch, critical.",
-                "Three shortcuts: stable, watch, critical.",
+                "Choisissez un profil machine a afficher en priorite.",
+                "Choose the machine profile to focus on first.",
+                "Choose the machine profile to focus on first.",
               )}
             </div>
           </div>
@@ -482,9 +482,9 @@ export function SimulatorPage() {
           {isBootstrapping && (
             <div className="mt-3 text-xs font-semibold text-primary">
               {l(
-                "Contexte en stabilisation. HI et RUL arrivent.",
-                "The context is stabilizing. HI and RUL will appear progressively.",
-                "The context is stabilizing. HI and RUL will appear progressively.",
+                "Initialisation en cours. Les indicateurs vont s'afficher.",
+                "Initialization in progress. Indicators will appear shortly.",
+                "Initialization in progress. Indicators will appear shortly.",
               )}
             </div>
           )}
@@ -492,9 +492,9 @@ export function SimulatorPage() {
           {simulator.isActive && !isBootstrapping && (
             <div className="mt-3 text-xs font-semibold text-success">
               {l(
-                "Simulation active. Pausez ou attendez la fin pour relancer.",
-                "Simulation active. Pause or wait for the end before restarting.",
-                "Simulation active. Pause or wait for the end before restarting.",
+                "Simulation en cours. Utilisez Pause pour l'arreter.",
+                "Simulation is running. Use Pause to stop it.",
+                "Simulation is running. Use Pause to stop it.",
               )}
             </div>
           )}
@@ -692,9 +692,9 @@ export function SimulatorPage() {
                             {currentLoad != null
                               ? `${l("Charge instantanée", "Live load", "Live load")}: ${currentLoad.toFixed(0)} kg`
                               : l(
-                                  "La decision se precise quand le runtime publie la lecture.",
-                                  "The decision becomes clearer when the runtime publishes the reading.",
-                                  "The decision becomes clearer when the runtime publishes the reading.",
+                                  "L'action sera mise a jour des que la mesure sera disponible.",
+                                  "The action will update as soon as the measurement is available.",
+                                  "The action will update as soon as the measurement is available.",
                                 )}
                           </div>
                         </div>

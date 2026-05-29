@@ -11,7 +11,7 @@ const FRENCH_PHRASE_REPLACEMENTS: Array<[RegExp, string]> = [
     /aucun signe precurseur fort de degradation rapide n'est observe/gi,
     "aucun signe précurseur fort de dégradation rapide n'est observé",
   ],
-  [/source simulator_demo/gi, "source replay démo calibré"],
+  [/source simulator_demo/gi, "source simulée"],
   [/référence l10/gi, "référence stable de durée de vie"],
   [/health index/gi, "indice de santé"],
   [/source live_runtime/gi, "source flux en direct"],

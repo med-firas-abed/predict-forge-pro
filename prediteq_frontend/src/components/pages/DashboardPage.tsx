@@ -560,15 +560,15 @@ export function DashboardPage() {
     selectedInsight?.dataSource === "live_runtime"
       ? l("Flux en direct", "Live stream", "Flux en direct")
       : selectedInsight?.dataSource === "simulator_demo"
-        ? l("Replay démo calibré", "Calibrated demo replay", "Replay démo calibré")
+        ? l("Source simulée", "Simulated source", "Source simulée")
         : selectedInsight?.dataSource === "persisted_reference"
           ? l("Référence persistée", "Reference snapshot", "Référence persistée")
           : l("Flux en attente", "Waiting for stream", "Flux en attente");
   const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
   const demoPipelineNote = l(
-    "Lecture issue du replay démo. Même chaîne prévue avec mesures réelles.",
-    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
-    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
+    "Lecture simulee calibree pour cette machine.",
+    "Calibrated simulated reading for this machine.",
+    "Calibrated simulated reading for this machine.",
   );
   const freshnessLabel =
     selectedInsight?.updatedAt != null
@@ -1063,13 +1063,13 @@ export function DashboardPage() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
-              <div className="section-title">{l("Mode démo", "Demo mode", "ÙˆØ¶Ø¹ Ø§Ù„Ø¹Ø±Ø¶")}</div>
+              <div className="section-title">{l("Mode simulateur", "Simulator mode", "Simulator mode")}</div>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               {l(
-                "Lancez le replay démo. Même logique prévue sur mesures réelles.",
-                "Launch the calibrated demo replay here. The simulator then feeds the dashboard, diagnostics, and alerts with the same logic planned for real measurements.",
-                "Launch the calibrated demo replay here. The simulator then feeds the dashboard, diagnostics, and alerts with the same logic planned for real measurements.",
+                "Demarrez le simulateur pour alimenter le tableau de bord, le diagnostic et les alertes.",
+                "Start the simulator to feed the dashboard, diagnostics, and alerts.",
+                "Start the simulator to feed the dashboard, diagnostics, and alerts.",
               )}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">

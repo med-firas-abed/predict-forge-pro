@@ -363,15 +363,15 @@ export function DiagnosticsPage() {
     selectedInsight?.dataSource === "live_runtime"
       ? l("Flux en direct", "Live stream", "Live stream")
       : selectedInsight?.dataSource === "simulator_demo"
-        ? l("Replay démo calibré", "Calibrated demo replay", "Calibrated demo replay")
+        ? l("Source simulée", "Simulated source", "Simulated source")
         : selectedInsight?.dataSource === "persisted_reference"
           ? l("Référence persistée", "Reference snapshot", "Reference snapshot")
           : l("Flux en attente", "Waiting for stream", "Waiting for stream");
   const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
   const demoPipelineNote = l(
-    "Lecture issue du replay démo. Même chaîne prévue avec mesures réelles.",
-    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
-    "This reading comes from a calibrated demo replay. In real operation, the same pipeline will use live vibration, power, temperature, and humidity signals.",
+    "Lecture simulee calibree pour cette machine.",
+    "Calibrated simulated reading for this machine.",
+    "Calibrated simulated reading for this machine.",
   );
   const freshnessLabel =
     selectedInsight?.updatedAt != null

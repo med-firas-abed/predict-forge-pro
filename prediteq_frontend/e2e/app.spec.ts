@@ -1175,7 +1175,7 @@ test.describe("Authenticated app flows", () => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
     await page.goto("/simulateur");
-    await expect(page.getByRole("heading", { name: /Simulateur/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Simulateur", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /D[ée]marrer/i })).toBeVisible();
   });
 
@@ -1314,7 +1314,7 @@ test.describe("Authenticated app flows", () => {
     const simulatorMock = await mockSimulatorLifecycle(page);
 
     await page.goto("/simulateur");
-    await expect(page.getByText(/Piloter la démo/i)).toBeVisible();
+    await expect(page.getByText(/Pilotage du simulateur/i)).toBeVisible();
 
     await page.getByRole("main").getByRole("combobox").selectOption("500");
     await page.getByRole("button", { name: /Réinitialiser/i }).click();
