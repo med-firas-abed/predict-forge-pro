@@ -1185,16 +1185,14 @@ test.describe("Authenticated app flows", () => {
     await mockAlertsData(page);
     await mockPlannerCalendarFlow(page);
 
-    const repeatedTaskTitle = "Intervention corrective ASC-C3 - Vibration moteur - reprise";
+    const repeatedTaskTitle = "Intervention corrective Machine 3 - Vibration moteur - reprise";
 
     await page.goto("/planner");
     await page.getByRole("button", { name: /Lancer le plan d'action/i }).click();
 
-    await expect(page.getByText("Synthese planner backend pour la machine critique ASC-C3.")).toBeVisible();
-    await expect(page.getByText(/2 action\(s\) recente\(s\)/i)).toBeVisible();
-    await expect(
-      page.getByText(/aucune nouvelle suggestion calendrier n'est emise tant qu'elles ne sont pas cloturees/i),
-    ).toBeVisible();
+    await expect(page.getByText("Synthese planner backend pour la machine critique Machine 3.")).toBeVisible();
+    await expect(page.getByText(/2 action\(s\) r.cente\(s\)/i)).toBeVisible();
+    await expect(page.getByRole("main").getByText(/Aucune nouvelle t.che . valider/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i })).toHaveCount(0);
 
     await page.goto("/maintenance");
@@ -1236,7 +1234,7 @@ test.describe("Authenticated app flows", () => {
     await page.goto("/dashboard?machine=ASC-C3");
     await expect(page.getByRole("heading", { name: /Tableau de bord/i })).toBeVisible();
 
-    await page.getByRole("button", { name: /Contexte d'exploitation/i }).click();
+    await page.getByRole("button", { name: /Contexte sc[ée]nario|Contexte d'exploitation/i }).click();
     await expect(page.getByText(/Cadre d'exploitation/i)).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /Ouvrir le diagnostic/i }).click();
@@ -1329,7 +1327,7 @@ test.describe("Authenticated app flows", () => {
 
     await page.waitForTimeout(1200);
     await page.getByRole("button", { name: /Pause/i }).click();
-    await expect(page.getByText(/Dernière session arrêtée au pas|Last session stopped at tick/i)).toBeVisible();
+    await expect(page.getByText(/Session arr.t.e au pas|Last session stopped at tick/i)).toBeVisible();
 
     await page.getByRole("button", { name: /Rafraîchir/i }).click();
     await expect(page.getByRole("main").getByText(/^x500$/)).toBeVisible();
@@ -1347,12 +1345,14 @@ test.describe("Authenticated app flows", () => {
     await satelliteButton.click();
     await expect(satelliteButton).toHaveAttribute("aria-pressed", "true");
 
-    await page.getByRole("main").getByRole("button", { name: /Machine 3/i }).first().click();
-    await expect(page.locator(".leaflet-popup-content")).toContainText("Machine 3");
+    const machineCard = page.getByRole("main").getByRole("button", { name: /Machine 3/i }).first();
+    await machineCard.click();
+    await expect(machineCard).toHaveClass(/border-primary\/40/);
 
     const mapButton = page.getByRole("button", { name: /Plan|Map/i });
     await mapButton.click();
     await expect(mapButton).toHaveAttribute("aria-pressed", "true");
+    await expect(machineCard).toHaveClass(/border-primary\/40/);
   });
 
   test.fixme("lets admins run the experiment page over mocked Web Serial", async ({ page }) => {

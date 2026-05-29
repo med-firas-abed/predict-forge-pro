@@ -10,6 +10,11 @@ import {
   getGoogleMapsMapId,
   hasGoogleMapsApiKey,
   loadGoogleMapsApi,
+  type GoogleMapsApi,
+  type GoogleMapsInfoWindowInstance,
+  type GoogleMapsMapInstance,
+  type GoogleMapsMapOptions,
+  type GoogleMapsMarkerInstance,
 } from "@/lib/googleMapsLoader";
 import { getMachinePublicLabel } from "@/lib/machinePresentation";
 import {
@@ -91,7 +96,7 @@ function makeLeafletPinIcon(hex: string, highlighted: boolean) {
   });
 }
 
-function makeGooglePinIcon(googleMaps: any, hex: string, highlighted: boolean) {
+function makeGooglePinIcon(googleMaps: GoogleMapsApi, hex: string, highlighted: boolean) {
   const width = highlighted ? 54 : 42;
   const height = highlighted ? 62 : 50;
   const halo = highlighted
@@ -235,11 +240,11 @@ function getLeafletMachineFocusBounds(lat: number, lon: number) {
   return L.latLng(lat, lon).toBounds(MACHINE_FOCUS_RADIUS_METERS * 2);
 }
 
-function resolveGoogleMapTypeId(googleMaps: any, tileMode: TileMode) {
+function resolveGoogleMapTypeId(googleMaps: GoogleMapsApi, tileMode: TileMode) {
   return tileMode === "satellite" ? googleMaps.MapTypeId.HYBRID : googleMaps.MapTypeId.ROADMAP;
 }
 
-function clampGoogleMapZoom(map: any, zoom: number) {
+function clampGoogleMapZoom(map: GoogleMapsMapInstance, zoom: number) {
   const currentZoom = Number(map.getZoom?.() ?? 0);
   if (currentZoom > zoom) {
     map.setZoom(zoom);
@@ -257,7 +262,12 @@ function focusLeafletMapOnMachine(map: L.Map, lat: number, lon: number) {
   });
 }
 
-function focusGoogleMapOnMachine(map: any, googleMaps: any, lat: number, lon: number) {
+function focusGoogleMapOnMachine(
+  map: GoogleMapsMapInstance,
+  googleMaps: GoogleMapsApi,
+  lat: number,
+  lon: number,
+) {
   const bounds = new googleMaps.Circle({
     center: { lat, lng: lon },
     radius: MACHINE_FOCUS_RADIUS_METERS,
@@ -277,9 +287,9 @@ function focusGoogleMapOnMachine(map: any, googleMaps: any, lat: number, lon: nu
 }
 
 function openGoogleMachinePopup(
-  map: any,
-  infoWindow: any,
-  marker: any,
+  map: GoogleMapsMapInstance,
+  infoWindow: GoogleMapsInfoWindowInstance,
+  marker: GoogleMapsMarkerInstance,
   machine: Machine,
   mode: MapMode,
   predictiveInsight: PredictiveInsight | undefined,
@@ -491,13 +501,14 @@ function GoogleIndustrialMapCanvas({
   onGoogleUnavailable,
 }: IndustrialMapCanvasProps & { onGoogleUnavailable: (reason?: string) => void }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
-  const googleMapsRef = useRef<any>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const infoWindowRef = useRef<any>(null);
-  const markerByIdRef = useRef<Record<string, any>>({});
+  const googleMapsRef = useRef<GoogleMapsApi | null>(null);
+  const mapInstanceRef = useRef<GoogleMapsMapInstance | null>(null);
+  const infoWindowRef = useRef<GoogleMapsInfoWindowInstance | null>(null);
+  const markerByIdRef = useRef<Record<string, GoogleMapsMarkerInstance>>({});
   const hasFittedBoundsRef = useRef(false);
   const lastMarkerSignatureRef = useRef("");
   const initialLangRef = useRef(lang);
+  const initialTileModeRef = useRef(tileMode);
   const focusedMachine = useMemo(
     () => (focusedMachineId ? machines.find((entry) => entry.id === focusedMachineId) ?? null : null),
     [focusedMachineId, machines],
@@ -513,15 +524,14 @@ function GoogleIndustrialMapCanvas({
     }
 
     loadGoogleMapsApi(initialLangRef.current)
-      .then((googleMapsUnknown) => {
+      .then((googleMaps) => {
         if (cancelled || !mapElementRef.current) {
           return;
         }
 
-        const googleMaps = googleMapsUnknown as any;
         googleMapsRef.current = googleMaps;
 
-        const mapOptions: Record<string, unknown> = {
+        const mapOptions: GoogleMapsMapOptions = {
           center: {
             lat: TUNISIA_CENTER_COORDINATES.lat,
             lng: TUNISIA_CENTER_COORDINATES.lon,
@@ -539,7 +549,7 @@ function GoogleIndustrialMapCanvas({
           clickableIcons: true,
           keyboardShortcuts: true,
           backgroundColor: "#e5e3df",
-          mapTypeId: resolveGoogleMapTypeId(googleMaps, tileMode),
+          mapTypeId: resolveGoogleMapTypeId(googleMaps, initialTileModeRef.current),
           zoomControlOptions: {
             position: googleMaps.ControlPosition.LEFT_TOP,
           },

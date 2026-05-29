@@ -63,9 +63,8 @@ export function AdminPage() {
     });
   };
 
-  // Combien d'admins approuvÃ©s restent ? Sert Ã  griser le bouton "Supprimer"
-  // pour le DERNIER admin restant (impossible de tout supprimer cÃ´tÃ© UI, et
-  // cÃ´tÃ© backend l'endpoint rÃ©pondrait 409 de toute faÃ§on â€” voir auth.py).
+  // Count approved admins so the UI can block deleting the last one.
+  // The backend also guards this path and would return 409.
   const approvedAdminCount = allUsers.filter(
     u => u.role === "admin" && u.status === "approved",
   ).length;
@@ -170,7 +169,7 @@ export function AdminPage() {
       await reassignUserMachine(userId, nextMachineId);
       await loadAdminContext();
       toast.success(l(
-        `Machine mise Ã  jour pour ${userName}.`,
+        `Machine mise a jour pour ${userName}.`,
         `Machine updated for ${userName}.`,
         `ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¢Ù„Ø© Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù… ${userName}.`,
       ));
