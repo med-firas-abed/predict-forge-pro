@@ -29,8 +29,8 @@ describe("ChatWidget", () => {
       lang: "fr",
       t: (key: string) =>
         ({
-          "chat.title": "Assistant PrediTeq",
-          "chat.subtitle": "Posez une question sur la flotte",
+          "chat.title": "Aide PrediTeq",
+          "chat.subtitle": "Questions sur l'etat des machines",
           "chat.welcome": "Bonjour, je peux vous aider.",
           "chat.thinking": "Reflexion...",
           "chat.placeholder": "Votre question",
@@ -74,7 +74,7 @@ describe("ChatWidget", () => {
 
     render(<ChatWidget />);
 
-    fireEvent.click(screen.getByRole("button", { name: /assistant prediteq/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aide prediteq/i }));
 
     expect(screen.queryByText(/Machine 2/i)).not.toBeInTheDocument();
     expect(
@@ -105,7 +105,7 @@ describe("ChatWidget", () => {
 
       render(<ChatWidget />);
 
-      fireEvent.click(screen.getByRole("button", { name: /assistant prediteq/i }));
+      fireEvent.click(screen.getByRole("button", { name: /aide prediteq/i }));
 
       const input = screen.getByPlaceholderText("Votre question");
       fireEvent.change(input, { target: { value: "Quelle machine est prioritaire ?" } });

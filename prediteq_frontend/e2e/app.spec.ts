@@ -1188,7 +1188,7 @@ test.describe("Authenticated app flows", () => {
     const repeatedTaskTitle = "Intervention corrective Machine 3 - Vibration moteur - reprise";
 
     await page.goto("/planner");
-    await page.getByRole("button", { name: /Lancer le plan d'action/i }).click();
+    await page.getByRole("button", { name: /Preparer les actions/i }).click();
 
     await expect(page.getByText("Synthese planner backend pour la machine critique Machine 3.")).toBeVisible();
     await expect(page.getByText(/2 action\(s\) r.cente\(s\)/i)).toBeVisible();
@@ -1196,7 +1196,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i })).toHaveCount(0);
 
     await page.goto("/maintenance");
-    await expect(page.getByText(/Calendrier des actions validees apres pronostic/i)).toBeVisible();
+    await expect(page.getByText(/Calendrier des actions confirmees/i)).toBeVisible();
     await expect(page.getByText(repeatedTaskTitle).first()).toBeVisible();
   });
 
@@ -1250,9 +1250,9 @@ test.describe("Authenticated app flows", () => {
     await page.getByRole("button", { name: /Retour au tableau de bord/i }).click();
     await expect(page).toHaveURL(/\/dashboard\?machine=ASC-B2/);
 
-    await page.getByRole("button", { name: /Voir pourquoi/i }).click();
+    await page.getByRole("button", { name: /Voir le detail/i }).click();
     await expect(
-      page.getByText(/Éléments qui influencent le pronostic|Elements driving the prognosis/i),
+      page.getByText(/Facteurs de decision|Decision factors/i),
     ).toBeVisible();
     await page.keyboard.press("Escape");
 
@@ -1422,7 +1422,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByText(/Machine 3/i).first()).toBeVisible();
 
     await page.goto("/maintenance");
-    await expect(page.getByText(/Calendrier des actions validees apres pronostic/i)).toBeVisible();
+    await expect(page.getByText(/Calendrier des actions confirmees/i)).toBeVisible();
 
     await page.goto("/administration");
     await expect(page.getByText(/Gestion des comptes/i)).toBeVisible();
@@ -1436,7 +1436,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.locator('input[value="manager@prediteq.test"]')).toBeVisible();
 
     await page.goto("/ia?tab=report");
-    await expect(page.getByText(/Prediction, decision & rapport IA/i)).toBeVisible();
+    await expect(page.getByText(/Analyse, actions & rapports/i)).toBeVisible();
     await expect(page.getByText(/Rapport ASC-C3/i)).toBeVisible();
   });
 });

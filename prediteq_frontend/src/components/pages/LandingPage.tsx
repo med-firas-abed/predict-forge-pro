@@ -41,10 +41,10 @@ const tc = (d: string, l: string) => ({ dark: d, light: l });
 const T = {
   nav: { features: { fr: "Fonctionnalités", en: "Features" }, how: { fr: "Comment ça marche", en: "How it Works" }, metrics: { fr: "Métriques", en: "Metrics" }, pricing: { fr: "Périmètre", en: "Scope" }, signin: { fr: "Connexion", en: "Sign In" }, getStarted: { fr: "Commencer", en: "Get Started" } },
   hero: {
-    badge: { fr: "SaaS Prédictif propulsé par l'IA", en: "AI-Powered Predictive SaaS" },
+    badge: { fr: "Plateforme de maintenance predictive", en: "Predictive maintenance platform" },
     h1a: { fr: "Prédisez les pannes", en: "Predict Equipment Failures" },
     h1b: { fr: "Avant qu'elles n'arrivent", en: "Before They Happen" },
-    sub: { fr: "PrediTeq équipe vos machines de capteurs intelligents et transforme leurs signaux en décisions de maintenance plus tôt, plus clairement et avec un niveau de confiance explicite.", en: "PrediTeq equips your machines with smart sensors and turns their signals into earlier, clearer maintenance decisions with explicit confidence." },
+    sub: { fr: "PrediTeq equipe vos machines de capteurs et transforme leurs signaux en decisions de maintenance plus tot, plus clairement et avec un niveau de confiance lisible.", en: "PrediTeq equips your machines with sensors and turns their signals into earlier, clearer maintenance decisions with readable confidence." },
     cta: { fr: "Essai Gratuit", en: "Start Free Trial" },
     demo: { fr: "Voir la démo", en: "Watch Demo" },
     hi: { fr: "Indice de santé (HI)", en: "Machine health (HI)" },
@@ -59,7 +59,7 @@ const T = {
     challengeLabel: { fr: "Défi :", en: "Challenge:" },
     challengeText: { fr: "Anticiper les dérives et pannes potentielles sur plusieurs contextes industriels à partir de signaux instrumentés, de bancs de test connectés ou d'une future intégration terrain.", en: "Anticipate drift and potential failures across industrial contexts using instrumented signals, connected test benches, or a future field integration." },
     solutionLabel: { fr: "Solution :", en: "Solution:" },
-    solutionText: { fr: "Une plateforme SaaS prédictive multi-capteurs combinant la détection d'anomalies par ", en: "An AI-powered predictive SaaS platform combining " },
+    solutionText: { fr: "Une plateforme SaaS predictive multi-capteurs combinant la detection d'anomalies par ", en: "A predictive multi-sensor SaaS platform combining " },
     solutionIF: { fr: "Isolation Forest", en: "Isolation Forest" },
     solutionHI: { fr: "Indice de santé (HI)", en: "Machine health (HI)" },
     solutionRUL: { fr: "Prédiction RUL par Random Forest", en: "Random Forest RUL" },
@@ -72,14 +72,14 @@ const T = {
   },
   features: {
     label: { fr: "Notre Plateforme", en: "Our Platform" },
-    title: { fr: "Intelligence prédictive lisible", en: "Readable Predictive Intelligence" },
-    sub: { fr: "Des fonctions conçues pour relier signaux, diagnostic, pronostic et décision dans un même parcours produit.", en: "Capabilities designed to connect signals, diagnosis, prognosis, and action in one product flow." },
+    title: { fr: "Maintenance predictive lisible", en: "Readable predictive maintenance" },
+    sub: { fr: "Des fonctions concues pour relier signaux, diagnostic, lecture RUL et decision dans un meme parcours produit.", en: "Capabilities designed to connect signals, diagnosis, RUL reading, and action in one product flow." },
     items: [
       { title: { fr: "Indice de santé (HI)", en: "Machine health (HI)" }, desc: { fr: "Calcul continu de la santé machine à partir d'une télémétrie multi-capteurs reliée à un démonstrateur, un banc instrumenté ou une machine cible.", en: "Continuous machine-health estimation from multi-sensor telemetry connected to a demonstrator, an instrumented bench, or a target machine." } },
-      { title: { fr: "Prédiction RUL", en: "RUL Prediction" }, desc: { fr: "Le pronostic RUL est publié lorsque le contexte et l'historique disponibles rendent l'estimation défendable pour la maintenance.", en: "RUL is published when the available context and history make the estimate defensible for maintenance planning." } },
-      { title: { fr: "Détection d'Anomalies", en: "Anomaly Detection" }, desc: { fr: "Identification instantanée des déviations subtiles dans les signatures thermiques, vibratoires ou acoustiques.", en: "Instant identification of subtle deviations in thermal, vibration, or acoustic signatures using unsupervised learning." } },
-      { title: { fr: "Alertes Intelligentes", en: "Smart Alerts" }, desc: { fr: "Notifications contextuelles par Email lorsque les seuils critiques sont approchés. Niveaux URGENCE, SURVEILLANCE, OK.", en: "Context-aware notifications via Email when critical thresholds are approached. URGENCE, SURVEILLANCE, OK levels." } },
-      { title: { fr: "Rapports IA", en: "AI Reports" }, desc: { fr: "Synthèses exécutives et analyses techniques générées à la demande depuis les mêmes décisions que le tableau de bord.", en: "Executive summaries and technical analyses generated on demand from the same decisions used in the dashboard." } },
+      { title: { fr: "Lecture RUL", en: "RUL reading" }, desc: { fr: "La lecture RUL est publiee lorsque le contexte et l'historique disponibles rendent l'estimation defendable pour la maintenance.", en: "RUL is published when the available context and history make the estimate reliable enough for maintenance planning." } },
+      { title: { fr: "Detection d'anomalies", en: "Anomaly detection" }, desc: { fr: "Identification rapide des deviations dans les signatures thermiques, vibratoires ou acoustiques.", en: "Fast identification of deviations in thermal, vibration, or acoustic signatures." } },
+      { title: { fr: "Alertes terrain", en: "Field alerts" }, desc: { fr: "Notifications par email lorsque les seuils critiques sont approches. Niveaux URGENCE, SURVEILLANCE, OK.", en: "Email notifications when critical thresholds are approached. URGENCE, SURVEILLANCE, OK levels." } },
+      { title: { fr: "Rapports maintenance", en: "Maintenance reports" }, desc: { fr: "Syntheses executives et analyses techniques generees a la demande a partir des memes decisions que le tableau de bord.", en: "Executive summaries and technical analyses generated on demand from the same dashboard decisions." } },
       { title: { fr: "Calendrier & Planification", en: "Calendar & Task Scheduling" }, desc: { fr: "Planifiez et suivez vos tâches de maintenance préventive grâce à un calendrier interactif avec rappels automatiques.", en: "Plan and track your preventive maintenance tasks with an interactive calendar and automatic reminders." } },
     ],
   },
@@ -87,9 +87,9 @@ const T = {
     title: { fr: "La Feuille de Route vers\nune maintenance mieux anticipée", en: "The Roadmap to\nEarlier Maintenance Decisions" },
     items: [
       { title: { fr: "Connexion des Signaux", en: "Connect Signals" }, desc: { fr: "Le projet peut être relié à un banc instrumenté, à des signaux existants ou à une future chaîne industrielle selon le périmètre retenu.", en: "The project can be connected to an instrumented bench, existing signals, or a future industrial chain depending on the selected scope." } },
-      { title: { fr: "L'IA Analyse", en: "AI Analyzes" }, desc: { fr: "Notre plateforme analyse les comportements nominaux et les dérives à partir des signaux multi-capteurs, pour produire HI, diagnostics et pronostic.", en: "Our platform analyzes nominal behavior and drift from multi-sensor signals to produce HI, diagnostics, and prognosis." } },
-      { title: { fr: "Publier le Pronostic", en: "Publish Prognosis" }, desc: { fr: "Recevez des alertes exploitables lorsque le contexte, les seuils et l'historique rendent le pronostic publiable et utile pour la maintenance.", en: "Receive actionable alerts when context, thresholds, and history make the prognosis publishable and useful for maintenance." } },
-      { title: { fr: "Agir en Avance", en: "Act Early" }, desc: { fr: "Alertes intelligentes, rapports IA automatisés et planification de maintenance avant que les pannes ne surviennent.", en: "Smart alerts, automated AI reports, and maintenance scheduling before failures occur." } },
+      { title: { fr: "Lire les signaux", en: "Read the signals" }, desc: { fr: "Notre plateforme analyse les comportements nominaux et les derives a partir des signaux multi-capteurs, pour produire HI, diagnostics et lecture RUL.", en: "Our platform analyzes nominal behavior and drift from multi-sensor signals to produce HI, diagnostics, and RUL readings." } },
+      { title: { fr: "Publier la lecture", en: "Publish the reading" }, desc: { fr: "Recevez des alertes exploitables lorsque le contexte, les seuils et l'historique rendent la lecture utile pour la maintenance.", en: "Receive actionable alerts when context, thresholds, and history make the reading useful for maintenance." } },
+      { title: { fr: "Agir en avance", en: "Act early" }, desc: { fr: "Alertes terrain, rapports maintenance et planification avant que les pannes ne surviennent.", en: "Field alerts, maintenance reports, and scheduling before failures occur." } },
     ],
   },
   stats: {
@@ -99,11 +99,11 @@ const T = {
     benchmark: { fr: "Benchmark NASA", en: "NASA Benchmark" },
   },
   cases: {
-    title: { fr: "Nos études de cas IA", en: "All our AI case studies" },
+    title: { fr: "Nos etudes de cas", en: "Our case studies" },
     items: [
       { tag: { fr: "FABRICATION", en: "MANUFACTURING" }, title: { fr: "Maintenance Prédictive de Stockeurs Verticaux — Usine Ben Arous", en: "Vertical Storage Carousel Predictive Maintenance — Ben Arous Factory" } },
-      { tag: { fr: "PLANIFICATION", en: "PLANNING" }, title: { fr: "Calendrier de Maintenance — Planification Intelligente", en: "Maintenance Calendar — Smart Scheduling" } },
-      { tag: { fr: "RAPPORTS IA", en: "AI REPORTS" }, title: { fr: "Rapports de Maintenance par IA — Analyses Automatisées", en: "AI-Powered Maintenance Reports — Automated Insights" } },
+      { tag: { fr: "PLANIFICATION", en: "PLANNING" }, title: { fr: "Calendrier de Maintenance — Planification terrain", en: "Maintenance Calendar — Field scheduling" } },
+      { tag: { fr: "RAPPORTS", en: "REPORTS" }, title: { fr: "Rapports de Maintenance — Syntheses automatisees", en: "Maintenance reports — automated summaries" } },
     ],
   },
   pricing: {
@@ -124,7 +124,7 @@ const T = {
     btn: { fr: "Commencer Maintenant", en: "Get Started Now" },
   },
   footer: {
-    desc: { fr: "Maintenance prédictive par IA pour la prochaine génération d'opérations industrielles.", en: "AI-powered predictive maintenance for the next generation of industrial operations." },
+    desc: { fr: "Maintenance predictive pour la prochaine generation d'operations industrielles.", en: "Predictive maintenance for the next generation of industrial operations." },
     quick: { fr: "Accès Rapide", en: "Quick Access" },
     platform: { fr: "Plateforme", en: "Platform" },
     industries: { fr: "Industries", en: "Industries" },
@@ -689,7 +689,7 @@ function Metrics() {
     <section id="metrics" className={`py-20 ${dark ? 'bg-gradient-to-b from-[#0c1a30] to-[#0a1628]' : 'bg-gray-50'}`}>
       <div ref={ref} className="max-w-6xl mx-auto px-6">
         <div className={`mb-8 text-center text-xs font-semibold uppercase tracking-[0.24em] ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
-          {lang === "fr" ? "Validation du modele IA" : "Validated AI performance"}
+          {lang === "fr" ? "Validation du modele" : "Validated model performance"}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {STATS.map((s) => (

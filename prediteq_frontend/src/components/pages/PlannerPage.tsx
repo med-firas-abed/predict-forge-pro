@@ -860,28 +860,28 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     "Fleet priority control",
   );
   const plannerSubtitle = l(
-    "La page classe les machines, prépare un plan d'action, puis envoie les tâches validées au calendrier maintenance.",
-    "Ranks the fleet, suggests useful actions, and prepares the send to the maintenance calendar.",
-    "Ranks the fleet, suggests useful actions, and prepares the send to the maintenance calendar.",
+    "La page classe les machines, propose les actions utiles, puis envoie les taches validees au calendrier maintenance.",
+    "Ranks the fleet, suggests useful actions, and sends validated tasks to the maintenance calendar.",
+    "Ranks the fleet, suggests useful actions, and sends validated tasks to the maintenance calendar.",
   );
   const workflowTitle = l("3 étapes simples", "3 simple steps", "3 simple steps");
   const workflowSubtitle = l(
-    "1. Cliquez une machine dans la liste si vous voulez la cibler. 2. Lancez le plan d'action. 3. Validez les tâches à envoyer au calendrier.",
-    "1. Focus a machine if needed. 2. Generate the proposed actions. 3. Validate each action to send it to the calendar.",
-    "1. Focus a machine if needed. 2. Generate the proposed actions. 3. Validate each action to send it to the calendar.",
+    "1. Cliquez une machine si vous voulez la cibler. 2. Preparez les actions. 3. Validez les taches a envoyer au calendrier.",
+    "1. Focus a machine if needed. 2. Prepare the actions. 3. Validate each task to send it to the calendar.",
+    "1. Focus a machine if needed. 2. Prepare the actions. 3. Validate each task to send it to the calendar.",
   );
   const fleetRiskTitle = l(
     "Machines à traiter d'abord",
     "Machine priority order",
     "Machine priority order",
   );
-  const fullPlanTitle = l("Plan d'action propose", "Proposed action plan", "Proposed action plan");
+  const fullPlanTitle = l("Actions proposees", "Suggested actions", "Suggested actions");
   const generateLabel = l(
-    "Lancer le plan d'action",
-    "Generate proposed actions",
-    "Generate proposed actions",
+    "Preparer les actions",
+    "Prepare actions",
+    "Prepare actions",
   );
-  const generatingLabel = l("Génération...", "Generating...", "Generating...");
+  const generatingLabel = l("Preparation...", "Preparing...", "Preparing...");
   const proposedTasksTitle = l(
     "Tâches à envoyer au calendrier",
     "Actions to validate for the calendar",
@@ -905,9 +905,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     if (taskCount > 0) {
       toast.success(
         l(
-          `${taskCount} tâche(s) proposée(s) par le planificateur.`,
-          `${taskCount} task(s) proposed by the planner.`,
-          `${taskCount} task(s) proposed by the planner.`,
+          `${taskCount} tâche(s) prete(s) a validation.`,
+          `${taskCount} task(s) ready for validation.`,
+          `${taskCount} task(s) ready for validation.`,
         ),
       );
       return;
@@ -1026,9 +1026,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
         );
         toast.warning(
           l(
-            "Plan backend indisponible - plan local de secours généré avec les données machines chargées.",
-            "Planner API unavailable - local fallback plan generated from loaded machine data.",
-            "Planner API unavailable - local fallback plan generated from loaded machine data.",
+            "Service de plan indisponible - une version locale a ete preparee avec les donnees chargees.",
+            "Planning service unavailable - a local version was prepared from the loaded data.",
+            "Planning service unavailable - a local version was prepared from the loaded data.",
           ),
         );
       } else {
@@ -1224,21 +1224,21 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
 
   const planTitle = focusMachine
     ? l(
-        `Plan d'action pour ${formatMachineLabel(focusMachine)}`,
-        `Summary for ${formatMachineLabel(focusMachine)}`,
-        `Summary for ${formatMachineLabel(focusMachine)}`,
+        `Actions proposees pour ${formatMachineLabel(focusMachine)}`,
+        `Suggested actions for ${formatMachineLabel(focusMachine)}`,
+        `Suggested actions for ${formatMachineLabel(focusMachine)}`,
       )
     : fullPlanTitle;
   const planSubtitle = selectedRisk
     ? l(
-        `Lisez le résumé pour ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)}, puis validez seulement les actions utiles ci-dessous.`,
-        `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the actions below.`,
-        `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the actions below.`,
+        `Lisez le resume pour ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)}, puis validez seulement les actions utiles ci-dessous.`,
+        `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the useful actions below.`,
+        `Review the summary for ${formatMachineLabel(selectedRisk.machine_code, selectedRisk.nom)} before validating the useful actions below.`,
       )
     : l(
-        "Lisez le résumé, puis validez les actions que vous voulez envoyer au calendrier.",
-        "The summary helps review the priorities before validating the actions.",
-        "The summary helps review the priorities before validating the actions.",
+        "Lisez le resume, puis validez les actions a envoyer au calendrier.",
+        "Review the summary, then validate the actions to send to the calendar.",
+        "Review the summary, then validate the actions to send to the calendar.",
       );
 
   const workflowSteps = [
@@ -1262,17 +1262,17 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     {
       id: "generate",
       step: "2",
-      title: l("Lancer le plan", "Run the plan", "Run the plan"),
+      title: l("Preparer les actions", "Prepare actions", "Prepare actions"),
       detail: displayText
         ? l(
-            "Le plan est prêt. Vérifiez-le avant de valider les tâches.",
-            "Summary ready for review before validation.",
-            "Summary ready for review before validation.",
+            "Les actions sont pretes. Verifiez-les avant de valider les taches.",
+            "The actions are ready. Review them before validating the tasks.",
+            "The actions are ready. Review them before validating the tasks.",
           )
         : l(
-            "Cliquez sur le bouton vert pour générer le plan d'action.",
-            "Run the summary to prepare maintenance decisions.",
-            "Run the summary to prepare maintenance decisions.",
+            "Cliquez sur le bouton vert pour preparer les actions.",
+            "Use the green button to prepare the actions.",
+            "Use the green button to prepare the actions.",
           ),
       active: generating || Boolean(displayText),
     },

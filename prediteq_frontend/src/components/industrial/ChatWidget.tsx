@@ -288,7 +288,7 @@ export function ChatWidget() {
               <div className="mb-1 flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full border border-primary/12 bg-primary/10 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary">
                   <Sparkles className="h-3 w-3" />
-                  AI Copilot
+                  Guide PrediTeq
                 </span>
               </div>
               <div className="truncate text-sm font-semibold text-foreground">
@@ -317,7 +317,7 @@ export function ChatWidget() {
                 <div className="text-[0.96rem] font-semibold text-foreground">{t("chat.title")}</div>
                 <span className="inline-flex items-center gap-1 rounded-full border border-primary/12 bg-primary/10 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-primary">
                   <Sparkles className="h-3 w-3" />
-                  AI Copilot
+                  Guide PrediTeq
                 </span>
               </div>
               <div className="mt-0.5 text-[0.76rem] leading-5 text-muted-foreground">{t("chat.subtitle")}</div>
@@ -353,7 +353,7 @@ export function ChatWidget() {
               <div className="space-y-4">
                 <div className="rounded-[1.35rem] border border-primary/10 bg-[linear-gradient(135deg,rgba(15,118,110,0.08),rgba(255,255,255,0.02))] px-5 py-4 text-left shadow-sm">
                   <div className="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-primary/80">
-                    Assistant IA
+                    Guide PrediTeq
                   </div>
                   <p className="text-[0.95rem] leading-7 text-foreground/88">{t("chat.welcome")}</p>
                   <p className="mt-3 text-[0.82rem] leading-6 text-muted-foreground">{audienceHelp}</p>
@@ -387,7 +387,7 @@ export function ChatWidget() {
                 )}
                 <div className={`flex max-w-[86%] flex-col gap-1.5 ${message.role === "user" ? "items-end" : "items-start"}`}>
                   <div className="px-1 text-[0.68rem] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
-                    {message.role === "user" ? "Vous" : "Assistant IA"}
+                    {message.role === "user" ? "Vous" : "Guide PrediTeq"}
                   </div>
                   <div
                     className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-[0.95rem] leading-7 ${
@@ -419,7 +419,7 @@ export function ChatWidget() {
                 </div>
                 <div className="flex max-w-[86%] flex-col gap-1.5">
                   <div className="px-1 text-[0.68rem] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
-                    Assistant IA
+                    Guide PrediTeq
                   </div>
                   <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/90 px-4 py-3 text-[0.92rem] leading-6 text-muted-foreground shadow-sm">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

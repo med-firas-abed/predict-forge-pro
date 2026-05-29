@@ -134,8 +134,8 @@ describe("Index routing", () => {
       lang: "fr",
       t: (key: string) =>
         ({
-          "meta.ia.title": "Analyse & Rapport IA",
-          "meta.ia.sub": "Analyse assistee, decision et rapports intelligents",
+          "meta.ia.title": "Analyse & rapports",
+          "meta.ia.sub": "Priorites machine, syntheses et export PDF",
           "meta.dashboard.title": "Tableau de bord",
           "meta.dashboard.sub": "Vue globale",
           "auth.loading": "Chargement...",
@@ -160,7 +160,7 @@ describe("Index routing", () => {
     renderIndex("/planner");
 
     expect(await screen.findByText("IA page")).toBeInTheDocument();
-    expect(screen.getByTestId("topbar")).toHaveTextContent("Analyse & Rapport IA");
+    expect(screen.getByTestId("topbar")).toHaveTextContent("Analyse & rapports");
   });
 
   it("opens the unified IA page for non-admin users too", async () => {

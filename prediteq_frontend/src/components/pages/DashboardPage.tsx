@@ -366,32 +366,32 @@ export function DashboardPage() {
   const isReferenceMode =
     predictionMode === "reference_only" || rulDisplay.source === "reference_lifetime";
   const explainDialogTitle = hasLivePrediction
-    ? l("Détail du pronostic", "Prognosis details", "Prognosis details")
+    ? l("Lecture detaillee", "Detailed reading", "Detailed reading")
     : isReferenceMode
-      ? l("Détail de la référence", "Reference details", "Reference details")
-      : l("Préparation du pronostic", "Prognosis warm-up", "Prognosis warm-up");
+      ? l("Lecture de reference", "Reference reading", "Reference reading")
+      : l("Lecture en preparation", "Reading warm-up", "Reading warm-up");
   const explainDialogDescription = hasLivePrediction
     ? l(
-        "Facteurs qui influencent le pronostic et la priorité d'intervention.",
-        "Factors influencing the prognosis and intervention priority.",
-        "Factors influencing the prognosis and intervention priority.",
+        "Points qui pesent le plus sur la priorite d'intervention.",
+        "Main points driving intervention priority.",
+        "Main points driving intervention priority.",
       )
     : isReferenceMode
       ? l(
-          "Repères conservés lorsque le pronostic live n'est pas encore disponible.",
-          "Signals retained when the live prognosis is not available yet.",
-          "Signals retained when the live prognosis is not available yet.",
+          "Reperes conserves tant qu'une lecture en direct n'est pas encore disponible.",
+          "Signals kept while a live reading is not available yet.",
+          "Signals kept while a live reading is not available yet.",
         )
       : l(
-          "Repères utilisés pour préparer la première lecture RUL fiable.",
-          "Signals used to prepare the first reliable RUL reading.",
-          "Signals used to prepare the first reliable RUL reading.",
+          "Reperes utilises pour preparer une premiere lecture RUL fiable.",
+          "Signals used to prepare a first reliable RUL reading.",
+          "Signals used to prepare a first reliable RUL reading.",
         );
   const explainPrimaryLabel = hasLivePrediction
-    ? l("Pronostic live", "Live prognosis", "Live prognosis")
+    ? l("Lecture en direct", "Live reading", "Live reading")
     : isReferenceMode
-      ? l("Référence courante", "Current reference", "Current reference")
-      : l("Référence provisoire", "Provisional reference", "Provisional reference");
+      ? l("Reference courante", "Current reference", "Current reference")
+      : l("Reference provisoire", "Provisional reference", "Provisional reference");
   const explainPrimarySub = hasLivePrediction
     ? maintenanceWindow ??
       l(
@@ -401,13 +401,13 @@ export function DashboardPage() {
       )
     : rulSub;
   const explainStatusLabel = hasLivePrediction
-    ? l("Confiance", "Confidence", "Confidence")
-    : l("Statut du pronostic", "Prognosis status", "Prognosis status");
+    ? l("Niveau de confiance", "Confidence level", "Confidence level")
+    : l("Etat de lecture", "Reading status", "Reading status");
   const explainStatusValue = hasLivePrediction
-    ? confidenceLabel ?? l("En évaluation", "Under evaluation", "Under evaluation")
+    ? confidenceLabel ?? l("En evaluation", "Under evaluation", "Under evaluation")
     : isReferenceMode
-      ? l("Référence stable", "Stable reference", "Stable reference")
-      : l("Calibration en cours", "Calibration in progress", "Calibration in progress");
+      ? l("Reference stable", "Stable reference", "Stable reference")
+      : l("Mise en route", "Warm-up in progress", "Warm-up in progress");
   const explainStatusSub = repairText(
     hasLivePrediction
       ? `${prediction?.display_interval_label ?? "IC 80 %"} ${
@@ -417,81 +417,81 @@ export function DashboardPage() {
         ? calibratedDisclosures.availability_note ??
           selectedInsight?.trustNote ??
           l(
-            "Le tableau conserve une référence stable tant que le pronostic live n'est pas exploitable.",
-            "The dashboard keeps a stable reference while the live prognosis is not usable yet.",
-            "The dashboard keeps a stable reference while the live prognosis is not usable yet.",
+            "Le tableau garde une reference stable tant qu'une lecture fiable n'est pas disponible.",
+            "The dashboard keeps a stable reference while a reliable live reading is not available yet.",
+            "The dashboard keeps a stable reference while a reliable live reading is not available yet.",
           )
         : calibratedWarmupDetail ??
           calibratedDisclosures.warmup_note ??
           selectedInsight?.trustNote ??
           l(
-            "Le pipeline collecte encore assez d'historique pour fiabiliser le premier RUL live.",
-            "The pipeline is still collecting enough history to stabilize the first live RUL.",
-            "The pipeline is still collecting enough history to stabilize the first live RUL.",
+            "Le systeme collecte encore assez d'historique pour fiabiliser la premiere lecture RUL.",
+            "The system is still collecting enough history to stabilize the first live RUL reading.",
+            "The system is still collecting enough history to stabilize the first live RUL reading.",
           ),
   );
   const explainFactorsTitle = hasLivePrediction
     ? l(
-        "Éléments qui influencent le pronostic",
-        "Elements driving the prognosis",
-        "Elements driving the prognosis",
+        "Facteurs de decision",
+        "Decision factors",
+        "Decision factors",
       )
     : l(
-        "Variables actuellement suivies",
-        "Variables currently monitored",
-        "Variables currently monitored",
+        "Points actuellement suivis",
+        "Points currently monitored",
+        "Points currently monitored",
       );
   const explainFactorsDescription = hasLivePrediction
     ? l(
-        "Chaque facteur ajoute ou retire des jours par rapport à la tendance moyenne du modèle.",
-        "Each factor adds or removes days relative to the model's average trend.",
-        "Each factor adds or removes days relative to the model's average trend.",
+        "Chaque facteur allonge ou reduit la marge restante par rapport a la tendance moyenne.",
+        "Each factor extends or shortens the remaining margin compared with the average trend.",
+        "Each factor extends or shortens the remaining margin compared with the average trend.",
       )
     : isReferenceMode
       ? l(
-          "Facteurs suivis pendant la référence stable.",
-          "These factors still drive the model's internal projection even while the interface keeps a stable reference.",
-          "These factors still drive the model's internal projection even while the interface keeps a stable reference.",
+          "Facteurs suivis pendant la phase de reference stable.",
+          "These factors are still monitored while the interface stays on a stable reference.",
+          "These factors are still monitored while the interface stays on a stable reference.",
         )
       : l(
-          "Facteurs utilisés pour préparer le premier RUL live.",
-          "These factors will stabilize the first live reading once enough history is available.",
-          "These factors will stabilize the first live reading once enough history is available.",
+          "Facteurs suivis pour preparer la premiere lecture RUL.",
+          "These factors help stabilize the first live RUL reading.",
+          "These factors help stabilize the first live RUL reading.",
         );
   const explainEmptyText = hasLivePrediction
     ? l(
-        "Le détail des facteurs du modèle n'est pas disponible pour cette lecture.",
-        "Model factor details are unavailable for this reading.",
-        "Model factor details are unavailable for this reading.",
+        "Le detail des facteurs n'est pas disponible pour cette lecture.",
+        "Factor details are unavailable for this reading.",
+        "Factor details are unavailable for this reading.",
       )
     : l(
-        "Le détail des variables suivies n'est pas disponible pour cette lecture.",
-        "Tracked-variable details are unavailable for this reading.",
-        "Tracked-variable details are unavailable for this reading.",
+        "Le detail des points suivis n'est pas disponible pour cette lecture.",
+        "Tracked-point details are unavailable for this reading.",
+        "Tracked-point details are unavailable for this reading.",
       );
   const explainFooterText = repairText(
     hasLivePrediction
       ? selectedInsight?.summary ??
           l(
-            "Priorité issue du RUL, du HI, du stress et du contexte.",
-            "Priority combines remaining life, observed health, current pressure, and usage context to support field decisions.",
-            "Priority combines remaining life, observed health, current pressure, and usage context to support field decisions.",
+            "La priorite combine le RUL, le HI, le stress et le contexte d'usage.",
+            "Priority combines remaining life, observed health, current pressure, and usage context.",
+            "Priority combines remaining life, observed health, current pressure, and usage context.",
           )
       : isReferenceMode
         ? calibratedDisclosures.availability_note ??
           selectedInsight?.trustNote ??
           l(
-            "Le dashboard conserve ici une référence stable tant que le pronostic live n'est pas encore disponible.",
-            "The dashboard keeps a stable reference here while the live prognosis is not available yet.",
-            "The dashboard keeps a stable reference here while the live prognosis is not available yet.",
+            "Le tableau garde ici une reference stable tant qu'une lecture en direct n'est pas disponible.",
+            "The dashboard keeps a stable reference here while a live reading is not available yet.",
+            "The dashboard keeps a stable reference here while a live reading is not available yet.",
           )
         : calibratedWarmupDetail ??
           calibratedDisclosures.warmup_note ??
           selectedInsight?.trustNote ??
           l(
-            "La lecture reste en préparation pendant que le pipeline consolide suffisamment d'historique.",
-            "The reading stays in warm-up while the pipeline consolidates enough history.",
-            "The reading stays in warm-up while the pipeline consolidates enough history.",
+            "La lecture reste en preparation pendant que le systeme rassemble assez d'historique.",
+            "The reading stays in warm-up while the system gathers enough history.",
+            "The reading stays in warm-up while the system gathers enough history.",
           ),
   );
 
@@ -509,9 +509,9 @@ export function DashboardPage() {
           <div className="mt-2 text-sm text-muted-foreground">
             {(machinesError as Error).message ||
               l(
-                "Vérifiez le flux backend puis rechargez la vue.",
-                "Check the backend feed and reload the view.",
-                "تحقق من تدفق الخلفية ثم أعد تحميل الصفحة.",
+                "Verifiez l'arrivee des donnees puis rechargez la vue.",
+                "Check the incoming data feed and reload the view.",
+                "تحقق من وصول البيانات ثم أعد تحميل الصفحة.",
               )}
           </div>
           <Button
@@ -637,9 +637,9 @@ export function DashboardPage() {
       )
     : isReferenceMode
       ? l(
-          "Référence de durée de vie affichée seulement quand le pronostic live n'est pas encore disponible.",
-          "Lifetime reference shown only when the live prognosis is not available yet.",
-          "Lifetime reference shown only when the live prognosis is not available yet.",
+          "Reference de duree de vie affichee seulement quand la lecture en direct n'est pas encore disponible.",
+          "Lifetime reference shown only when the live reading is not available yet.",
+          "Lifetime reference shown only when the live reading is not available yet.",
         )
       : l(
           "Lecture de durée de vie en préparation pendant la phase de calibration.",
@@ -1538,7 +1538,7 @@ export function DashboardPage() {
 
             {isLoadingDiagnostics && !diagnostics ? (
               <div className="rounded-xl border border-border bg-surface-3 px-4 py-6 text-sm text-muted-foreground">
-                {l("Chargement du pronostic...", "Loading prognosis...", "Ø¬Ø§Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„ØªÙ†Ø¨Ø¤...")}
+                {l("Chargement de la lecture...", "Loading reading...", "Ø¬Ø§Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù‚Ø±Ø§Ø¡Ø©...")}
               </div>
             ) : predictionMode === "prediction" && prediction ? (
               <div className="space-y-4">
@@ -1629,9 +1629,9 @@ export function DashboardPage() {
                   </div>
                   <div className="text-sm font-semibold text-foreground">
                     {l(
-                      "Pronostic live indisponible. Référence stable affichée.",
-                      "The live prognosis is not available for this reading, so the dashboard keeps a simple and stable reference.",
-                      "The live prognosis is not available for this reading, so the dashboard keeps a simple and stable reference.",
+                      "Lecture en direct indisponible. Reference stable affichee.",
+                      "A live reading is not available for this machine yet, so the dashboard keeps a simple stable reference.",
+                      "A live reading is not available for this machine yet, so the dashboard keeps a simple stable reference.",
                     )}
                   </div>
                   <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
@@ -1703,15 +1703,15 @@ export function DashboardPage() {
             {!diagnostics ? (
               <div className="rounded-xl border border-border bg-surface-3 px-4 py-6 text-sm text-muted-foreground">
                 {l(
-                  "Chargement des facteurs de prédiction...",
-                  "Loading prediction factors...",
+                  "Chargement des facteurs suivis...",
+                  "Loading tracked factors...",
                   "Ø¬Ø§Ø± ØªØ­Ù…ÙŠÙ„ Ø¹ÙˆØ§Ù…Ù„ Ø§Ù„ØªÙ†Ø¨Ø¤...",
                 )}
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="rounded-xl bg-surface-3 p-4">
-                  <div className="industrial-label">{l("Facteur dominant du pronostic", "Leading prognosis factor", "Leading prognosis factor")}</div>
+                  <div className="industrial-label">{l("Facteur principal", "Main factor", "Main factor")}</div>
                   <div className="mt-1 text-lg font-bold text-foreground">
                     {topDriverLabel ?? l("Non disponible", "Unavailable", "ØºÙŠØ± Ù…ØªØ§Ø­")}
                   </div>
@@ -1787,7 +1787,7 @@ export function DashboardPage() {
                   onClick={() => setIsExplainOpen(true)}
                 >
                   <Info className="w-4 h-4" />
-                  {l("Voir pourquoi", "See why", "See why")}
+                  {l("Voir le detail", "See details", "See details")}
                 </Button>
               </div>
             )}
@@ -1894,9 +1894,9 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                   {l(
-                    "Niveaux issus du scénario simulé pour expliquer la dérive générale.",
-                    "Levels taken from the simulated scenario to explain the overall drift.",
-                    "Levels taken from the simulated scenario to explain the overall drift.",
+                    "Niveaux issus du scenario de demonstration pour situer l'usure generale.",
+                    "Levels taken from the demo scenario to frame the overall wear.",
+                    "Levels taken from the demo scenario to frame the overall wear.",
                   )}
                 </div>
                 {compactContextFactorRows.length > 0 ? (
@@ -1945,9 +1945,9 @@ export function DashboardPage() {
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
                 <div className="section-title">
                   {l(
-                    "Comment ce contexte alimente le dashboard",
-                    "How this context feeds the dashboard",
-                    "How this context feeds the dashboard",
+                    "Lien avec la lecture du tableau",
+                    "How this context feeds the dashboard reading",
+                    "How this context feeds the dashboard reading",
                   )}
                 </div>
                 <div className="mt-2 text-sm leading-relaxed text-secondary-foreground">
@@ -1982,9 +1982,9 @@ export function DashboardPage() {
                   </span>
                   :{" "}
                   {l(
-                    "ce panneau explique le contexte. Le détail technique reste dans Diagnostic avancé.",
-                    "this panel explains the context. Technical detail stays in Advanced diagnostics.",
-                    "this panel explains the context. Technical detail stays in Advanced diagnostics.",
+                    "ce panneau donne le contexte. Le detail technique reste dans Diagnostic avance.",
+                    "this panel gives the context. Technical detail stays in Advanced diagnostics.",
+                    "this panel gives the context. Technical detail stays in Advanced diagnostics.",
                   )}
                 </div>
               </div>
@@ -2035,8 +2035,8 @@ export function DashboardPage() {
             {!diagnostics ? (
               <div className="rounded-2xl border border-border bg-surface-3 px-4 py-6 text-sm text-muted-foreground">
                 {l(
-                  "Les explications du modèle sont en cours de chargement.",
-                  "Model explanations are loading.",
+                  "La lecture detaillee est en cours de chargement.",
+                  "Detailed reading is loading.",
                   "ØªÙØ³ÙŠØ±Ø§Øª Ø§Ù„Ù†Ù…ÙˆØ°Ø¬ Ù‚ÙŠØ¯ Ø§Ù„ØªØ­Ù…ÙŠÙ„.",
                 )}
               </div>
@@ -2091,7 +2091,7 @@ export function DashboardPage() {
                         </div>
                       </div>
                       <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wider text-primary">
-                        {l("5 facteurs modèle", "5 model drivers", "5 model drivers")}
+                        {l("5 points suivis", "5 tracked points", "5 tracked points")}
                       </span>
                     </div>
 

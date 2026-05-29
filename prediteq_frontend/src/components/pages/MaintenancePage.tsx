@@ -493,10 +493,10 @@ export function MaintenancePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="section-title">Calendrier des actions validees apres pronostic</div>
+          <div className="section-title">Calendrier des actions confirmees</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ici, on suit seulement les taches deja validees. Le pronostic decide d'abord, puis le
-            calendrier execute ce qui a ete confirme.
+            Ici, on suit seulement les taches deja confirmees. La decision se fait avant, puis le
+            calendrier suit l'execution.
           </p>
         </div>
         <div className="flex gap-2">
@@ -752,8 +752,8 @@ export function MaintenancePage() {
             <div className="space-y-3">
               <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                 {isAdmin
-                  ? "Cette date est libre pour l'instant. Vous pouvez y ajouter une tache manuelle, ou ouvrir le plan d'action pour valider une recommandation IA avant de l'envoyer ici."
-                  : "Cette date est libre pour l'instant. Vous pouvez consulter les prochaines actions validees et ouvrir l'espace IA pour suivre les recommandations de votre machine."}
+                  ? "Cette date est libre pour l'instant. Vous pouvez y ajouter une tache manuelle, ou ouvrir l'espace priorites pour confirmer une action avant de l'envoyer ici."
+                  : "Cette date est libre pour l'instant. Vous pouvez consulter les prochaines actions confirmees et ouvrir l'analyse machine pour suivre votre situation."}
               </div>
 
               {fallbackEvents.length > 0 && (
@@ -798,18 +798,18 @@ export function MaintenancePage() {
             </div>
           )}
 
-          {/* === Recommandations IA en attente — encart intégré au panneau Planning ===
+          {/* === Actions en attente de validation — encart integre au panneau Planning ===
               Anciennement une carte séparée placée au-dessus du calendrier. Elle est
               désormais montée sous le planning de la date sélectionnée pour regrouper,
               dans une même boîte, les deux espaces qui touchent à la décision côté
-              maintenance (interventions du jour + suggestions IA en attente de revue).
+              maintenance (interventions du jour + suggestions en attente de revue).
               Justification UX : limiter le « scroll-and-scan » en gardant la totalité
               du contexte décisionnel dans un seul cadre visuel. */}
           <div className="mt-5 rounded-2xl border border-border bg-surface-3 p-4">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                <div className="industrial-label">Pronostic en attente de validation</div>
+                <div className="industrial-label">Actions en attente de validation</div>
               </div>
               <span className="rounded-full bg-card px-2.5 py-1 text-[0.6rem] font-semibold text-muted-foreground">
                 {isRefreshingInsights ? "Mise à jour..." : "Actualisation 5 s"}
@@ -818,8 +818,8 @@ export function MaintenancePage() {
 
             <p className="mb-3 text-xs text-muted-foreground">
               {isAdmin
-                ? "Le plan d'action IA reste l'espace de decision. Une fois validees, les taches issues du pronostic arrivent ici automatiquement ; l'ajout manuel reste aussi possible."
-                : "Le plan d'action IA reste l'espace de decision. Une fois validees, les taches issues du pronostic apparaissent ici automatiquement pour votre machine."}
+                ? "L'espace priorites reste le lieu de decision. Une fois confirmees, les taches arrivent ici automatiquement ; l'ajout manuel reste aussi possible."
+                : "L'analyse machine reste le lieu de lecture. Une fois confirmees, les taches de votre machine apparaissent ici automatiquement."}
             </p>
 
             <div className="rounded-xl border border-border bg-card p-3">
@@ -847,7 +847,7 @@ export function MaintenancePage() {
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90"
             >
               <Brain className="h-3.5 w-3.5" />
-              {isAdmin ? "Ouvrir le plan d'action" : "Ouvrir l'espace IA"}
+              {isAdmin ? "Ouvrir l'espace priorites" : "Ouvrir l'analyse machine"}
             </button>
           </div>
         </div>

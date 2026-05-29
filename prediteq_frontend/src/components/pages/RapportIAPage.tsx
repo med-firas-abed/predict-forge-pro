@@ -99,8 +99,8 @@ function buildLocalReport(
   );
   const intro = reportCopy(
     reportLang,
-    `Source locale de secours - période ${period}. Le moteur IA ou l'export backend est temporairement indisponible, ce rapport reprend les derniers signaux machines déjà chargés dans l'application.`,
-    `Local fallback source - period ${period}. The AI or backend export is temporarily unavailable, so this report reuses the latest machine signals already loaded in the app.`,
+    `Version locale de secours - periode ${period}. Le service de generation est temporairement indisponible, ce rapport reprend les derniers signaux machines deja charges dans l'application.`,
+    `Local backup version - period ${period}. The report service is temporarily unavailable, so this version reuses the latest machine signals already loaded in the app.`,
     `مصدر محلي احتياطي - الفترة ${period}. محرك الذكاء الاصطناعي أو تصدير الخادم غير متاح مؤقتا، لذلك يعتمد هذا التقرير على آخر إشارات الآلات المحملة داخل التطبيق.`,
   );
 
@@ -281,13 +281,13 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
       toast.warning(
         error instanceof Error && error.message === "EMPTY_REPORT"
           ? l(
-              "Le rapport IA etait vide - un rapport local de secours a ete affiche.",
-              "The AI report was empty - a local fallback report is now displayed.",
-              "The AI report was empty - a local fallback report is now displayed.",
+              "Le rapport recu etait vide - une version locale a ete affichee.",
+              "The returned report was empty - a local version is now displayed.",
+              "The returned report was empty - a local version is now displayed.",
             )
           : l(
-              "Generation backend indisponible - rapport local de secours affiche.",
-              "Backend generation unavailable - local fallback report displayed.",
+              "Generation indisponible - rapport local de secours affiche.",
+              "Generation unavailable - local backup report displayed.",
               "تعذر التوليد من الخادم - تم عرض تقرير محلي احتياطي.",
             ),
       );
@@ -387,7 +387,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   return (
     <div className={embedded ? "space-y-5" : "space-y-6"}>
       {!embedded ? (
-        <div className="section-title">{l("Rapport IA", "AI Report", "تقرير الذكاء الاصطناعي")}</div>
+        <div className="section-title">{l("Rapports", "Reports", "تقارير")}</div>
       ) : null}
 
       {isAdmin && !embedded && (
@@ -396,12 +396,12 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Sparkles className="h-4 w-4 text-primary" />
-                {l("Agent IA separe", "Separate AI planner", "مخطط الذكاء الاصطناعي المنفصل")}
+                {l("Espace actions separe", "Separate action space", "مساحة الاجراءات المنفصلة")}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {l(
-                  "Le rapport reste centré sur l'analyse et l'export. Le planificateur IA vit maintenant sur sa propre page.",
-                  "The report page now stays focused on analysis and export. The AI planner now lives on its own page.",
+                  "Le rapport reste centre sur la lecture et l'export. Les actions a valider se gerent maintenant dans une page dediee.",
+                  "The report page now stays focused on review and export. Action validation now lives on its own page.",
                   "اصبحت صفحة التقرير مخصصة للتحليل والتصدير، بينما اصبح مخطط الذكاء الاصطناعي في صفحة مستقلة.",
                 )}
               </p>
@@ -411,7 +411,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
               onClick={() => navigate("/planner")}
               className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-surface-3"
             >
-              {l("Ouvrir l'agent IA", "Open AI planner", "افتح مخطط الذكاء الاصطناعي")}
+              {l("Ouvrir l'espace actions", "Open action space", "افتح مساحة الاجراءات")}
             </button>
           </div>
         </div>
@@ -425,7 +425,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
             </div>
             <div className="flex-1">
               <h3 className="text-base font-semibold text-foreground">
-                {l("Générer un rapport intelligent", "Generate a smart report", "انشئ تقريرا ذكيا")}
+                {l("Generer un rapport clair", "Generate a clear report", "انشئ تقريرا واضحا")}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {l(

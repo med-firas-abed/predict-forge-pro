@@ -121,7 +121,7 @@ describe("RapportIAPage", () => {
 
     await waitFor(() => {
       expect(toastWarningMock).toHaveBeenCalledWith(
-        "Le rapport IA etait vide - un rapport local de secours a ete affiche.",
+        "Le rapport recu etait vide - une version locale a ete affichee.",
       );
     });
 

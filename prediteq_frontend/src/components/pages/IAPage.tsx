@@ -38,14 +38,14 @@ export function IAPage() {
   const pageLead =
     activeTab === "planner"
       ? l(
-          "Partir du pronostic machine, choisir les priorites flotte, puis transformer la prediction en taches validees.",
-          "Prioritize the fleet, prepare the actions, then validate the send to the maintenance calendar.",
-          "Prioritize the fleet, prepare the actions, then validate the send to the maintenance calendar.",
+          "Partir de l'etat machine, choisir les priorites flotte, puis valider les actions utiles.",
+          "Start from machine status, choose fleet priorities, then validate the useful actions.",
+          "Start from machine status, choose fleet priorities, then validate the useful actions.",
         )
       : l(
-          "Transformer le pronostic HI, stress et RUL en synthese claire, historique et PDF final.",
-          "Generate the formal report, review the history, and export the final PDF.",
-          "Generate the formal report, review the history, and export the final PDF.",
+          "Rassembler l'etat machine, l'historique et les actions dans une synthese claire et exportable.",
+          "Gather machine status, history, and actions into a clear report ready to export.",
+          "Gather machine status, history, and actions into a clear report ready to export.",
         );
 
   const tabs = [
@@ -53,24 +53,24 @@ export function IAPage() {
       ? [
           {
             id: "planner" as const,
-            label: l("Planification IA", "AI Planning", "Planification IA"),
+            label: l("Plan d'action", "Action plan", "Plan d'action"),
             icon: Brain,
             description: l(
-              "Pronostic flotte, plan d'action et validation calendrier.",
-              "Fleet priorities, proposed actions, and tasks ready for validation.",
-              "Fleet priorities, proposed actions, and tasks ready for validation.",
+              "Priorites flotte, actions a confirmer et envoi au calendrier.",
+              "Fleet priorities, actions to confirm, and send to calendar.",
+              "Fleet priorities, actions to confirm, and send to calendar.",
             ),
           },
         ]
       : []),
     {
       id: "report" as const,
-      label: l("Rapport IA", "AI Report", "AI Report"),
+      label: l("Rapports", "Reports", "Reports"),
       icon: FileText,
       description: l(
-        "Rapport formel, historique et export PDF.",
-        "Formal report, history, and PDF export.",
-        "Formal report, history, and PDF export.",
+        "Synthese, historique et export PDF.",
+        "Summary, history, and PDF export.",
+        "Summary, history, and PDF export.",
       ),
     },
   ];
@@ -85,14 +85,14 @@ export function IAPage() {
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="section-title">
-              {l("Prediction, decision & rapport IA", "AI prediction, decision & reporting", "AI prediction, decision & reporting")}
+              {l("Analyse, actions & rapports", "Analysis, actions & reports", "Analysis, actions & reports")}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {pageLead}
             </p>
           </div>
           <div className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
-            {l("Predire -> expliquer -> decider -> executer", "Predict -> explain -> decide -> execute", "Predict -> explain -> decide -> execute")}
+            {l("Lire -> prioriser -> valider -> suivre", "Review -> prioritize -> validate -> track", "Review -> prioritize -> validate -> track")}
           </div>
         </div>
 

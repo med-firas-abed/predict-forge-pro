@@ -144,7 +144,7 @@ describe("PlannerPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /lancer le plan d'action/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
 
     expect(await screen.findByText("Synthese backend")).toBeInTheDocument();
     expect(screen.getByText(/2 action\(s\) récente\(s\)/i)).toBeInTheDocument();
@@ -209,7 +209,7 @@ describe("PlannerPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /lancer le plan d'action/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
 
     expect(await screen.findByText("Synthese backend")).toBeInTheDocument();
     expect(screen.getByText(/cooldown récent actif/i)).toBeInTheDocument();
@@ -270,7 +270,7 @@ describe("PlannerPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /lancer le plan d'action/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
 
     expect(
       (await screen.findAllByText(
@@ -281,7 +281,7 @@ describe("PlannerPage", () => {
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
     ).not.toBeInTheDocument();
     expect(toastWarningMock).toHaveBeenCalledWith(
-      expect.stringContaining("Plan backend indisponible"),
+      expect.stringContaining("Service de plan indisponible"),
     );
   });
 
@@ -368,7 +368,7 @@ describe("PlannerPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /lancer le plan d'action/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
 
     expect(await screen.findByText(/cooldown récent actif/i)).toBeInTheDocument();
     expect(
@@ -378,7 +378,7 @@ describe("PlannerPage", () => {
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
     ).not.toBeInTheDocument();
     expect(toastWarningMock).toHaveBeenCalledWith(
-      expect.stringContaining("Plan backend indisponible"),
+      expect.stringContaining("Service de plan indisponible"),
     );
   });
 
@@ -468,7 +468,7 @@ describe("PlannerPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /lancer le plan d'action/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
 
     expect(
       await screen.findByText(/Intervention corrective Machine 3 - vibration/i),
@@ -562,7 +562,7 @@ describe("PlannerPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /lancer le plan d'action/i }));
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
 
     expect(
       await screen.findByText(/Intervention corrective Machine 3 - vibration/i),
