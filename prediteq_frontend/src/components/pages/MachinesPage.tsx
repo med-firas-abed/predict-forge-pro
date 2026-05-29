@@ -508,41 +508,6 @@ export function MachinesPage() {
         </select>
       </div>
 
-      {isAdmin ? (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 shadow-premium">
-          <div className="section-title">{l("Connexion machine reelle", "Real machine connection")}</div>
-          <div className="mt-3 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-border bg-card/70 p-4">
-              <div className="industrial-label">{l("1. Code machine", "1. Machine code")}</div>
-              <p className="mt-2 text-sm text-secondary-foreground">
-                {l(
-                  "Le code interne doit etre le meme que le machine_id envoye plus tard par le bridge LabVIEW / PLC.",
-                  "The internal code must match the machine_id sent later by the LabVIEW / PLC bridge.",
-                )}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card/70 p-4">
-              <div className="industrial-label">{l("2. CSV minimum", "2. Minimum CSV")}</div>
-              <p className="mt-2 text-sm text-secondary-foreground">
-                {l(
-                  "Le flux reel peut arriver en CSV ou JSON avec au minimum machine_id, observed_at, rms_mms, power_kw, temp_c et humidity_rh.",
-                  "The live feed can arrive as CSV or JSON with at least machine_id, observed_at, rms_mms, power_kw, temp_c, and humidity_rh.",
-                )}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card/70 p-4">
-              <div className="industrial-label">{l("3. Preparation runtime", "3. Runtime preparation")}</div>
-              <p className="mt-2 text-sm text-secondary-foreground">
-                {l(
-                  "Le bouton Preparer flux reel charge un contexte coherent avec l'etat connu de la machine pour publier HI et RUL rapidement, puis le vrai CSV prend le relais.",
-                  "The Prepare live feed button loads a context consistent with the known machine state so HI and RUL can be published quickly before the real CSV takes over.",
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="space-y-4">
         {filteredMachines.map((machine) => {
           const statusConfig = STATUS_CONFIG[machine.status];
