@@ -162,11 +162,11 @@ function formatUpdatedAt(value: string | null) {
 function getSourceLabel(source: string) {
   switch (source) {
     case "live_runtime":
-      return "Flux live";
+      return "Flux en direct";
     case "simulator_demo":
-      return "Replay calibre";
+      return "Source simulée";
     case "persisted_reference":
-      return "Reference stable";
+      return "Référence stable";
     default:
       return "Lecture partielle";
   }
@@ -1026,7 +1026,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
         );
         toast.warning(
           l(
-            "Service de plan indisponible - une version locale a ete preparee avec les donnees chargees.",
+            "Service de plan indisponible - une version locale a été préparée avec les données chargées.",
             "Planning service unavailable - a local version was prepared from the loaded data.",
             "Planning service unavailable - a local version was prepared from the loaded data.",
           ),

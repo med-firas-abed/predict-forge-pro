@@ -46,7 +46,7 @@ const T = {
     h1b: { fr: "Avant qu'elles n'arrivent", en: "Before They Happen" },
     sub: { fr: "PrediTeq equipe vos machines de capteurs et transforme leurs signaux en decisions de maintenance plus tot, plus clairement et avec un niveau de confiance lisible.", en: "PrediTeq equips your machines with sensors and turns their signals into earlier, clearer maintenance decisions with readable confidence." },
     cta: { fr: "Essai Gratuit", en: "Start Free Trial" },
-    demo: { fr: "Voir la démo", en: "Watch Demo" },
+    demo: { fr: "Voir l'aperçu", en: "View overview" },
     hi: { fr: "Indice de santé (HI)", en: "Machine health (HI)" },
     optimal: { fr: "Optimal", en: "Optimal" },
     rul: { fr: "Prédiction RUL (Durée de Vie Restante)", en: "RUL Prediction (Remaining Useful Life)" },
@@ -75,7 +75,7 @@ const T = {
     title: { fr: "Maintenance predictive lisible", en: "Readable predictive maintenance" },
     sub: { fr: "Des fonctions concues pour relier signaux, diagnostic, lecture RUL et decision dans un meme parcours produit.", en: "Capabilities designed to connect signals, diagnosis, RUL reading, and action in one product flow." },
     items: [
-      { title: { fr: "Indice de santé (HI)", en: "Machine health (HI)" }, desc: { fr: "Calcul continu de la santé machine à partir d'une télémétrie multi-capteurs reliée à un démonstrateur, un banc instrumenté ou une machine cible.", en: "Continuous machine-health estimation from multi-sensor telemetry connected to a demonstrator, an instrumented bench, or a target machine." } },
+      { title: { fr: "Indice de santé (HI)", en: "Machine health (HI)" }, desc: { fr: "Calcul continu de la santé machine à partir d'une télémétrie multi-capteurs reliée à un banc instrumenté, à une machine pilote ou à une machine cible.", en: "Continuous machine-health estimation from multi-sensor telemetry connected to an instrumented bench, a pilot machine, or a target machine." } },
       { title: { fr: "Lecture RUL", en: "RUL reading" }, desc: { fr: "La lecture RUL est publiee lorsque le contexte et l'historique disponibles rendent l'estimation defendable pour la maintenance.", en: "RUL is published when the available context and history make the estimate reliable enough for maintenance planning." } },
       { title: { fr: "Detection d'anomalies", en: "Anomaly detection" }, desc: { fr: "Identification rapide des deviations dans les signatures thermiques, vibratoires ou acoustiques.", en: "Fast identification of deviations in thermal, vibration, or acoustic signatures." } },
       { title: { fr: "Alertes terrain", en: "Field alerts" }, desc: { fr: "Notifications par email lorsque les seuils critiques sont approches. Niveaux URGENCE, SURVEILLANCE, OK.", en: "Email notifications when critical thresholds are approached. URGENCE, SURVEILLANCE, OK levels." } },
@@ -108,11 +108,11 @@ const T = {
   },
   pricing: {
     label: { fr: "Périmètres de projet", en: "Project scopes" },
-    title: { fr: "Formats de démonstration et de déploiement", en: "Demonstration and deployment formats" },
-    sub: { fr: "Le périmètre exact dépend du niveau de maturité recherché : démonstrateur, pilote ou extension industrielle.", en: "The exact scope depends on the target maturity level: demonstrator, pilot, or industrial extension." },
+    title: { fr: "Formats de déploiement progressif", en: "Progressive deployment formats" },
+    sub: { fr: "Le périmètre exact dépend du niveau de maturité recherché : pilote ciblé, flotte restreinte ou extension industrielle.", en: "The exact scope depends on the target maturity level: targeted pilot, limited fleet, or industrial extension." },
     mo: { fr: "/mois", en: "/mo" },
     plans: [
-      { name: { fr: "Démonstrateur", en: "Demonstrator" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Banc ou machine instrumentée", en: "Instrumented bench or target machine" }, features: { fr: ["Acquisition capteurs reliée à PrediTeq", "Indice de santé (HI) en temps réel", "Page Experiment et tableau de bord", "Alertes email de démonstration", "Rapport de validation fonctionnelle"], en: ["Sensor acquisition connected to PrediTeq", "Real-time machine health (HI)", "Experiment page and dashboard", "Demonstration email alerts", "Functional validation report"] }, popular: false },
+      { name: { fr: "Banc instrumenté", en: "Instrumented bench" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Banc ou machine instrumentée", en: "Instrumented bench or target machine" }, features: { fr: ["Acquisition capteurs reliée à PrediTeq", "Indice de santé (HI) en temps réel", "Page Experiment et tableau de bord", "Alertes email de validation", "Rapport de validation fonctionnelle"], en: ["Sensor acquisition connected to PrediTeq", "Real-time machine health (HI)", "Experiment page and dashboard", "Validation email alerts", "Functional validation report"] }, popular: false },
       { name: { fr: "Pilote", en: "Pilot" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Petit parc instrumenté", en: "Small instrumented fleet" }, features: { fr: ["Télémétrie multi-capteurs", "RUL avec intervalles de confiance", "Tableau de bord multi-machine", "Alertes et rapports à la demande", "Bridge MQTT et réglage des seuils terrain"], en: ["Multi-sensor telemetry", "RUL with confidence intervals", "Multi-machine dashboard", "Alerts and on-demand reports", "MQTT bridge and field-threshold tuning"] }, popular: true },
       { name: { fr: "Extension industrielle", en: "Industrial extension" }, price: { fr: "Sur devis", en: "Custom" }, sub: { fr: "Intégration selon projet", en: "Integration per project" }, features: { fr: ["Connexion LabVIEW / PLC / supervision", "Déploiement cloud ou on-premise", "Ajustement progressif avec données terrain", "Adaptation des pages métier et du planner", "Montée en charge selon le site"], en: ["LabVIEW / PLC / supervision connection", "Cloud or on-premise deployment", "Progressive tuning with field data", "Adaptation of business pages and planner", "Scale-up according to the site"] }, popular: false },
     ],
@@ -120,7 +120,7 @@ const T = {
   cta: {
     h2a: { fr: "Prêt à mieux anticiper", en: "Ready to better anticipate" },
     h2b: { fr: "les arrêts imprévus ?", en: "unplanned downtime?" },
-    sub: { fr: "Découvrez le démonstrateur PrediTeq, la page Experiment et les scénarios de déploiement progressif selon le projet.", en: "Discover the PrediTeq demonstrator, the Experiment page, and the progressive deployment paths available per project." },
+    sub: { fr: "Découvrez PrediTeq, la page Experiment et les scénarios de déploiement progressif selon le projet.", en: "Discover PrediTeq, the Experiment page, and the progressive deployment paths available per project." },
     btn: { fr: "Commencer Maintenant", en: "Get Started Now" },
   },
   footer: {

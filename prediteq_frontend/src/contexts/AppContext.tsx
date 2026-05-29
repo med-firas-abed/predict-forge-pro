@@ -69,7 +69,7 @@ const TR: Record<string, TranslationEntry> = {
   "nav.ia": { fr: "Analyse & rapports", en: "Analysis & reports", ar: "ØªØ­Ù„ÙŠÙ„ ÙˆØªÙ‚Ø§Ø±ÙŠØ±" },
   "nav.rapportIA": { fr: "Rapports", en: "Reports", ar: "ØªÙ‚Ø§Ø±ÙŠØ±" },
   "nav.planner": { fr: "Plan d'action", en: "Action plan", ar: "Ø®Ø·Ø© Ø§Ù„Ø¹Ù…Ù„" },
-  "nav.diagnostics": { fr: "Diagnostic avancÃ©", en: "Advanced diagnostics", ar: "Ø§Ù„ØªØ´Ø®ÙŠØµ Ø§Ù„Ù…ØªÙ‚Ø¯Ù…" },
+  "nav.diagnostics": { fr: "Diagnostic détaillé", en: "Detailed diagnostics", ar: "Ø§Ù„ØªØ´Ø®ÙŠØµ Ø§Ù„Ù…ÙØµÙ„" },
   "nav.seuils": { fr: "Seuils d'alertes", en: "Alert Thresholds", ar: "Ø¹ØªØ¨Ø§Øª Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡" },
   "nav.simulator": { fr: "Simulateur", en: "Simulator", ar: "Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
   "nav.experiment": { fr: "ExpÃ©rience ESP32", en: "ESP32 Experiment", ar: "ØªØ¬Ø±Ø¨Ø© ESP32" },
@@ -79,9 +79,9 @@ const TR: Record<string, TranslationEntry> = {
   "meta.adminusers.title": { fr: "Gestion des comptes", en: "Account Management", ar: "Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª" },
   "meta.adminusers.sub": { fr: "Approbation et gestion des utilisateurs", en: "User approval and management", ar: "Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…ÙŠÙ† ÙˆØ¥Ø¯Ø§Ø±ØªÙ‡Ù…" },
   "meta.simulator.title": { fr: "Simulateur", en: "Simulator", ar: "Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
-  "meta.simulator.sub": { fr: "Lancer la dÃ©mo et suivre l'Ã©volution des indicateurs machine en temps rÃ©el", en: "Launch the demo and follow machine indicators in real time", ar: "Ø¥Ø·Ù„Ø§Ù‚ Ø§Ù„Ø¹Ø±Ø¶ Ø§Ù„ØªØ¬Ø±ÙŠØ¨ÙŠ ÙˆÙ…ØªØ§Ø¨Ø¹Ø© Ù…Ø¤Ø´Ø±Ø§Øª Ø§Ù„Ø¢Ù„Ø§Øª ÙÙŠ Ø§Ù„ÙˆÙ‚Øª Ø§Ù„ÙØ¹Ù„ÙŠ" },
+  "meta.simulator.sub": { fr: "Suivre les indicateurs machine en temps reel avec le simulateur", en: "Follow machine indicators in real time with the simulator", ar: "Ù…ØªØ§Ø¨Ø¹Ø© Ù…Ø¤Ø´Ø±Ø§Øª Ø§Ù„Ø¢Ù„Ø§Øª ÙÙŠ Ø§Ù„ÙˆÙ‚Øª Ø§Ù„ÙØ¹Ù„ÙŠ Ø¹Ø¨Ø± Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
   "meta.experiment.title": { fr: "ExpÃ©rience ESP32", en: "ESP32 Experiment", ar: "ØªØ¬Ø±Ø¨Ø© ESP32" },
-  "meta.experiment.sub": { fr: "Banc d'essai ESP32 â€” capteur de vibration + capteur de courant + pipeline ML", en: "ESP32 bench test â€” vibration sensor + current sensor + ML pipeline", ar: "Ù…Ù†ØµØ© Ø§Ø®ØªØ¨Ø§Ø± ESP32 â€” Ù…Ø³ØªØ´Ø¹Ø± Ø§Ù‡ØªØ²Ø§Ø² + Ù…Ø³ØªØ´Ø¹Ø± ØªÙŠØ§Ø± + Ø®Ø· Ø£Ù†Ø§Ø¨ÙŠØ¨ ML" },
+  "meta.experiment.sub": { fr: "Banc d'essai ESP32 â€” vibration, courant et lecture machine", en: "ESP32 bench test — vibration, current, and machine reading", ar: "Ù…Ù†ØµØ© Ø§Ø®ØªØ¨Ø§Ø± ESP32 â€” Ø§Ù‡ØªØ²Ø§Ø² ÙˆØªÙŠØ§Ø± ÙˆÙ‚Ø±Ø§Ø¡Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ø¢Ù„Ø©" },
 
   // Dashboard
   "dash.activeMachines": { fr: "Machines actives", en: "Active Machines", ar: "Ø§Ù„Ø¢Ù„Ø§Øª Ø§Ù„Ù†Ø´Ø·Ø©" },
@@ -286,8 +286,8 @@ const TR: Record<string, TranslationEntry> = {
   "meta.seuils.sub": { fr: "Regles d'alerte et notifications", en: "Alert rules and notifications", ar: "Ù‚ÙˆØ§Ø¹Ø¯ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡ ÙˆØ§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª" },
   "meta.planner.title": { fr: "Plan d'action", en: "Action plan", ar: "Ø®Ø·Ø© Ø§Ù„Ø¹Ù…Ù„" },
   "meta.planner.sub": { fr: "Priorites flotte, actions a valider et envoi au calendrier", en: "Fleet priorities, actions to validate, and send to calendar", ar: "Ø£ÙˆÙ„ÙˆÙŠØ§Øª Ø§Ù„Ø£Ø³Ø·ÙˆÙ„ ÙˆØ§Ù„Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ù…Ø±Ø§Ø¯ ØªØ£ÙƒÙŠØ¯Ù‡Ø§ ÙˆØ¥Ø±Ø³Ø§Ù„Ù‡Ø§ Ø¥Ù„Ù‰ Ø§Ù„ØªÙ‚ÙˆÙŠÙ…" },
-  "meta.diagnostics.title": { fr: "Diagnostics & Intervalle RUL", en: "Diagnostics & RUL Interval", ar: "ØªØ´Ø®ÙŠØµØ§Øª Ø§Ù„Ø¹Ù…Ø± Ø§Ù„Ù…ØªØ¨Ù‚ÙŠ" },
-  "meta.diagnostics.sub": { fr: "Lecture dÃ©taillÃ©e de la machine : durÃ©e de vie restante, alertes techniques et facteurs explicatifs", en: "Detailed machine view: remaining life, technical alerts, and explanatory factors", ar: "Ù‚Ø±Ø§Ø¡Ø© Ù…ÙØµÙ„Ø© Ù„Ù„Ø¢Ù„Ø©: Ø§Ù„Ø¹Ù…Ø± Ø§Ù„Ù…ØªØ¨Ù‚ÙŠ ÙˆØ§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª Ø§Ù„ØªÙ‚Ù†ÙŠØ© ÙˆØ§Ù„Ø¹ÙˆØ§Ù…Ù„ Ø§Ù„ØªÙØ³ÙŠØ±ÙŠØ©" },
+  "meta.diagnostics.title": { fr: "Diagnostic détaillé", en: "Detailed diagnostics", ar: "Ø§Ù„ØªØ´Ø®ÙŠØµ Ø§Ù„Ù…ÙØµÙ„" },
+  "meta.diagnostics.sub": { fr: "Lecture détaillée de la machine : marge restante, alertes et points de contrôle", en: "Detailed machine view: remaining margin, alerts, and checkpoints", ar: "Ù‚Ø±Ø§Ø¡Ø© Ù…ÙØµÙ„Ø© Ù„Ù„Ø¢Ù„Ø©: Ø§Ù„Ù…Ø¯Ù‰ Ø§Ù„Ù…ØªØ¨Ù‚ÙŠ ÙˆØ§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª ÙˆÙ†Ù‚Ø§Ø· Ø§Ù„ÙØ­Øµ" },
 
   // Chat widget
   "chat.title": { fr: "Lecture rapide", en: "Quick view", ar: "Ù‚Ø±Ø§Ø¡Ø© Ø³Ø±ÙŠØ¹Ø©" },
@@ -517,19 +517,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (key === "meta.diagnostics.title") {
       return repairText(
         {
-          fr: "Diagnostic avancÃ©",
-          en: "Advanced Diagnostics",
-        }[lang] || "Diagnostic avancÃ©"
+          fr: "Diagnostic détaillé",
+          en: "Detailed diagnostics",
+        }[lang] || "Diagnostic détaillé"
       );
     }
 
     if (key === "meta.diagnostics.sub") {
       return repairText(
         {
-          fr: "Lecture technique claire pour la machine sÃ©lectionnÃ©e : maintenance, RUL, stress et alertes.",
-          en: "Clear technical reading for the selected machine: maintenance, RUL, stress, and alerts.",
+          fr: "Lecture claire pour la machine sélectionnée : marge restante, alertes et points de contrôle.",
+          en: "Clear reading for the selected machine: remaining margin, alerts, and checkpoints.",
         }[lang] ||
-        "Lecture technique claire pour la machine selectionnee : maintenance, RUL, stress et alertes."
+        "Lecture claire pour la machine sélectionnée : marge restante, alertes et points de contrôle."
       );
     }
 

@@ -365,13 +365,13 @@ export function DiagnosticsPage() {
       : selectedInsight?.dataSource === "simulator_demo"
         ? l("Source simulée", "Simulated source", "Simulated source")
         : selectedInsight?.dataSource === "persisted_reference"
-          ? l("Référence persistée", "Reference snapshot", "Reference snapshot")
+          ? l("Référence stable", "Stable reference", "Stable reference")
           : l("Flux en attente", "Waiting for stream", "Waiting for stream");
   const isDemoReplay = selectedInsight?.dataSource === "simulator_demo";
   const demoPipelineNote = l(
-    "Lecture simulee calibree pour cette machine.",
-    "Calibrated simulated reading for this machine.",
-    "Calibrated simulated reading for this machine.",
+    "Lecture simulée pour cette machine.",
+    "Simulated reading for this machine.",
+    "Simulated reading for this machine.",
   );
   const freshnessLabel =
     selectedInsight?.updatedAt != null
@@ -594,12 +594,12 @@ export function DiagnosticsPage() {
               <ArrowLeft className="h-4 w-4" />
               {l("Retour au tableau de bord", "Back to dashboard", "Back to dashboard")}
             </Button>
-            <div className="section-title">{l("Diagnostic avancé", "Advanced diagnostics", "Advanced diagnostics")}</div>
+            <div className="section-title">{l("Diagnostic détaillé", "Detailed diagnostics", "Detailed diagnostics")}</div>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-secondary-foreground">
               {l(
                 "Vue de contrôle : action, cible, délai et mesures.",
-                "Detailed view: what to check, why, and how soon. In demo mode, the reading comes from a calibrated replay; in operation, the same pipeline will read field measurements.",
-                "Detailed view: what to check, why, and how soon. In demo mode, the reading comes from a calibrated replay; in operation, the same pipeline will read field measurements.",
+                "Detailed view: action, target, timing, and key measurements.",
+                "Detailed view: action, target, timing, and key measurements.",
               )}
             </p>
           </div>
@@ -656,7 +656,7 @@ export function DiagnosticsPage() {
       {isDemoReplay ? (
         <div className="rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 text-xs leading-relaxed text-secondary-foreground">
           <span className="font-semibold text-foreground">
-            {l("Lecture démo", "Demo reading", "Demo reading")}
+            {l("Source simulée", "Simulated source", "Simulated source")}
           </span>
           : {demoPipelineNote}
         </div>
@@ -712,7 +712,7 @@ export function DiagnosticsPage() {
             <div className="mt-3 text-sm leading-relaxed text-secondary-foreground">{repairText(rulDisplay.sub)}</div>
             {predictionMode === "prediction" && prediction ? (
               <div className="mt-3 text-xs text-muted-foreground">
-                {(prediction.display_interval_label ?? "IC 80 %")}:
+                {(prediction.display_interval_label ?? "Plage probable (80 %)")}:
                 {" "}
                 {prediction.rul_days_display_low ?? prediction.rul_days_p10 ?? "-"}
                 {" - "}
@@ -908,7 +908,7 @@ export function DiagnosticsPage() {
               value={`${formatNumber(latestSensorPoint?.temp ?? selected.temp, 1)} C`}
             />
             <MiniMetric
-              label={l("Cadence scénario", "Scenario cadence", "Scenario cadence")}
+              label={l("Cadence machine", "Machine cadence", "Machine cadence")}
               value={
                 selectedScenario?.cycles_per_day != null
                   ? `${Math.round(selectedScenario.cycles_per_day).toLocaleString(numberLocale)} ${l("cycles/jour", "cycles/day", "cycles/day")}`

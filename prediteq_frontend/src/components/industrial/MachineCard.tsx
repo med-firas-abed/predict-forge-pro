@@ -26,7 +26,7 @@ export function MachineCard({ machineId, onClick, machineScopeId }: MachineCardP
   const rulSub = referenceOnly
     ? t("modal.rulNoPrecursor")
     : m.rulIntervalLow != null && m.rulIntervalHigh != null
-      ? `${m.rulIntervalLabel ?? 'IC 80 %'} [${m.rulIntervalLow}–${m.rulIntervalHigh}j]${m.stopRecommended ? ' · arrêt recommandé' : ''}`
+      ? `${m.rulIntervalLabel ?? 'Plage probable (80 %)'} [${m.rulIntervalLow}–${m.rulIntervalHigh}j]${m.stopRecommended ? ' · arrêt recommandé' : ''}`
       : (!referenceOnly && m.rul && m.rulci
         ? `[${m.rul - m.rulci}–${m.rul + m.rulci}j]`
         : '');

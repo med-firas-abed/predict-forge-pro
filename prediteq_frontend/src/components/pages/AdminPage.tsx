@@ -444,9 +444,9 @@ export function AdminPage() {
                 <h2 className="section-title">{l("Destinataires des alertes critiques", "Critical alert recipients", "Ù…Ø³ØªÙ„Ù…Ùˆ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡Ø§Øª Ø§Ù„Ø­Ø±Ø¬Ø©")}</h2>
                 <p className="text-sm text-muted-foreground">
                   {l(
-                    "AperÃ§u machine par machine des emails notifiÃ©s au prochain replay critique ou Ã  la prochaine alerte live.",
-                    "Machine-by-machine preview of the emails notified on the next critical replay or live alert.",
-                    "Ù…Ø¹Ø§ÙŠÙ†Ø© Ø­Ø³Ø¨ ÙƒÙ„ Ø¢Ù„Ø© Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„ØªÙŠ Ø³ØªØªÙ„Ù‚Ù‰ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø± Ø¹Ù†Ø¯ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªØ´ØºÙŠÙ„ Ø§Ù„Ø­Ø±Ø¬Ø© Ø§Ù„ØªØ§Ù„ÙŠØ© Ø£Ùˆ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡ Ø§Ù„Ø­ÙŠ Ø§Ù„ØªØ§Ù„ÙŠ.",
+                    "Aperçu machine par machine des emails prévus lors du prochain cas critique ou de la prochaine alerte.",
+                    "Machine-by-machine preview of the emails planned for the next critical case or alert.",
+                    "Ù…Ø¹Ø§ÙŠÙ†Ø© Ø­Ø³Ø¨ ÙƒÙ„ Ø¢Ù„Ø© Ù„Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ù…ØªÙˆÙ‚Ø¹ Ø¹Ù†Ø¯ Ø§Ù„Ø­Ø§Ù„Ø© Ø§Ù„Ø­Ø±Ø¬Ø© Ø§Ù„ØªØ§Ù„ÙŠØ© Ø£Ùˆ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡ Ø§Ù„ØªØ§Ù„ÙŠ.",
                   )}
                 </p>
               </div>

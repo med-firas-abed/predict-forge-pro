@@ -811,7 +811,7 @@ export function CostsPage() {
             <Bar dataKey="labor" name="Main-d'œuvre" fill="#4b8b9b" radius={4} />
             <Bar dataKey="parts" name="Pièces" fill="#d4915a" radius={4} />
             <Bar dataKey="planned" name="Tâches validées" fill="#14b8a6" radius={4} />
-            <Bar dataKey="pipeline" name="Projection pipeline" fill="hsl(var(--primary))" radius={4} />
+            <Bar dataKey="pipeline" name="Projection prévue" fill="hsl(var(--primary))" radius={4} />
           </BarChart>
         </ResponsiveContainer>
       </div>

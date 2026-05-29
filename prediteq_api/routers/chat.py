@@ -690,7 +690,7 @@ async def chat(body: ChatRequest, user: CurrentUser = Depends(require_auth)):
     Groq Llama uses tool-use to query real machine data before answering.
     """
     if not check_user_rate(user.id, limit=15, window=3600):
-        raise HTTPException(429, "Limite atteinte — max 15 requêtes IA par heure")
+        raise HTTPException(429, "Limite atteinte — max 15 requêtes par heure")
 
     if not settings.GROQ_API_KEY:
         raise HTTPException(503, "GROQ_API_KEY not configured")
@@ -726,7 +726,7 @@ async def chat(body: ChatRequest, user: CurrentUser = Depends(require_auth)):
         except Exception as e:
             logger.error("Groq API error: %s", e)
             return StreamingResponse(
-                iter(["Erreur de l'IA. Veuillez réessayer."]),
+                iter(["Erreur du service. Veuillez réessayer."]),
                 media_type="text/plain; charset=utf-8",
             )
 

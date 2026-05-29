@@ -195,7 +195,7 @@ function makePopupHTML(
     machine.rulMode === "reference_only"
       ? localize("Référence stable de durée de vie", "Stable lifetime reference", "مرجع عمر تشغيلي ثابت")
       : machine.rulIntervalLow != null && machine.rulIntervalHigh != null
-        ? `${machine.rulIntervalLabel ?? "IC 80 %"} ${machine.rulIntervalLow}-${machine.rulIntervalHigh} ${localize("j", "d", "ي")}`
+        ? `${machine.rulIntervalLabel ?? "Plage probable (80 %)"} ${machine.rulIntervalLow}-${machine.rulIntervalHigh} ${localize("j", "d", "ي")}`
         : machine.rulci != null
           ? `+/- ${machine.rulci} ${localize("j", "d", "ي")}`
           : localize("Sans intervalle", "No interval", "بدون مجال");

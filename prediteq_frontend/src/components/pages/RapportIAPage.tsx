@@ -25,8 +25,6 @@ interface SavedReport {
 }
 
 type ReportPeriod = "7d" | "15d" | "30d";
-type ReportAudience = "jury" | "dual" | "technician";
-
 interface RapportIAPageProps {
   embedded?: boolean;
 }
@@ -149,7 +147,6 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
   );
   const [period, setPeriod] = useState<ReportPeriod>("7d");
   const [reportLang, setReportLang] = useState<UiLang>(lang);
-  const reportAudience: ReportAudience = "dual";
   const [reportText, setReportText] = useState("");
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -225,7 +222,6 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         machine_id: machineCode,
         period,
         lang: reportLang,
-        audience: reportAudience,
       });
       if (!stream) {
         throw new Error("No stream");
@@ -304,7 +300,6 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         machine_id: machineCode,
         period,
         lang: reportLang,
-        audience: reportAudience,
       });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -396,13 +391,13 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Sparkles className="h-4 w-4 text-primary" />
-                {l("Espace actions separe", "Separate action space", "مساحة الاجراءات المنفصلة")}
+                {l("Plan d'action dédié", "Dedicated action plan", "خطة اجراءات مخصصة")}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {l(
-                  "Le rapport reste centre sur la lecture et l'export. Les actions a valider se gerent maintenant dans une page dediee.",
-                  "The report page now stays focused on review and export. Action validation now lives on its own page.",
-                  "اصبحت صفحة التقرير مخصصة للتحليل والتصدير، بينما اصبح مخطط الذكاء الاصطناعي في صفحة مستقلة.",
+                  "Le rapport reste centré sur la lecture et l'export. Les actions à confirmer sont maintenant regroupées dans une page dédiée.",
+                  "The report page stays focused on review and export. Actions to confirm are now grouped in a dedicated page.",
+                  "اصبحت صفحة التقرير مخصصة للقراءة والتصدير، بينما جُمعت الاجراءات المطلوب تأكيدها في صفحة مخصصة.",
                 )}
               </p>
             </div>
@@ -411,7 +406,7 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
               onClick={() => navigate("/planner")}
               className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-surface-3"
             >
-              {l("Ouvrir l'espace actions", "Open action space", "افتح مساحة الاجراءات")}
+              {l("Ouvrir le plan d'action", "Open action plan", "افتح خطة الاجراءات")}
             </button>
           </div>
         </div>

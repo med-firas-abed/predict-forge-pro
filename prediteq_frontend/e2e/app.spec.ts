@@ -425,7 +425,7 @@ function buildDiagnosticsPayload(machineCode: string) {
       confidence,
       n_trees: 64,
       status: "ok",
-      disclaimer: "Pronostic demo",
+      disclaimer: "Lecture simulée",
     },
     diagnose: {
       machine_code: machineCode,
@@ -522,7 +522,7 @@ function buildDiagnosticsPayload(machineCode: string) {
         calendar_basis: "Rythme observe sur la machine",
         bearing_reference_basis: "Reference ISO 281 corrigee par charge observee",
         warmup_note: "Calibration terminee",
-        model_scope_note: "Lecture issue du pipeline de demo",
+        model_scope_note: "Lecture calculée à partir des signaux machine",
       },
       prediction: {
         rul_days: rulDays,
@@ -530,7 +530,7 @@ function buildDiagnosticsPayload(machineCode: string) {
         rul_days_p90: intervalHigh,
         rul_days_display_low: intervalLow,
         rul_days_display_high: intervalHigh,
-        display_interval_label: "IC 80 %",
+        display_interval_label: "Plage probable (80 %)",
         cycles_remaining: rulDays * 52,
         cycles_per_day_observed: 52,
         factor_used: 1,
@@ -555,7 +555,7 @@ function buildDiagnosticsPayload(machineCode: string) {
     },
     disclaimers: {
       rul_nature: "Demo",
-      calibration_notice: "Calibrated replay",
+      calibration_notice: "Source simulée",
       badge_labels: {
         high: {
           label: "Lecture solide",
@@ -1234,13 +1234,13 @@ test.describe("Authenticated app flows", () => {
     await page.goto("/dashboard?machine=ASC-C3");
     await expect(page.getByRole("heading", { name: /Tableau de bord/i })).toBeVisible();
 
-    await page.getByRole("button", { name: /Contexte sc[ée]nario|Contexte d'exploitation/i }).click();
+    await page.getByRole("button", { name: /Contexte machine|Contexte d'exploitation/i }).click();
     await expect(page.getByText(/Cadre d'exploitation/i)).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /Ouvrir le diagnostic/i }).click();
 
     await expect(page).toHaveURL(/\/diagnostics\?machine=ASC-C3/);
-    await expect(page.getByRole("heading", { name: /Diagnostic avanc/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Diagnostic détaill|Detailed diagnostics/i })).toBeVisible();
 
     const machineSelect = page.locator('select:has(option[value="ASC-B2"])');
     await expect(machineSelect).toBeVisible();

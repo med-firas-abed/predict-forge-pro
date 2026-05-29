@@ -145,7 +145,7 @@ export function SimulatorPage() {
         case "critical":
           return l("Critique", "Critical", "Critical");
         default:
-          return scenario?.health_label ?? l("Scenario", "Scenario", "Scenario");
+          return scenario?.health_label ?? l("Profil", "Profile", "Profile");
       }
     },
     [l],
@@ -161,7 +161,7 @@ export function SimulatorPage() {
         case "critical":
           return l("Critique", "Critical", "Critical");
         default:
-          return l("Scénario", "Scenario", "Scenario");
+          return l("Profil", "Profile", "Profile");
       }
     },
     [l],
@@ -710,9 +710,9 @@ export function SimulatorPage() {
                         <div className="mb-3 rounded-xl border border-border bg-surface-3 p-3">
                           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                             {l(
-                              "Facteurs du scénario",
-                              "Scenario factors",
-                              "Scenario factors",
+                              "Facteurs suivis",
+                              "Tracked factors",
+                              "Tracked factors",
                             )}
                           </div>
                           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">

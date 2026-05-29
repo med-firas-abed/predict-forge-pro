@@ -78,7 +78,7 @@ export function formatPredictiveRul(insight: PredictiveInsight, locale?: string)
     if (typeof insight.machine.referenceLifetimeYears === "number") {
       return `Ref. ${formatCompactNumber(insight.machine.referenceLifetimeYears, activeLocale, 1)} ${yearUnit}`;
     }
-    return isEnglish ? "Stable reference" : "Reference stable";
+    return isEnglish ? "Stable reference" : "Référence stable";
   }
 
   if (typeof insight.rulDays === "number") {

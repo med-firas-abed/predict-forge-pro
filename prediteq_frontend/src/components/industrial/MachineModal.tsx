@@ -131,7 +131,7 @@ export function MachineModal({ machine, onClose }: MachineModalProps) {
               RUL: {referenceOnly
                 ? `Ref. stable ${m.referenceLifetimeYears ?? '—'} ans — lecture de référence`
                 : m.rul !== null && m.rul !== undefined
-                  ? `${m.rul}j${m.rulIntervalLow != null && m.rulIntervalHigh != null ? ` · ${m.rulIntervalLabel ?? 'IC 80 %'} ${m.rulIntervalLow}–${m.rulIntervalHigh}j` : m.rulci ? ` ± ${m.rulci}j` : ''}${m.stopRecommended ? ' · arrêt recommandé' : ''}`
+                  ? `${m.rul}j${m.rulIntervalLow != null && m.rulIntervalHigh != null ? ` · ${m.rulIntervalLabel ?? 'Plage probable (80 %)'} ${m.rulIntervalLow}–${m.rulIntervalHigh}j` : m.rulci ? ` ± ${m.rulci}j` : ''}${m.stopRecommended ? ' · arrêt recommandé' : ''}`
                   : t("modal.inMaintenance")}
             </div>
             <div className="text-xs text-muted-foreground mt-1">{t("modal.anomalies24h")}: {m.anom}</div>

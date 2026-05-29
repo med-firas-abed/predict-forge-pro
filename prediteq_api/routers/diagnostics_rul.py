@@ -550,11 +550,11 @@ def _wide_interval_for_zone(
     """Select the display interval by HI band.
 
     Good zone (0.60-0.80): widen the displayed interval for prudence.
-    Degraded/Critical zones: keep the standard IC80% display.
+    Degraded/Critical zones: keep the standard interval display.
     """
     if zone_name == "Good":
-        return conv_p05["rul_days"], conv_p95["rul_days"], "IC 90 %"
-    return conv_p10["rul_days"], conv_p90["rul_days"], "IC 80 %"
+        return conv_p05["rul_days"], conv_p95["rul_days"], "Plage probable (90 %)"
+    return conv_p10["rul_days"], conv_p90["rul_days"], "Plage probable (80 %)"
 
 
 def build_calibrated_rul_response(manager, machine_code: str) -> dict:

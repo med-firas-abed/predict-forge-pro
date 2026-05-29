@@ -59,7 +59,7 @@ export function buildRulDisplay({
   if (predictionMode === "prediction" && isFiniteNumber(prediction?.rul_days)) {
     const intervalLow = prediction?.rul_days_display_low ?? prediction?.rul_days_p10;
     const intervalHigh = prediction?.rul_days_display_high ?? prediction?.rul_days_p90;
-    const intervalLabel = prediction?.display_interval_label ?? "IC 80 %";
+    const intervalLabel = prediction?.display_interval_label ?? "Plage probable (80 %)";
 
     return {
       value: `${formatDays(prediction.rul_days)} ${dayUnit}`,
@@ -71,8 +71,8 @@ export function buildRulDisplay({
                 : ""
             }`
           : localize(
-              "Prédiction live issue du modèle ML.",
-              "Live ML prediction.",
+              "Lecture calculée à partir des signaux machine.",
+              "Reading calculated from machine signals.",
               "تنبؤ حي صادر عن نموذج التعلم الآلي.",
             ),
       source: "prediction",
@@ -85,13 +85,13 @@ export function buildRulDisplay({
       value: `~${formatDays(pipelineReferenceDays)} ${dayUnit}`,
       sub: hasLastValidReference
         ? localize(
-            "Dernière prédiction valide en attente du flux live.",
-            "Last valid prediction while the live stream resumes.",
+            "Dernière estimation valide en attente du flux en direct.",
+            "Last valid estimate while the live stream resumes.",
             "آخر تنبؤ صالح بانتظار عودة التدفق الحي.",
           )
         : localize(
-            "Repère ML conservé en attendant un RUL live fiable.",
-            "ML reference kept while waiting for a reliable live RUL.",
+            "Référence de durée conservée en attendant une lecture fiable de marge restante.",
+            "Lifetime reference kept while waiting for a reliable remaining-margin reading.",
             "تم الاحتفاظ بمرجع النموذج إلى حين توفر RUL حي موثوق.",
           ),
       source: "reference_projection",
@@ -126,13 +126,13 @@ export function buildRulDisplay({
       value: `${formatDays(machine.rul)} ${dayUnit}`,
       sub: isFiniteNumber(machine?.rulci)
         ? localize(
-            `Dernière prédiction valide +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
-            `Last valid prediction +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
+            `Dernière estimation valide +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
+            `Last valid estimate +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
             `آخر تنبؤ صالح +/- ${formatDays(machine.rulci)} ${dayUnit}.`,
           )
         : localize(
-            "Dernière prédiction valide - actualisation en cours.",
-            "Last valid prediction - refresh in progress.",
+            "Dernière estimation valide - actualisation en cours.",
+            "Last valid estimate - refresh in progress.",
             "آخر تنبؤ صالح - التحديث جار.",
           ),
       source: "cached_prediction",
@@ -144,8 +144,8 @@ export function buildRulDisplay({
     return {
       value: `~${formatDays(pipelineReferenceDays)} ${dayUnit}`,
       sub: localize(
-        "Repère ML provisoire en attendant une lecture live exploitable.",
-        "Temporary ML reference while waiting for a usable live reading.",
+        "Référence de durée provisoire en attendant une lecture en direct exploitable.",
+        "Temporary lifetime reference while waiting for a usable live reading.",
         "مرجع مؤقت من النموذج بانتظار قراءة حية قابلة للاستخدام.",
       ),
       source: "reference_projection",
@@ -154,10 +154,10 @@ export function buildRulDisplay({
   }
 
   return {
-    value: localize("Initialisation RUL", "RUL warm-up", "تهيئة العمر المتبقي"),
+    value: localize("Marge restante en préparation", "Remaining margin warming up", "تهيئة الهامش المتبقي"),
     sub: localize(
-      "Le pipeline collecte encore assez d'historique pour publier un RUL live fiable.",
-      "The pipeline is still collecting enough history before publishing a reliable live RUL.",
+      "Le système collecte encore assez d'historique pour publier une marge restante fiable.",
+      "The system is still collecting enough history before publishing a reliable remaining margin.",
       "لا يزال المسار يجمع ما يكفي من السجل قبل نشر عمر متبقٍ حي موثوق.",
     ),
     source: "initializing",

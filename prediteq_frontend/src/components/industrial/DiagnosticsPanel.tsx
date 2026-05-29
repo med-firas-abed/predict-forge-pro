@@ -119,7 +119,7 @@ function RulIntervalCard({
   return (
     <KpiCard
       icon={<Clock className="w-5 h-5" />}
-      label={l("RUL avec intervalle (IC 80 %)", "RUL with interval (80% CI)", "العمر المتبقي مع المجال (80% CI)")}
+      label={l("RUL avec plage probable", "RUL with likely range", "العمر المتبقي مع النطاق المرجح")}
       value={
         <>
           {Math.round(rul.rul_days)}
@@ -129,11 +129,11 @@ function RulIntervalCard({
       sub={
         hasInterval
           ? l(
-              `Plage probable : ${Math.round(rul.rul_days_p10!)}-${Math.round(rul.rul_days_p90!)} j · ${rul.n_trees ?? 300} arbres`,
-              `Likely range: ${Math.round(rul.rul_days_p10!)}-${Math.round(rul.rul_days_p90!)} d · ${rul.n_trees ?? 300} trees`,
-              `النطاق المرجح: ${Math.round(rul.rul_days_p10!)}-${Math.round(rul.rul_days_p90!)} ي · ${rul.n_trees ?? 300} شجرة`,
+              `Plage probable : ${Math.round(rul.rul_days_p10!)}-${Math.round(rul.rul_days_p90!)} j`,
+              `Likely range: ${Math.round(rul.rul_days_p10!)}-${Math.round(rul.rul_days_p90!)} d`,
+              `النطاق المرجح: ${Math.round(rul.rul_days_p10!)}-${Math.round(rul.rul_days_p90!)} ي`,
             )
-          : l("Intervalle indisponible (mode simulateur ou warming-up)", "Interval unavailable (simulator or warming-up mode)", "المجال غير متاح (وضع المحاكي او التهيئة)")
+          : l("Plage probable indisponible pour l'instant", "Likely range unavailable for now", "النطاق المرجح غير متاح حاليا")
       }
       variant={variant}
     >
@@ -781,7 +781,7 @@ function PredictionPanel({
   const variant = CONFIDENCE_VARIANT[pred.confidence];
   const displayLow = pred.rul_days_display_low ?? pred.rul_days_p10;
   const displayHigh = pred.rul_days_display_high ?? pred.rul_days_p90;
-  const intervalLabel = pred.display_interval_label ?? "IC 80 %";
+  const intervalLabel = pred.display_interval_label ?? "Plage probable (80 %)";
 
   // Couleur du bandeau de statut selon la zone HI
   const isCritical = (rul.hi_current ?? 1) < 0.3;
@@ -1104,7 +1104,7 @@ export function DiagnosticsPanel({ machineCode }: DiagnosticsPanelProps) {
           (thermique, vibratoire, charge, variabilité) normalisés contre des
           seuils <span className="font-semibold">ISO 10816-3:2009</span> et{" "}
           <span className="font-semibold">IEC 60034-1:2017</span>. Complète HI
-          (passé) et RUL (futur) - pas de modèle ML, 100 % auditable.
+          (passé) et RUL (futur) - lecture directe, 100 % auditable.
         </div>
       </div>
 
@@ -1117,7 +1117,7 @@ export function DiagnosticsPanel({ machineCode }: DiagnosticsPanelProps) {
           </div>
           {data.rul_interval?.source === "simulator_override" && (
             <span className="text-[0.6rem] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
-              Mode simulateur
+              Source simulée
             </span>
           )}
         </div>

@@ -30,7 +30,7 @@ Audience = Literal["jury", "technician", "dual"]
 # ── i18n helpers ──────────────────────────────────────────────────────────────
 
 _T = {
-    "title_report":     {"fr": "Rapport IA", "en": "AI Report", "ar": "تقرير الذكاء الاصطناعي"},
+    "title_report":     {"fr": "Rapport PrediTeq", "en": "PrediTeq Report", "ar": "تقرير PrediTeq"},
     "title_weekly":     {"fr": "Rapport Hebdomadaire", "en": "Weekly Report", "ar": "تقرير أسبوعي"},
     "title_monthly":    {"fr": "Rapport Mensuel", "en": "Monthly Report", "ar": "تقرير شهري"},
     "generated":        {"fr": "Généré le", "en": "Generated on", "ar": "تم الإنشاء في"},
@@ -991,9 +991,9 @@ def _draw_pdf_cover(
     pdf.multi_cell(page_w, 10, _sanitize_pdf_text(title))
 
     subtitle = {
-        "fr": "Rapport IA exporte avec mise en forme professionnelle pour partage client et jury.",
-        "en": "AI report exported with professional client-ready formatting.",
-        "ar": "AI report exported with professional client-ready formatting.",
+        "fr": "Rapport exporte avec mise en forme professionnelle.",
+        "en": "Report exported with professional formatting.",
+        "ar": "Report exported with professional formatting.",
     }[lang]
     subtitle = {
         "fr": "Rapport exporte avec mise en forme professionnelle.",
@@ -1012,7 +1012,7 @@ def _draw_pdf_cover(
     label_generated = {"fr": "Genere le", "en": "Generated on", "ar": "Generated on"}[lang]
     label_scope = {"fr": "Perimetre", "en": "Scope", "ar": "Scope"}[lang]
     label_source = {"fr": "Source", "en": "Source", "ar": "Source"}[lang]
-    scope_value = {"fr": "PrediTeq IA report", "en": "PrediTeq AI report", "ar": "PrediTeq AI report"}[lang]
+    scope_value = {"fr": "Rapport PrediTeq", "en": "PrediTeq report", "ar": "تقرير PrediTeq"}[lang]
 
     pdf.set_xy(pdf.l_margin + 4, box_top + 4)
     pdf.set_font(font_family, bold_style, 9)

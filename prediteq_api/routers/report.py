@@ -236,7 +236,7 @@ async def generate_report(body: ReportRequest, user: CurrentUser = Depends(requi
     if not settings.GROQ_API_KEY:
         raise HTTPException(503, "GROQ_API_KEY not configured")
     if not check_user_rate(user.id, limit=10, window=3600):
-        raise HTTPException(429, "Limite atteinte — max 10 rapports IA par heure")
+        raise HTTPException(429, "Limite atteinte — max 10 rapports par heure")
 
     machine, context_data, user_prompt = _gather_context(body.machine_id, user, body.audience)
 
@@ -276,7 +276,7 @@ async def generate_pdf_report(body: ReportRequest,
     if not settings.GROQ_API_KEY:
         raise HTTPException(503, "GROQ_API_KEY not configured")
     if not check_user_rate(user.id, limit=10, window=3600):
-        raise HTTPException(429, "Limite atteinte — max 10 rapports IA par heure")
+        raise HTTPException(429, "Limite atteinte — max 10 rapports par heure")
 
     machine, context_data, user_prompt = _gather_context(body.machine_id, user, body.audience)
     code = body.machine_id
@@ -377,9 +377,6 @@ async def auto_generate_report(body: AutoReportRequest,
         now = datetime.now(timezone.utc)
         machine_part = get_machine_public_label(machine_code) if machine_code else "Toutes les machines"
         period_label = _period_label(body.period, body.lang)
-        body.audience = "dual"
-        if body.audience != "dual":
-            period_label = f"{period_label} - {_audience_label(body.audience)}"
         titre = f"Rapport {period_label} — {machine_part} — {now.strftime('%d/%m/%Y %H:%M')}"
         sb.table('rapports').insert({
             'machine_code': machine_code,

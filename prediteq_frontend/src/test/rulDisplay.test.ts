@@ -20,7 +20,7 @@ describe("buildRulDisplay", () => {
 
     expect(state.source).toBe("reference_projection");
     expect(state.value).toBe("~147.2 j");
-    expect(state.sub).toMatch(/Dernière prédiction valide/i);
+    expect(state.sub).toMatch(/Dernière estimation valide/i);
   });
 
   it("stays in warm-up when only a static demo reference exists", () => {
@@ -36,7 +36,7 @@ describe("buildRulDisplay", () => {
     });
 
     expect(state.source).toBe("initializing");
-    expect(state.value).toBe("Initialisation RUL");
+    expect(state.value).toBe("Marge restante en préparation");
   });
 });
 

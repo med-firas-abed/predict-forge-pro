@@ -13,8 +13,6 @@ interface Message {
   content: string;
 }
 
-type ChatAudience = "jury" | "dual" | "technician";
-
 function getChatMachinePriorityScore(machine: Machine) {
   const urgencyScore = machine.decision?.urgencyScore;
   if (typeof urgencyScore === "number" && Number.isFinite(urgencyScore)) {
@@ -63,7 +61,6 @@ export function ChatWidget() {
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const audience: ChatAudience = "dual";
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
   const { primary: primaryMachineLabel, secondary: secondaryMachineLabel } =
@@ -124,7 +121,7 @@ export function ChatWidget() {
         content: message.content,
       }));
 
-      const stream = await apiStream("/chat", { message: text, history, audience });
+      const stream = await apiStream("/chat", { message: text, history });
       if (!stream) throw new Error("No stream");
 
       const reader = stream.getReader();

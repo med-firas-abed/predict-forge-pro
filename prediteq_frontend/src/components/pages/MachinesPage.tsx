@@ -72,17 +72,17 @@ function getMachineSourceMeta(machine: Machine, lang = getUiLang()) {
   switch (machine.dataSource ?? machine.decision?.dataSource ?? "no_data") {
     case "live_runtime":
       return {
-        label: localize(lang, "Flux live", "Live feed"),
+        label: localize(lang, "Flux en direct", "Live feed"),
         className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700",
       };
     case "simulator_demo":
       return {
-        label: localize(lang, "Replay demo", "Demo replay"),
+        label: localize(lang, "Source simulée", "Simulated source"),
         className: "border-sky-500/20 bg-sky-500/10 text-sky-700",
       };
     case "persisted_reference":
       return {
-        label: localize(lang, "Reference", "Reference"),
+        label: localize(lang, "Référence stable", "Stable reference"),
         className: "border-amber-500/20 bg-amber-500/10 text-amber-700",
       };
     default:
@@ -105,8 +105,8 @@ function getTelemetrySourceLabel(source?: string | null, lang = getUiLang()) {
   ) {
     return localize(lang, "Bridge PC relais", "Relay PC bridge");
   }
-  if (normalized.includes("simulator")) return localize(lang, "Replay demo", "Demo replay");
-  if (normalized.includes("runtime")) return localize(lang, "Pipeline live", "Live pipeline");
+  if (normalized.includes("simulator")) return localize(lang, "Source simulée", "Simulated source");
+  if (normalized.includes("runtime")) return localize(lang, "Flux en direct", "Live feed");
   return source?.replace(/_/g, " ") ?? null;
 }
 
@@ -462,7 +462,7 @@ export function MachinesPage() {
         <div>
           <div className="section-title">{l("Gestion des machines", "Machine management")}</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {l("Metadonnees, statut et acces aux analyses detaillees.", "Metadata, status, and access to detailed analysis.")}
+            {l("Métadonnées, statut et accès aux analyses détaillées.", "Metadata, status, and access to detailed analysis.")}
           </p>
         </div>
         <div className="flex gap-2">

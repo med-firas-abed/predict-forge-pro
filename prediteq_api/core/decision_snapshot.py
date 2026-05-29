@@ -37,8 +37,8 @@ CONFIDENCE_LABELS: dict[str, str] = {
 
 DATA_SOURCE_LABELS: dict[str, str] = {
     "live_runtime": "flux en direct",
-    "simulator_demo": "replay démo calibré",
-    "persisted_reference": "référence persistée",
+    "simulator_demo": "source simulée",
+    "persisted_reference": "référence stable",
     "no_data": "aucun flux récent",
 }
 
@@ -756,7 +756,7 @@ def build_machine_decision_snapshot(
 
     if str(scenario_policy.get("source") or "") == "demo_scenario" and scenario_pressure >= 0.45:
         evidence.append(
-            f"Contexte scenario {scenario_policy.get('label', 'actif')} ({scenario_policy.get('summary', 'usage soutenu')})"
+            f"Contexte machine {scenario_policy.get('label', 'actif')} ({scenario_policy.get('summary', 'usage soutenu')})"
         )
     if telemetry_trust <= 70:
         evidence.append(f"Telemetrie {telemetry_policy.get('trust_level', 'prudente')} ({telemetry_trust}/100)")

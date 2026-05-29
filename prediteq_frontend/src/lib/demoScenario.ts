@@ -170,7 +170,7 @@ export function describeAudienceScenarioUsageCase(
 
   if (!scenario) {
     return localize(
-      "Contexte d'exploitation non detaille pour cette machine.",
+      "Contexte d'exploitation non détaillé pour cette machine.",
       "Operating context is not detailed for this machine.",
       "Operating context is not detailed for this machine.",
     );
@@ -208,9 +208,9 @@ export function describeAudienceScenarioExplanation(
 ) {
   if (!scenario) {
     return localize(
-      "Cette vue relie le contexte d'usage simule a l'evolution du HI et de la marge RUL.",
-      "This view links the simulated operating context to HI drift and remaining-life margin.",
-      "This view links the simulated operating context to HI drift and remaining-life margin.",
+      "Cette vue relie le contexte d'usage de la machine a l'evolution du HI et de la marge RUL.",
+      "This view links the machine operating context to HI drift and remaining-life margin.",
+      "This view links the machine operating context to HI drift and remaining-life margin.",
     );
   }
 
@@ -223,20 +223,20 @@ export function describeAudienceScenarioExplanation(
   const derivedLead =
     wear >= 0.75
       ? localize(
-          "Le scenario part d'une usure deja avancee",
-          "The scenario starts from already advanced wear",
-          "The scenario starts from already advanced wear",
+          "La machine part d'une usure deja avancee",
+          "The machine starts from already advanced wear",
+          "The machine starts from already advanced wear",
         )
       : wear >= 0.4
         ? localize(
-            "Le scenario part d'une usure intermediaire",
-            "The scenario starts from intermediate wear",
-            "The scenario starts from intermediate wear",
+            "La machine part d'une usure intermediaire",
+            "The machine starts from intermediate wear",
+            "The machine starts from intermediate wear",
           )
         : localize(
-            "Le scenario part d'une usure encore contenue",
-            "The scenario starts from still-contained wear",
-            "The scenario starts from still-contained wear",
+            "La machine part d'une usure encore contenue",
+            "The machine starts from still-contained wear",
+            "The machine starts from still-contained wear",
           );
   const overloadLead =
     overload >= 0.45
@@ -277,9 +277,9 @@ export function describeAudienceScenarioExplanation(
   const intensityTail =
     intensity >= 0.75
       ? localize(
-          "Cette combinaison accelere la derive HI et raccourcit plus vite la marge RUL pendant la simulation.",
-          "This combination accelerates HI drift and shortens the RUL margin faster during simulation.",
-          "This combination accelerates HI drift and shortens the RUL margin faster during simulation.",
+          "Cette combinaison accelere la derive HI et raccourcit plus vite la marge RUL affichee.",
+          "This combination accelerates HI drift and shortens the displayed RUL margin faster.",
+          "This combination accelerates HI drift and shortens the displayed RUL margin faster.",
         )
       : intensity >= 0.45
         ? localize(

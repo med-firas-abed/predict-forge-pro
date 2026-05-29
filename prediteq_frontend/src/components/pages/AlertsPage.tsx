@@ -400,7 +400,7 @@ export function AlertsPage() {
           </span>
           {reviewSignalCount > 0 ? (
             <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
-              {reviewSignalCount} signal{reviewSignalCount > 1 ? "aux" : ""} à requalifier
+              {reviewSignalCount} ancien{reviewSignalCount > 1 ? "s" : ""} signal{reviewSignalCount > 1 ? "aux" : ""} ouvert{reviewSignalCount > 1 ? "s" : ""}
             </span>
           ) : null}
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.72rem] font-semibold text-muted-foreground">
@@ -873,7 +873,7 @@ export function AlertsPage() {
               const successClass = entry.success
                 ? "border-success/25 bg-success/5 text-success"
                 : "border-destructive/25 bg-destructive/5 text-destructive";
-              const sourceLabel = entry.source === "simulator" ? "Simulation" : "Pipeline";
+              const sourceLabel = entry.source === "simulator" ? "Source simulée" : "Flux en direct";
               return (
                 <div key={entry.id} className="rounded-xl border border-border bg-card p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
