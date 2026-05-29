@@ -61,9 +61,9 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
-  const [audience, setAudience] = useState<ChatAudience>("dual");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const audience: ChatAudience = "dual";
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
   const { primary: primaryMachineLabel, secondary: secondaryMachineLabel } =
@@ -167,92 +167,46 @@ export function ChatWidget() {
     }
   };
 
-  const audienceOptions: Array<{ id: ChatAudience; label: string }> = [
-    { id: "jury", label: l("Jury", "Jury", "Jury") },
-    { id: "dual", label: l("Les deux", "Both", "Both") },
-    { id: "technician", label: l("Technicien", "Technician", "Technician") },
-  ];
+  const helperText = l(
+    "Reponses claires avec l'essentiel d'abord, puis le detail utile.",
+    "Clear answers with the key point first, then the useful detail.",
+    "Clear answers with the key point first, then the useful detail.",
+  );
 
-  const audienceHelp =
-    audience === "jury"
+  const suggestions = [
+    l(
+      "Quelle machine demande de l'attention aujourd'hui ?",
+      "Which machine needs attention today?",
+      "Which machine needs attention today?",
+    ),
+    primaryMachineLabel
       ? l(
-          "Reponses sans jargon, avec l'impact et l'action en premier.",
-          "Answers without jargon, with impact and action first.",
-          "Answers without jargon, with impact and action first.",
+          `Explique ${primaryMachineLabel} clairement`,
+          `Explain ${primaryMachineLabel} clearly`,
+          `Explain ${primaryMachineLabel} clearly`,
         )
-      : audience === "technician"
-        ? l(
-            "Reponses terrain avec HI, RUL, alertes et facteurs dominants.",
-            "Field-ready answers with HI, RUL, alerts, and dominant drivers.",
-            "Field-ready answers with HI, RUL, alerts, and dominant drivers.",
-          )
-        : l(
-            "Reponses en deux couches: resume simple puis details terrain.",
-            "Two-layer answers: simple summary then field details.",
-            "Two-layer answers: simple summary then field details.",
-          );
-
-  const suggestions =
-    audience === "jury"
-      ? [
-          l("Quelle machine demande de l'attention aujourd'hui ?", "Which machine needs attention today?", "Which machine needs attention today?"),
-          primaryMachineLabel
-            ? l(
-                `Explique ${primaryMachineLabel} avec des mots simples`,
-                `Explain ${primaryMachineLabel} in simple words`,
-                `Explain ${primaryMachineLabel} in simple words`,
-              )
-            : l(
-                "Explique la machine la plus sensible avec des mots simples",
-                "Explain the most sensitive machine in simple words",
-                "Explain the most sensitive machine in simple words",
-              ),
-            l("Résume la flotte pour un jury", "Summarize the fleet for a jury", "Summarize the fleet for a jury"),
-            l("Quel est le prochain geste à faire ?", "What should we do next?", "What should we do next?"),
-        ]
-      : audience === "technician"
-        ? [
-            primaryMachineLabel
-              ? l(
-                  `Donne HI, RUL et facteur principal pour ${primaryMachineLabel}`,
-                  `Give HI, RUL, and top driver for ${primaryMachineLabel}`,
-                  `Give HI, RUL, and top driver for ${primaryMachineLabel}`,
-                )
-              : l(
-                  "Donne HI, RUL et facteur principal pour la machine la plus sensible",
-                  "Give HI, RUL, and top driver for the most sensitive machine",
-                  "Give HI, RUL, and top driver for the most sensitive machine",
-                ),
-            l("Quelles alertes sont urgentes ?", "Which alerts are urgent?", "Which alerts are urgent?"),
-            l("Quelle fenêtre d'intervention pour Machine 3 ?", "What is the intervention window for Machine 3?", "What is the intervention window for Machine 3?"),
-            l("Résume la flotte avec les priorités terrain", "Summarize the fleet with field priorities", "Summarize the fleet with field priorities"),
-          ]
-        : [
-            primaryMachineLabel
-              ? l(
-                  `Explique ${primaryMachineLabel} simplement puis techniquement`,
-                  `Explain ${primaryMachineLabel} simply, then technically`,
-                  `Explain ${primaryMachineLabel} simply, then technically`,
-                )
-              : l(
-                  "Explique la machine prioritaire simplement puis techniquement",
-                  "Explain the priority machine simply, then technically",
-                  "Explain the priority machine simply, then technically",
-                ),
-            l("Quelle machine est prioritaire ?", "Which machine is the priority?", "Which machine is the priority?"),
-            l("Résume la flotte pour un jury et un technicien", "Summarize the fleet for a jury and a technician", "Summarize the fleet for a jury and a technician"),
-            primaryMachineLabel
-              ? l(
-                  `Pourquoi ${primaryMachineLabel} est prioritaire ?`,
-                  `Why is ${primaryMachineLabel} the priority?`,
-                  `Why is ${primaryMachineLabel} the priority?`,
-                )
-              : l(
-                  "Pourquoi la machine prioritaire est urgente ?",
-                  "Why is the priority machine urgent?",
-                  "Why is the priority machine urgent?",
-                ),
-          ];
+      : l(
+          "Explique la machine la plus sensible clairement",
+          "Explain the most sensitive machine clearly",
+          "Explain the most sensitive machine clearly",
+        ),
+    l(
+      "Resumer l'etat de la flotte",
+      "Summarize the fleet status",
+      "Summarize the fleet status",
+    ),
+    primaryMachineLabel
+      ? l(
+          `Pourquoi ${primaryMachineLabel} est prioritaire ?`,
+          `Why is ${primaryMachineLabel} the priority?`,
+          `Why is ${primaryMachineLabel} the priority?`,
+        )
+      : l(
+          "Pourquoi la machine prioritaire demande de l'attention ?",
+          "Why does the priority machine need attention?",
+          "Why does the priority machine need attention?",
+        ),
+  ];
   const fallbackPriorityLabel = l(
     "la machine prioritaire",
     "the priority machine",
@@ -321,23 +275,7 @@ export function ChatWidget() {
                 </span>
               </div>
               <div className="mt-0.5 text-[0.76rem] leading-5 text-muted-foreground">{t("chat.subtitle")}</div>
-              <div className="mt-1 text-[0.74rem] leading-5 text-muted-foreground">{audienceHelp}</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {audienceOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setAudience(option.id)}
-                    className={`rounded-full border px-3 py-1 text-[0.68rem] font-semibold transition-all ${
-                      audience === option.id
-                        ? "border-primary/20 bg-primary text-primary-foreground"
-                        : "border-border/70 bg-background/70 text-muted-foreground hover:border-primary/20 hover:text-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+              <div className="mt-1 text-[0.74rem] leading-5 text-muted-foreground">{helperText}</div>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -356,7 +294,7 @@ export function ChatWidget() {
                     Guide PrediTeq
                   </div>
                   <p className="text-[0.95rem] leading-7 text-foreground/88">{t("chat.welcome")}</p>
-                  <p className="mt-3 text-[0.82rem] leading-6 text-muted-foreground">{audienceHelp}</p>
+                  <p className="mt-3 text-[0.82rem] leading-6 text-muted-foreground">{helperText}</p>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {visibleSuggestions.map((suggestion) => (

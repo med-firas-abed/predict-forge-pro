@@ -78,20 +78,17 @@ describe("ChatWidget", () => {
 
     expect(screen.queryByText(/Machine 2/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Explique Machine (3|ARO-01) simplement puis techniquement/i),
+      screen.getByText(/Explique Machine (3|ARO-01) clairement/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Pourquoi Machine (3|ARO-01) est prioritaire \?/i),
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Technicien" }));
-
     expect(
-      screen.getByText(/Donne HI, RUL et facteur principal pour Machine (3|ARO-01)/i),
+      screen.getByText(/Resumer .* flotte/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/intervention.*Machine (3|ARO-01)/i),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Technicien" }),
+    ).not.toBeInTheDocument();
   });
 
   it("replaces the pending assistant placeholder when the streamed reply fails", async () => {
