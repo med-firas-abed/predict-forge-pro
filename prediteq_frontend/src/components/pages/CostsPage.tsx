@@ -25,10 +25,8 @@ import { KpiCard } from "@/components/industrial/KpiCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCouts } from "@/hooks/useCouts";
 import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
-import { useGmaoTaches } from "@/hooks/useGmaoTaches";
 import { useMachines } from "@/hooks/useMachines";
 import {
-  getBudgetReferenceCost,
   getTaskCostReference,
   LABOR_RATE_PER_HOUR,
 } from "@/lib/costModel";
@@ -55,14 +53,14 @@ function formatMonthLabel(year: number, month: number) {
   });
 }
 
-function getBaselineSourceLabel(source: string) {
+function getBaseExplanation(source: string) {
   switch (source) {
     case "machine_history":
-      return "Base : historique machine";
+      return "Base de calcul : moyenne mensuelle de cette machine";
     case "fleet_history":
-      return "Base : moyenne flotte";
+      return "Base de calcul : moyenne mensuelle de la flotte";
     default:
-      return "Base : type d'action";
+      return "Base de calcul : forfait standard du type d'action";
   }
 }
 
@@ -85,7 +83,6 @@ export function CostsPage() {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const { couts: rows } = useCouts(currentUser?.machineId);
-  const { taches } = useGmaoTaches(currentUser?.machineId);
   const { machines } = useMachines(currentUser?.machineId);
   const { insights, isFetching } = useFleetPredictiveInsights(machines);
 
@@ -116,49 +113,21 @@ export function CostsPage() {
     return Array.from(map.values()).sort((left, right) => left.periodKey.localeCompare(right.periodKey));
   }, [rows]);
 
-  const recentMonthlyData = useMemo(() => {
-    const currentMonthStart = new Date();
-    currentMonthStart.setDate(1);
-
-    const sourceMap = new Map(monthlyData.map((entry) => [entry.periodKey, entry]));
-
-    return [3, 2, 1, 0].map((offset) => {
-      const date = new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - offset, 1);
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
-      const periodKey = `${year}-${String(month).padStart(2, "0")}`;
-      const source = sourceMap.get(periodKey);
-
-      return {
-        periodKey,
-        label: formatMonthLabel(year, month),
-        labor: source?.labor ?? 0,
-        parts: source?.parts ?? 0,
-        total: source?.total ?? 0,
-        pipeline: offset === 0 ? 0 : 0,
-      };
-    });
-  }, [monthlyData]);
+  const displayedMonthlyData = useMemo(() => monthlyData.slice(-6), [monthlyData]);
 
   const historyWindowLabel = useMemo(() => {
-    if (recentMonthlyData.length === 0) {
-      return "Aucune fenêtre budgétaire récente n'est disponible.";
+    if (displayedMonthlyData.length === 0) {
+      return "Aucun cout reel n'est encore enregistre dans la base.";
     }
 
-    const first = recentMonthlyData[0];
-    const last = recentMonthlyData[recentMonthlyData.length - 1];
-    const hasRecordedCosts = recentMonthlyData.some((entry) => entry.total > 0);
-
+    const first = displayedMonthlyData[0];
+    const last = displayedMonthlyData[displayedMonthlyData.length - 1];
     if (first.periodKey === last.periodKey) {
-      return hasRecordedCosts
-        ? `Fenêtre lue : ${first.label}`
-        : `Fenêtre lue : ${first.label} · aucune dépense enregistrée`;
+      return `Historique charge : ${first.label}`;
     }
 
-    return hasRecordedCosts
-      ? `Fenêtre lue : ${first.label} -> ${last.label}`
-      : `Fenêtre lue : ${first.label} -> ${last.label} · aucune dépense enregistrée`;
-  }, [recentMonthlyData]);
+    return `Historique charge : ${first.label} -> ${last.label}`;
+  }, [displayedMonthlyData]);
 
   const historyByMachine = useMemo(() => {
     const map = new Map<string, { total: number; labor: number; parts: number; count: number }>();
@@ -175,6 +144,17 @@ export function CostsPage() {
     return map;
   }, [rows]);
 
+  const machineHistoryRows = useMemo(
+    () =>
+      Array.from(historyByMachine.entries())
+        .map(([machineCode, history]) => ({
+          machineCode,
+          ...history,
+        }))
+        .sort((left, right) => right.total - left.total),
+    [historyByMachine],
+  );
+
   const fleetHistoricalAverage = useMemo(() => {
     if (rows.length === 0) {
       return 0;
@@ -182,28 +162,6 @@ export function CostsPage() {
 
     return rows.reduce((sum, row) => sum + row.total, 0) / rows.length;
   }, [rows]);
-
-  const plannedTaskLoadByMonth = useMemo(() => {
-    const map = new Map<string, number>();
-
-    taches.forEach((task) => {
-      if (!task.datePlanifiee) return;
-
-      const periodKey = task.datePlanifiee.slice(0, 7);
-      const machineHistory = historyByMachine.get(task.machineCode);
-      const machineAverage =
-        machineHistory && machineHistory.count > 0 ? machineHistory.total / machineHistory.count : 0;
-      const historyReference =
-        machineAverage > 0 ? machineAverage : fleetHistoricalAverage > 0 ? fleetHistoricalAverage : 0;
-      const fallback = getBudgetReferenceCost(task.type, historyReference);
-      const estimatedCost =
-        typeof task.coutEstime === "number" && task.coutEstime > 0 ? task.coutEstime : fallback;
-
-      map.set(periodKey, (map.get(periodKey) ?? 0) + estimatedCost);
-    });
-
-    return map;
-  }, [fleetHistoricalAverage, historyByMachine, taches]);
 
   const liveCostEntries = useMemo(() => {
     return insights
@@ -243,13 +201,12 @@ export function CostsPage() {
 
   const budgetFocusEntries = actionableCostEntries.length > 0 ? actionableCostEntries : liveCostEntries;
 
-  const comparisonData = useMemo(
+  const projectionComparisonData = useMemo(
     () =>
       budgetFocusEntries.map((entry) => ({
         machine: getMachinePublicLabel(entry.insight.machine),
-        history: Math.round(entry.historicalAverage),
         projection: entry.projectedCost,
-        delayed: entry.delayedCost,
+        penalty: entry.delayPenalty,
       })),
     [budgetFocusEntries],
   );
@@ -257,40 +214,14 @@ export function CostsPage() {
   const totalHistoricalCost = rows.reduce((sum, row) => sum + row.total, 0);
   const totalLabor = rows.reduce((sum, row) => sum + row.mainOeuvre, 0);
   const totalParts = rows.reduce((sum, row) => sum + row.pieces, 0);
+  const loadedPeriods = monthlyData.length;
   const projectedBudget = budgetFocusEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
   const delayedExposure = budgetFocusEntries.reduce((sum, entry) => sum + entry.delayPenalty, 0);
   const routineProjectionBudget = routineCostEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
-  const averageHistoricalTicket = rows.length > 0 ? totalHistoricalCost / rows.length : 0;
-  const actionsToReview = actionableCostEntries.length;
   const hasActionableBudgetCases = actionableCostEntries.length > 0;
+  const actionsToReview = actionableCostEntries.length;
   const topProjectedMachine = budgetFocusEntries[0] ?? null;
-
-  const timelineData = useMemo(() => {
-    if (recentMonthlyData.length === 0) {
-      return [];
-    }
-
-    return recentMonthlyData.map((entry, index) => ({
-      ...entry,
-      planned: Math.round(plannedTaskLoadByMonth.get(entry.periodKey) ?? 0),
-      pipeline: index === recentMonthlyData.length - 1 ? projectedBudget : 0,
-    }));
-  }, [plannedTaskLoadByMonth, projectedBudget, recentMonthlyData]);
-
-  const historicalContextLabel = useMemo(() => {
-    const closedMonths = timelineData.slice(0, -1).filter((entry) => entry.total === 0);
-    if (closedMonths.length === 0) {
-      return null;
-    }
-
-    return closedMonths
-      .map((entry) =>
-        entry.planned > 0
-          ? `${entry.label} : aucune dépense clôturée, mais ${formatCurrency(entry.planned)} d'engagements validés au calendrier`
-          : `${entry.label} : aucune dépense enregistrée dans la base pour cette période`,
-      )
-      .join(" · ");
-  }, [timelineData]);
+  const shownMachineCount = hasActionableBudgetCases ? actionsToReview : budgetFocusEntries.length;
 
   const openPlanner = (machineCode?: string) => {
     if (isAdmin) {
@@ -312,12 +243,13 @@ export function CostsPage() {
 
   const exportCsv = () => {
     const header =
-      "Machine,Mois,Année,Main-d'œuvre,Pièces,Total,Moyenne historique,Projection probable,Surcoût si report\n";
+      "Machine,Mois,Annee,Main-d'oeuvre,Pieces,Total,Total historique machine,Base de calcul,Projection prochaine action,Surcout si report\n";
     const rowMap = new Map(
       liveCostEntries.map((entry) => [
         entry.insight.machine.id,
         {
-          average: Math.round(entry.historicalAverage),
+          historicalTotal: Math.round(entry.historicalTotal),
+          baseLabel: getBaseExplanation(entry.baseSource),
           projection: entry.projectedCost,
           delayPenalty: entry.delayPenalty,
         },
@@ -334,7 +266,8 @@ export function CostsPage() {
           row.mainOeuvre,
           row.pieces,
           row.total,
-          live?.average ?? "",
+          live?.historicalTotal ?? "",
+          live?.baseLabel ?? "",
           live?.projection ?? "",
           live?.delayPenalty ?? "",
         ].join(",");
@@ -348,20 +281,20 @@ export function CostsPage() {
     anchor.download = `couts_maintenance_${new Date().toISOString().slice(0, 10)}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
-    toast.success("Export CSV prêt");
+    toast.success("Export CSV pret");
   };
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="section-title">Impact budgetaire du pronostic machine</div>
+          <div className="section-title">Lecture simple des couts maintenance</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Le budget part du HI, du stress et du RUL, puis estime l'action probable.
+            La page separe les couts reels deja enregistres et les estimations de prochaine action.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Hypothese de reference quand l'historique manque : main-d'oeuvre a {LABOR_RATE_PER_HOUR} DT/h
-            avec un forfait pieces selon le type d'action.
+            Une ligne de cout correspond a un cumul mensuel par machine. Une estimation de maintenance
+            n'est pas le prix d'achat ou de remplacement du moteur.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{historyWindowLabel}</p>
         </div>
@@ -375,15 +308,157 @@ export function CostsPage() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
+        <div className="mb-4">
+          <div className="section-title">Historique enregistre</div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Montants reels deja saisis dans la base.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard
+            icon={<DollarSign className="h-5 w-5" />}
+            label="Depenses enregistrees"
+            value={
+              <>
+                {totalHistoricalCost.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
+              </>
+            }
+            sub="Somme des lignes mensuelles deja saisies"
+            variant="blue"
+          />
+          <KpiCard
+            icon={<Wrench className="h-5 w-5" />}
+            label="Main-d'oeuvre enregistree"
+            value={
+              <>
+                {totalLabor.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
+              </>
+            }
+            sub="Montant reel saisi"
+            variant="green"
+          />
+          <KpiCard
+            icon={<Package className="h-5 w-5" />}
+            label="Pieces enregistrees"
+            value={
+              <>
+                {totalParts.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
+              </>
+            }
+            sub="Montant reel saisi"
+            variant="warn"
+          />
+          <KpiCard
+            icon={<CalendarClock className="h-5 w-5" />}
+            label="Periodes chargees"
+            value={String(loadedPeriods)}
+            sub={`${machineHistoryRows.length} machine${machineHistoryRows.length > 1 ? "s" : ""} avec historique`}
+            variant="blue"
+          />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+          <div className="rounded-2xl border border-border bg-surface-3 p-5">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Depenses mensuelles enregistrees</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Seulement les couts reels deja saisis.
+              </p>
+            </div>
+
+            {displayedMonthlyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={displayedMonthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "hsl(220,18%,10%)",
+                      border: "1px solid hsl(220,14%,20%)",
+                      borderRadius: "8px",
+                      fontSize: "11px",
+                      color: "hsl(215,12%,55%)",
+                    }}
+                    formatter={(value: number) => [`${value.toLocaleString("fr-FR")} TND`, ""]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(215,12%,55%)" }} />
+                  <Bar dataKey="labor" name="Main-d'oeuvre" fill="#4b8b9b" radius={4} stackId="history" />
+                  <Bar dataKey="parts" name="Pieces" fill="#d4915a" radius={4} stackId="history" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="rounded-xl border border-border bg-card/70 px-4 py-6 text-sm text-muted-foreground">
+                Aucun cout reel n'est encore disponible pour alimenter ce graphique.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-border bg-surface-3 p-5">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Repartition chargee par machine</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cumuls deja charges dans la base.
+              </p>
+            </div>
+
+            {machineHistoryRows.length > 0 ? (
+              <div className="space-y-3">
+                {machineHistoryRows.slice(0, 4).map((entry) => (
+                  <div
+                    key={entry.machineCode}
+                    className="rounded-xl border border-border bg-card/70 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-sm font-semibold text-foreground">
+                        {getMachinePublicLabel(entry.machineCode)}
+                      </div>
+                      <span className="rounded-full bg-surface-3 px-2.5 py-1 text-[0.65rem] font-semibold text-muted-foreground">
+                        {entry.count} mois
+                      </span>
+                    </div>
+                    <div className="mt-2 text-lg font-bold text-foreground">
+                      {formatCurrency(entry.total)}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Main-d'oeuvre : {formatCurrency(entry.labor)} / Pieces : {formatCurrency(entry.parts)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-card/70 px-4 py-6 text-sm text-muted-foreground">
+                Aucune machine ne dispose encore d'un historique charge.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Ce que la prediction engage maintenant</div>
+            <div className="section-title">Prochaine action estimee</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Comparatif entre cout observe, prochaine action et cout du retard.
+              Estimations de maintenance pour les machines affichees ci-dessous.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Base minimale sans historique : main-d'oeuvre a {LABOR_RATE_PER_HOUR} DT/h avec un
+              forfait pieces selon le type d'action.
             </p>
           </div>
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.65rem] font-semibold text-muted-foreground">
-            {isFetching ? "Mise à jour..." : "Actualisation 5 s"}
+            {isFetching ? "Mise a jour..." : "Actualisation 5 s"}
           </span>
         </div>
 
@@ -391,7 +466,7 @@ export function CostsPage() {
           <div className="mb-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
             {routineCostEntries.length} machine{routineCostEntries.length > 1 ? "s" : ""} stable
             {routineCostEntries.length > 1 ? "s restent" : " reste"} suivie
-            {routineCostEntries.length > 1 ? "s" : ""} en projection de routine (
+            {routineCostEntries.length > 1 ? "s" : ""} en routine (
             {formatCurrency(routineProjectionBudget)}), hors priorite immediate.
           </div>
         ) : null}
@@ -399,72 +474,79 @@ export function CostsPage() {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="rounded-2xl border border-border bg-surface-3 p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Historique vs prochaine action</h3>
+              <h3 className="text-sm font-semibold text-foreground">Projection et surcout du report</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Gris = historique. Vert = action now. Orange = cout du report.
+                Vert = prochaine action. Orange = surcout si on reporte encore.
               </p>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={comparisonData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
-                <XAxis
-                  dataKey="machine"
-                  tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(value: number) => `${Math.round(value / 1000)}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "hsl(220,18%,10%)",
-                    border: "1px solid hsl(220,14%,20%)",
-                    borderRadius: "8px",
-                    fontSize: "11px",
-                    color: "hsl(215,12%,55%)",
-                  }}
-                  formatter={(value: number) => [`${value.toLocaleString("fr-FR")} TND`, ""]}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(215,12%,55%)" }} />
-                <Bar dataKey="history" name="Moyenne historique" fill="#94a3b8" radius={4} />
-                <Bar dataKey="projection" name="Prochaine action" fill="hsl(var(--primary))" radius={4} />
-                <Bar dataKey="delayed" name="Si l'on reporte" fill="#f59e0b" radius={4} opacity={0.75} />
-              </BarChart>
-            </ResponsiveContainer>
+
+            {projectionComparisonData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={projectionComparisonData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
+                  <XAxis
+                    dataKey="machine"
+                    tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value: number) => `${Math.round(value / 1000)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "hsl(220,18%,10%)",
+                      border: "1px solid hsl(220,14%,20%)",
+                      borderRadius: "8px",
+                      fontSize: "11px",
+                      color: "hsl(215,12%,55%)",
+                    }}
+                    formatter={(value: number) => [`${value.toLocaleString("fr-FR")} TND`, ""]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(215,12%,55%)" }} />
+                  <Bar dataKey="projection" name="Prochaine action" fill="hsl(var(--primary))" radius={4} />
+                  <Bar dataKey="penalty" name="Surcout si report" fill="#f59e0b" radius={4} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="rounded-xl border border-border bg-card/70 px-4 py-6 text-sm text-muted-foreground">
+                Aucune projection n'est encore disponible pour la flotte.
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-3 p-5">
               <div className="industrial-label">
-                {hasActionableBudgetCases ? "Si on agit maintenant" : "Projection de routine"}
+                {hasActionableBudgetCases ? "Total des actions a lancer" : "Total des actions de routine"}
               </div>
               <div className="mt-3 text-3xl font-bold text-foreground">{formatCurrency(projectedBudget)}</div>
               <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                 {hasActionableBudgetCases
-                  ? "Somme des cas que le pronostic place dans l'action immediate."
-                  : "Projection des prochaines actions de routine sur la flotte stable."}{" "}
-                Sans historique exploitable : {LABOR_RATE_PER_HOUR} DT/h + forfait pieces par type d'action.
+                  ? "Somme des prochaines actions des machines a traiter en premier."
+                  : "Somme des prochaines actions des machines stables affichees."}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Si on attend</div>
+                <div className="industrial-label">Surcout si report</div>
                 <div className="mt-2 text-xl font-bold text-destructive">+{formatCurrency(delayedExposure)}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Surcoût estimé si la prochaine fenêtre est encore repoussée
+                  Difference supplementaire si la prochaine fenetre est encore repoussee
                 </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Cas à arbitrer</div>
-                <div className="mt-2 text-xl font-bold text-warning">{actionsToReview}</div>
+                <div className="industrial-label">
+                  {hasActionableBudgetCases ? "Machines a traiter" : "Machines lues"}
+                </div>
+                <div className="mt-2 text-xl font-bold text-warning">{shownMachineCount}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Machines non stables à relire dans le plan d'action
+                  {hasActionableBudgetCases ? "Machines non stables affichees ici" : "Machines affichees dans cette lecture"}
                 </div>
               </div>
 
@@ -474,19 +556,15 @@ export function CostsPage() {
                   {topProjectedMachine ? getMachinePublicLabel(topProjectedMachine.insight.machine) : "-"}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {topProjectedMachine
-                    ? formatCurrency(topProjectedMachine.projectedCost)
-                    : "Aucune donnée exploitable"}
+                  {topProjectedMachine ? formatCurrency(topProjectedMachine.projectedCost) : "Aucune donnee exploitable"}
                 </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Ticket moyen connu</div>
-                <div className="mt-2 text-base font-bold text-foreground">
-                  {rows.length > 0 ? formatCurrency(averageHistoricalTicket) : "-"}
-                </div>
+                <div className="industrial-label">Sans historique</div>
+                <div className="mt-2 text-base font-bold text-foreground">{LABOR_RATE_PER_HOUR} DT/h</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Moyenne des interventions déjà enregistrées
+                  Avec un forfait pieces selon le type d'action
                 </div>
               </div>
             </div>
@@ -494,10 +572,10 @@ export function CostsPage() {
             <div className="rounded-2xl border border-border bg-surface-3 p-4">
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Étape suivante</div>
+                <div className="text-sm font-semibold text-foreground">Etape suivante</div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Choisir, valider, puis envoyer la tache vers le calendrier.
+                Choisir la prochaine action, la valider, puis l'envoyer vers le calendrier.
               </p>
               <button
                 type="button"
@@ -512,83 +590,18 @@ export function CostsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
-        <KpiCard
-          icon={<DollarSign className="h-5 w-5" />}
-          label="Dépenses connues"
-          value={
-            <>
-              {totalHistoricalCost.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
-            </>
-          }
-          sub="Total déjà enregistré"
-          variant="blue"
-        />
-        <KpiCard
-          icon={<Wrench className="h-5 w-5" />}
-          label="Main-d'œuvre"
-          value={
-            <>
-              {totalLabor.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
-            </>
-          }
-          sub="Montant réel enregistré"
-          variant="green"
-        />
-        <KpiCard
-          icon={<Package className="h-5 w-5" />}
-          label="Pièces"
-          value={
-            <>
-              {totalParts.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
-            </>
-          }
-          sub="Montant réel enregistré"
-          variant="warn"
-        />
-        <KpiCard
-          icon={<DollarSign className="h-5 w-5" />}
-          label="Action issue du pronostic"
-          value={
-            <>
-              {projectedBudget.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
-            </>
-          }
-          sub={hasActionableBudgetCases ? "Projection immédiate sur les cas à arbitrer" : "Projection de routine sur la flotte"}
-          variant="blue"
-        />
-        <KpiCard
-          icon={<AlertTriangle className="h-5 w-5" />}
-          label="Risque si attente"
-          value={
-            <>
-              {delayedExposure.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
-            </>
-          }
-          sub="Si on repousse encore l'action"
-          variant="danger"
-        />
-        <KpiCard
-          icon={<CalendarClock className="h-5 w-5" />}
-          label="À faire valider"
-          value={String(actionsToReview)}
-          sub="Cas non stables"
-          variant="warn"
-        />
-      </div>
-
       <div
         data-testid="budget-action-section"
         className="rounded-2xl border border-border bg-card p-5 shadow-premium"
       >
         <div className="mb-4">
           <div className="section-title">
-            {hasActionableBudgetCases ? "Machines à arbitrer dans le budget" : "Projection budgétaire de routine"}
+            {hasActionableBudgetCases ? "Machines a traiter en premier" : "Machines lues"}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {hasActionableBudgetCases
-              ? "Les cas non stables passent d'abord."
-              : "Toutes les machines lues sont stables."}
+              ? "Les machines non stables apparaissent ici en premier."
+              : "Toutes les machines lues sont stables pour l'instant."}
           </p>
         </div>
 
@@ -635,27 +648,29 @@ export function CostsPage() {
                     </div>
                   </div>
                   <div className="rounded-xl bg-card/70 p-2">
-                    <div className="text-[0.6rem] uppercase tracking-[0.18em] text-muted-foreground">Fenêtre</div>
+                    <div className="text-[0.6rem] uppercase tracking-[0.18em] text-muted-foreground">Fenetre</div>
                     <div className="mt-1 text-sm font-bold text-foreground">
-                      {entry.insight.maintenanceWindow ?? "À confirmer"}
+                      {entry.insight.maintenanceWindow ?? "A confirmer"}
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">Coût probable</div>
+                  <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                    Prochaine action estimee
+                  </div>
                   <div className="mt-1 text-lg font-bold text-foreground">
                     {formatCurrency(entry.projectedCost)}
                   </div>
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                    {getBaselineSourceLabel(entry.baseSource)} x {entry.multiplier.toFixed(2)}
+                    {getBaseExplanation(entry.baseSource)}
                   </div>
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                    Référence métier : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
-                    {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pièces
+                    Reference standard : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
+                    {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pieces
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    +{formatCurrency(entry.delayPenalty)} si on reporte encore l'action
+                    +{formatCurrency(entry.delayPenalty)} si report
                   </div>
                 </div>
 
@@ -689,9 +704,9 @@ export function CostsPage() {
           className="rounded-2xl border border-border bg-card p-5 shadow-premium"
         >
           <div className="mb-4">
-            <div className="section-title">Projection de routine (machines stables)</div>
+            <div className="section-title">Suivi de routine</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Les lectures stables restent visibles, sans passer devant les cas a arbitrer.
+              Les machines stables restent visibles sans passer devant les cas urgents.
             </p>
           </div>
 
@@ -735,16 +750,18 @@ export function CostsPage() {
                   </div>
 
                   <div className="mt-4">
-                    <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">Projection routine</div>
+                    <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                      Projection routine
+                    </div>
                     <div className="mt-1 text-lg font-bold text-foreground">
                       {formatCurrency(entry.projectedCost)}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                      {getBaselineSourceLabel(entry.baseSource)} x {entry.multiplier.toFixed(2)}
+                      {getBaseExplanation(entry.baseSource)}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                      Référence métier : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
-                      {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pièces
+                      Reference standard : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
+                      {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pieces
                     </div>
                   </div>
 
@@ -772,49 +789,6 @@ export function CostsPage() {
           </div>
         </div>
       ) : null}
-
-      <div className="rounded-2xl border border-border bg-card p-5">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-foreground">Du passé vers le budget à venir</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Bleu/ocre = depenses enregistrees. Turquoise = taches validees. Vert = projection du mois en cours.
-          </p>
-          {historicalContextLabel ? (
-            <p className="mt-2 text-xs text-muted-foreground">{historicalContextLabel}</p>
-          ) : null}
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={timelineData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              contentStyle={{
-                background: "hsl(220,18%,10%)",
-                border: "1px solid hsl(220,14%,20%)",
-                borderRadius: "8px",
-                fontSize: "11px",
-                color: "hsl(215,12%,55%)",
-              }}
-              formatter={(value: number) => [`${value.toLocaleString("fr-FR")} TND`, ""]}
-            />
-            <Legend wrapperStyle={{ fontSize: "11px", color: "hsl(215,12%,55%)" }} />
-            <Bar dataKey="labor" name="Main-d'œuvre" fill="#4b8b9b" radius={4} />
-            <Bar dataKey="parts" name="Pièces" fill="#d4915a" radius={4} />
-            <Bar dataKey="planned" name="Tâches validées" fill="#14b8a6" radius={4} />
-            <Bar dataKey="pipeline" name="Projection prévue" fill="hsl(var(--primary))" radius={4} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
     </div>
   );
 }

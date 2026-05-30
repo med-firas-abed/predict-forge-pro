@@ -155,12 +155,16 @@ describe("CostsPage", () => {
   it("keeps stable machines in the routine section even when their projected cost is high", () => {
     renderPage();
 
+    expect(
+      screen.getByText(/Une ligne de cout correspond a un cumul mensuel par machine/i),
+    ).toBeInTheDocument();
+
     const actionSection = screen.getByTestId("budget-action-section");
     expect(within(actionSection).getByText("Machine 2")).toBeInTheDocument();
     expect(within(actionSection).queryByText("Machine 1")).not.toBeInTheDocument();
 
     const routineSection = screen.getByTestId("budget-routine-section");
     expect(within(routineSection).getByText("Machine 1")).toBeInTheDocument();
-    expect(within(routineSection).getByText(/projection de routine/i)).toBeInTheDocument();
+    expect(within(routineSection).getByText(/projection routine/i)).toBeInTheDocument();
   });
 });

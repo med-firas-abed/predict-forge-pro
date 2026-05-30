@@ -1294,7 +1294,7 @@ test.describe("Authenticated app flows", () => {
     await mockDiagnosticsAndSensors(page);
 
     await page.goto("/couts");
-    await expect(page.getByText(/Impact budgetaire du pronostic machine/i)).toBeVisible();
+    await expect(page.getByText(/Lecture simple des couts maintenance/i)).toBeVisible();
 
     await page.getByRole("button", { name: /Exporter CSV/i }).click();
     await expect(page.getByText(/Export CSV pr[eê]t/i)).toBeVisible();
