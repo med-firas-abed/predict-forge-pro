@@ -157,47 +157,46 @@ REAL_MACHINE_SIM_STAGE_CONFIG: dict[str, dict[str, object]] = {
     "ARO-01": {
         "machine_name": "Machine AroTeq",
         "site": "Ben Arous",
-        "scenario_name": "surveillance",
-        "profile": "B_quadratic",
-        "base_load_kg": 90,
-        "load_band_kg": (0, 180),
+        "scenario_name": "healthy",
+        "profile": "A_linear",
+        "base_load_kg": 60,
+        "load_band_kg": (0, 90),
         "bootstrap_ticks": 3600,
         "public_ticks": 7200,
         "seed": DEMO_SEED_BASE + 17,
-        "target_runtime_hi": 0.62,
-        "cycles_per_day": 360.0,
-        "power_avg_30j_kw": 1.38,
+        "target_runtime_hi": 0.96,
+        "cycles_per_day": 280.0,
+        "power_avg_30j_kw": 1.18,
         "scenario": {
             "site": "Ben Arous",
-            "health_state": "surveillance",
-            "health_label": "Sous surveillance",
+            "health_state": "good",
+            "health_label": "Operationnel",
             "usage_case": (
-                "Telemetrie CSV representative du futur flux PLC / LabVIEW vers la "
-                "machine AroTeq."
+                "Machine neuve en mise en service avec telemetrie CSV representative "
+                "du futur flux PLC / LabVIEW."
             ),
             "explanation": (
-                "La simulation alimente ARO-01 avec le meme type de mesures que le "
-                "relais CSV prevu, afin d'afficher capteurs, HI, RUL et facteurs "
-                "sur le meme parcours produit."
+                "La simulation montre une machine recente, peu chargee et stable, "
+                "afin d'illustrer le futur parcours temps reel sur une machine saine."
             ),
-            "profile": "B_quadratic",
-            "base_load_kg": 90,
-            "load_pattern": "csv_bridge_surveillance",
-            "load_band_kg": (0, 180),
-            "target_hi": 0.62,
+            "profile": "A_linear",
+            "base_load_kg": 60,
+            "load_pattern": "commissioning_light_duty",
+            "load_band_kg": (0, 90),
+            "target_hi": 0.96,
             "public_ticks": 7200,
-            "cycles_per_day": 360.0,
-            "power_avg_30j_kw": 1.38,
-            "temp_bias_c": 1.2,
-            "humidity_bias_rh": 6.0,
-            "usage_intensity": 0.48,
-            "wear_level": 0.38,
-            "thermal_stress": 0.34,
-            "humidity_stress": 0.32,
-            "load_variability": 0.30,
-            "vibration_bias_mms": 0.18,
-            "overload_bias": 0.14,
-            "reference_rul_days": 126,
+            "cycles_per_day": 280.0,
+            "power_avg_30j_kw": 1.18,
+            "temp_bias_c": -1.0,
+            "humidity_bias_rh": -6.0,
+            "usage_intensity": 0.22,
+            "wear_level": 0.08,
+            "thermal_stress": 0.12,
+            "humidity_stress": 0.10,
+            "load_variability": 0.08,
+            "vibration_bias_mms": 0.03,
+            "overload_bias": 0.00,
+            "reference_rul_days": None,
         },
     }
 }

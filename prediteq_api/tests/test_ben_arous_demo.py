@@ -80,14 +80,16 @@ class AroTeqSimulatorReplayTests(unittest.TestCase):
     def test_aroteq_real_machine_joins_demo_mode_simulator(self):
         self.assertIn("ARO-01", SIMULATOR_DEMO_MODE_CODES)
 
-    def test_aroteq_real_machine_replay_has_warmup_and_live_rows(self):
+    def test_aroteq_real_machine_replay_stays_close_to_machine_1_story(self):
         trajectories = _build_real_machine_simulator_trajectories()
         cfg = REAL_MACHINE_SIM_STAGE_CONFIG["ARO-01"]
         aro = trajectories["ARO-01"]
 
         self.assertEqual(len(aro["warmup"]), int(cfg["bootstrap_ticks"]))
         self.assertEqual(len(aro["public"]), int(cfg["public_ticks"]))
-        self.assertEqual(aro["scenario"]["health_state"], "surveillance")
+        self.assertEqual(aro["scenario"]["health_state"], "good")
+        self.assertEqual(aro["scenario"]["profile"], "A_linear")
+        self.assertGreaterEqual(float(cfg["target_runtime_hi"]), 0.95)
         self.assertIn("observed_at", aro["warmup"].columns)
 
         first_public_row = aro["public"].iloc[0].to_dict()
@@ -95,6 +97,8 @@ class AroTeqSimulatorReplayTests(unittest.TestCase):
         self.assertIn("current_a", raw)
         self.assertIn("vibration_rms", raw)
         self.assertEqual(raw["source"], "simulator_demo")
+        self.assertLessEqual(float(first_public_row["charge"]), 90.0)
+        self.assertLess(float(first_public_row["vibration_mm_s"]), 1.4)
 
 
 def _make_request(client_host: str) -> Request:
