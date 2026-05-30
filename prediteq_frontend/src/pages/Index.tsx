@@ -154,8 +154,6 @@ const PAGE_META_KEYS: Record<PageId, { title: string; sub: string }> = {
 };
 
 const ADMIN_ONLY_PAGES: PageId[] = [
-  "machines",
-  "couts",
   "seuils",
   "simulateur",
   "experiment",

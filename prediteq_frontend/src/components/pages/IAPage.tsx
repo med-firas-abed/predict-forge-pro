@@ -2,38 +2,35 @@ import { Brain, FileText } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "@/contexts/AppContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { PlannerPage } from "@/components/pages/PlannerPage";
 import { RapportIAPage } from "@/components/pages/RapportIAPage";
 import { repairText } from "@/lib/repairText";
 
 type IATab = "planner" | "report";
 
-function getRequestedTab(pathname: string, search: string, isAdmin: boolean): IATab {
+function getRequestedTab(pathname: string, search: string): IATab {
   if (pathname === "/rapport-ia") return "report";
-  if (pathname === "/planner") return isAdmin ? "planner" : "report";
+  if (pathname === "/planner") return "planner";
 
   const params = new URLSearchParams(search);
   const tab = params.get("tab");
 
   if (tab === "report") return "report";
-  if (tab === "planner" && isAdmin) return "planner";
+  if (tab === "planner") return "planner";
 
-  return isAdmin ? "planner" : "report";
+  return "planner";
 }
 
 export function IAPage() {
   const { lang } = useApp();
-  const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isAdmin = currentUser?.role === "admin";
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
 
   const activeTab = useMemo(
-    () => getRequestedTab(location.pathname, location.search, isAdmin),
-    [isAdmin, location.pathname, location.search],
+    () => getRequestedTab(location.pathname, location.search),
+    [location.pathname, location.search],
   );
   const pageLead =
     activeTab === "planner"
@@ -49,20 +46,16 @@ export function IAPage() {
         );
 
   const tabs = [
-    ...(isAdmin
-      ? [
-          {
-            id: "planner" as const,
-            label: l("Plan d'action", "Action plan", "Plan d'action"),
-            icon: Brain,
-            description: l(
-              "Priorites flotte, actions a confirmer et envoi au calendrier.",
-              "Fleet priorities, actions to confirm, and send to calendar.",
-              "Fleet priorities, actions to confirm, and send to calendar.",
-            ),
-          },
-        ]
-      : []),
+    {
+      id: "planner" as const,
+      label: l("Plan d'action", "Action plan", "Plan d'action"),
+      icon: Brain,
+      description: l(
+        "Priorites machine, actions utiles et preparation du calendrier.",
+        "Machine priorities, useful actions, and calendar preparation.",
+        "Machine priorities, useful actions, and calendar preparation.",
+      ),
+    },
     {
       id: "report" as const,
       label: l("Rapports", "Reports", "Reports"),
@@ -131,7 +124,7 @@ export function IAPage() {
         </div>
       </div>
 
-      {activeTab === "planner" && isAdmin ? <PlannerPage embedded /> : <RapportIAPage embedded />}
+      {activeTab === "planner" ? <PlannerPage embedded /> : <RapportIAPage embedded />}
     </div>
   );
 }

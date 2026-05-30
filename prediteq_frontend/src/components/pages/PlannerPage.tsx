@@ -935,11 +935,37 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
 
   const loadFallbackPlannerRowsWithHistory = async () => {
     try {
-      const tasks = await listGmaoTaches();
+      const tasks = await listGmaoTaches(isAdmin ? undefined : currentUser?.machineId);
       return buildFallbackPlannerRows(insights, buildTaskHistoryIndex(tasks));
     } catch {
       return buildFallbackPlannerRows(insights);
     }
+  };
+
+  const hydrateLocalPlan = async () => {
+    const localRows = await loadFallbackPlannerRowsWithHistory();
+    const scopedRows = focusMachine
+      ? localRows.filter((row) => row.machine_code === focusMachine)
+      : localRows;
+
+    if (scopedRows.length === 0) {
+      return false;
+    }
+
+    const fallbackData = buildLocalGeneratePlanResponse(scopedRows, focusMachine, l);
+    setPlanText(fallbackData.markdown);
+    setPlanGeneratedAt(fallbackData.generated_at);
+    setGeneratedFleet(fallbackData.fleet);
+    setProposedTasks(fallbackData.tasks);
+    notifyPlanGeneration(
+      fallbackData.tasks.length,
+      fallbackData.fleet.filter(
+        (row) =>
+          !row.task_suggestion &&
+          ((row.similar_open_tasks ?? 0) > 0 || Boolean(row.repeat_cooldown_active)),
+      ).length,
+    );
+    return true;
   };
 
   useEffect(() => {
@@ -978,6 +1004,28 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     setProposedTasks([]);
     setEditingIdx(null);
 
+    if (!isAdmin) {
+      try {
+        const hasLocalPlan = await hydrateLocalPlan();
+        if (!hasLocalPlan) {
+          throw new Error("planner_empty");
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : l(
+                "Erreur lors de la gÃ©nÃ©ration de la synthÃ¨se",
+                "Failed to generate the summary",
+                "Failed to generate the summary",
+              ),
+        );
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+
     try {
       const scopedRows = focusMachine
         ? fallbackPlannerRows.filter((row) => row.machine_code === focusMachine)
@@ -1005,25 +1053,8 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
         ).length,
       );
     } catch (error) {
-      const localRows = await loadFallbackPlannerRowsWithHistory();
-      const scopedRows = focusMachine
-        ? localRows.filter((row) => row.machine_code === focusMachine)
-        : localRows;
-
-      if (scopedRows.length > 0) {
-        const fallbackData = buildLocalGeneratePlanResponse(scopedRows, focusMachine, l);
-        setPlanText(fallbackData.markdown);
-        setPlanGeneratedAt(fallbackData.generated_at);
-        setGeneratedFleet(fallbackData.fleet);
-        setProposedTasks(fallbackData.tasks);
-        notifyPlanGeneration(
-          fallbackData.tasks.length,
-          fallbackData.fleet.filter(
-            (row) =>
-              !row.task_suggestion &&
-              ((row.similar_open_tasks ?? 0) > 0 || Boolean(row.repeat_cooldown_active)),
-          ).length,
-        );
+      const hasLocalPlan = await hydrateLocalPlan();
+      if (hasLocalPlan) {
         toast.warning(
           l(
             "Service de plan indisponible - une version locale a été préparée avec les données chargées.",

@@ -78,11 +78,10 @@ export function AppSidebar({
         { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
         { id: "diagnostics", labelKey: "nav.diagnostics", icon: Activity },
         { id: "geo", labelKey: "nav.geo", icon: MapPin },
+        { id: "machines", labelKey: "nav.machines", icon: Cpu },
         { id: "ia", labelKey: "nav.ia", icon: Brain },
         { id: "maintenance", labelKey: "nav.maintenance", icon: Wrench },
-        ...(isAdmin
-          ? [{ id: "couts" as const, labelKey: "nav.costs", icon: DollarSign }]
-          : []),
+        { id: "couts", labelKey: "nav.costs", icon: DollarSign },
         {
           id: "alertes",
           labelKey: "nav.alerts",
@@ -96,7 +95,6 @@ export function AppSidebar({
           {
             section: l("Administration", "Administration", "الإدارة"),
             items: [
-              { id: "machines", labelKey: "nav.machines", icon: Cpu },
               { id: "administration", labelKey: "nav.admin", icon: ShieldCheck },
               { id: "seuils", labelKey: "nav.seuils", icon: SlidersHorizontal },
             ],

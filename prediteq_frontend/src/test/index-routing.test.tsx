@@ -181,6 +181,60 @@ describe("Index routing", () => {
     expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
   });
 
+  it("lets approved users open the machines page", async () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      isAuthenticated: true,
+      currentUser: {
+        role: "user",
+        status: "approved",
+        fullName: "Regular User",
+        email: "user@example.com",
+      },
+    });
+
+    renderIndex("/machines");
+
+    expect(await screen.findByText("Machines page")).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
+  });
+
+  it("lets approved users open the costs page", async () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      isAuthenticated: true,
+      currentUser: {
+        role: "user",
+        status: "approved",
+        fullName: "Regular User",
+        email: "user@example.com",
+      },
+    });
+
+    renderIndex("/couts");
+
+    expect(await screen.findByText("Costs page")).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
+  });
+
+  it("still blocks users from thresholds and admin pages", async () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      isAuthenticated: true,
+      currentUser: {
+        role: "user",
+        status: "approved",
+        fullName: "Regular User",
+        email: "user@example.com",
+      },
+    });
+
+    renderIndex("/seuils");
+
+    expect(await screen.findByRole("heading", { name: /Acces refuse/i })).toBeInTheDocument();
+    expect(screen.queryByText("Thresholds page")).not.toBeInTheDocument();
+  });
+
   it("shows the not found page for unknown in-app routes", async () => {
     mockUseAuth.mockReturnValue({
       loading: false,
