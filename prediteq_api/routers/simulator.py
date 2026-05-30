@@ -90,6 +90,7 @@ HI_ZONE_BOUNDS = {
     "ASC-A1": (0.90, 0.98),   # opérationnel protégé
     "ASC-B2": (0.60, 0.70),   # usage moyen / surveillance
     "ASC-C3": (0.05, 0.16),   # usage dur / critique
+    "ARO-01": (0.92, 0.99),   # nouvelle machine AroTeq en mise en service
 }
 
 # Fraction of a full lifecycle per simulator session.
@@ -165,6 +166,8 @@ REAL_MACHINE_SIM_STAGE_CONFIG: dict[str, dict[str, object]] = {
         "public_ticks": 7200,
         "seed": DEMO_SEED_BASE + 17,
         "target_runtime_hi": 0.96,
+        "display_hi_start": 0.985,
+        "display_hi_end": 0.958,
         "cycles_per_day": 280.0,
         "power_avg_30j_kw": 1.18,
         "scenario": {
@@ -807,15 +810,30 @@ def _build_real_machine_simulator_trajectories() -> dict[str, dict]:
         public_samples = samples[bootstrap_ticks:]
         warmup_df = pd.DataFrame(warmup_samples)
         public_df = pd.DataFrame(public_samples)
+        display_hi_start = float(cfg.get("display_hi_start", cfg["target_runtime_hi"]))
+        display_hi_end = float(cfg.get("display_hi_end", cfg["target_runtime_hi"]))
+        display_hi_series = np.linspace(display_hi_start, display_hi_end, total_ticks, dtype=float)
+        warmup_hi = display_hi_series[:bootstrap_ticks]
+        public_hi = display_hi_series[bootstrap_ticks:]
+        nominal_load = float(cfg["base_load_kg"])
 
-        for frame in (warmup_df, public_df):
+        for frame, hi_values in ((warmup_df, warmup_hi), (public_df, public_hi)):
             if frame.empty:
                 continue
+            frame["simulated_hi"] = hi_values
+            frame["vibration_mm_s"] = np.clip(frame["vibration_mm_s"].astype(float), 0.88, 1.18)
             frame["rms_mms"] = frame["vibration_mm_s"].astype(float)
             frame["power_kw"] = frame["motor_power"].astype(float)
-            frame["temp_c"] = frame["temperature"].astype(float)
-            frame["humidity_rh"] = frame["humidity"].astype(float)
+            frame["temp_c"] = np.clip(frame["temperature"].astype(float), 21.2, 25.0)
+            frame["humidity_rh"] = np.clip(frame["humidity"].astype(float), 56.0, 68.0)
+            frame["charge"] = np.where(frame["phase"].astype(str) == "pause", 0.0, nominal_load)
             frame["load_kg"] = frame["charge"].astype(float)
+            phase = frame["phase"].astype(str)
+            frame["current"] = np.where(
+                phase == "ascent",
+                1.12 + 0.02 * np.sin(np.linspace(0.0, 2.0 * np.pi, len(frame))),
+                np.where(phase == "descent", 0.64, 0.0),
+            )
             frame["current_a"] = frame["current"].astype(float)
             frame["status"] = frame["state"].astype(str)
 
@@ -836,7 +854,8 @@ def _build_real_machine_simulator_trajectories() -> dict[str, dict]:
             "start_tick": bootstrap_ticks,
             "target_runtime_hi": float(cfg["target_runtime_hi"]),
             "scenario": _get_simulator_display_scenario(code),
-            "rul_seed_hi_history": [],
+            "rul_seed_hi_history": [float(value) for value in warmup_hi[59::60]] or [float(value) for value in warmup_hi[-60:]],
+            "force_hi_alignment": True,
         }
 
         logger.info(
@@ -986,6 +1005,13 @@ def _bootstrap_simulator_histories(manager) -> tuple[dict[str, dict], dict[str, 
                 seed_hi_history = [
                     float(value) for value in info.get("rul_seed_hi_history", [])
                 ]
+                if info.get("force_hi_alignment") and seed_hi_history:
+                    aligned_hi_history = seed_hi_history[-(engine.buffer_hi_smooth.maxlen or len(seed_hi_history)):]
+                    engine.buffer_hi_smooth.clear()
+                    engine.buffer_hi_smooth.extend(aligned_hi_history)
+                    if code in manager.last_results:
+                        manager.last_results[code]["buffer_hi_len"] = len(engine.buffer_hi_smooth)
+                    ml_hi_history = [float(value) for value in engine.buffer_hi_smooth]
                 required_points = max(0, (engine.buffer_hi_smooth.maxlen or 0) - len(ml_hi_history))
                 if required_points > 0 and seed_hi_history:
                     demo_prefix = seed_hi_history[:required_points]
@@ -995,7 +1021,7 @@ def _bootstrap_simulator_histories(manager) -> tuple[dict[str, dict], dict[str, 
                     if code in manager.last_results:
                         manager.last_results[code]["buffer_hi_len"] = len(engine.buffer_hi_smooth)
             warmup_df = info["warmup"]
-            if code in DEMO_STAGE_CONFIG and len(warmup_df) > 0 and "simulated_hi" in warmup_df.columns:
+            if len(warmup_df) > 0 and "simulated_hi" in warmup_df.columns:
                 _apply_demo_display_override(
                     manager,
                     code,
@@ -1489,7 +1515,7 @@ async def _replay_loop(
                     raw = _shape_simulator_raw(prev_raw_by_code.get(code), row)
                     prev_raw_by_code[code] = raw
                     manager.ingest(code, raw, allow_extreme=True)
-                    if code in DEMO_STAGE_CONFIG and row.get("simulated_hi") is not None:
+                    if row.get("simulated_hi") is not None:
                         _apply_demo_display_override(
                             manager,
                             code,

@@ -91,6 +91,8 @@ class AroTeqSimulatorReplayTests(unittest.TestCase):
         self.assertEqual(aro["scenario"]["profile"], "A_linear")
         self.assertGreaterEqual(float(cfg["target_runtime_hi"]), 0.95)
         self.assertIn("observed_at", aro["warmup"].columns)
+        self.assertIn("simulated_hi", aro["warmup"].columns)
+        self.assertGreater(float(aro["public"]["simulated_hi"].min()), 0.94)
 
         first_public_row = aro["public"].iloc[0].to_dict()
         raw = _shape_simulator_raw(None, first_public_row)
@@ -99,6 +101,13 @@ class AroTeqSimulatorReplayTests(unittest.TestCase):
         self.assertEqual(raw["source"], "simulator_demo")
         self.assertLessEqual(float(first_public_row["charge"]), 90.0)
         self.assertLess(float(first_public_row["vibration_mm_s"]), 1.4)
+
+        ascent_currents = aro["public"].loc[
+            aro["public"]["phase"] == "ascent",
+            "current_a",
+        ].astype(float)
+        self.assertTrue(len(ascent_currents) > 10)
+        self.assertLess(float(ascent_currents.std()), 0.05)
 
 
 def _make_request(client_host: str) -> Request:
