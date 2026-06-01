@@ -153,12 +153,14 @@ const PAGE_META_KEYS: Record<PageId, { title: string; sub: string }> = {
   "admin-users": { title: "meta.adminusers.title", sub: "meta.adminusers.sub" },
 };
 
-const ADMIN_ONLY_PAGES: PageId[] = [
-  "seuils",
-  "simulateur",
-  "experiment",
-  "administration",
-  "admin-users",
+const NON_ADMIN_ALLOWED_PAGES: PageId[] = [
+  "dashboard",
+  "maintenance",
+  "calendrier",
+  "couts",
+  "alertes",
+  "ia",
+  "diagnostics",
 ];
 
 const routeToPage: Record<string, PageId> = {
@@ -316,7 +318,7 @@ const Index = () => {
 
   const isAdmin = currentUser.role === "admin";
 
-  if (!isAdmin && ADMIN_ONLY_PAGES.includes(currentPage)) {
+  if (!isAdmin && !NON_ADMIN_ALLOWED_PAGES.includes(currentPage)) {
     return <AccessDeniedPage />;
   }
 

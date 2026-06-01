@@ -74,21 +74,35 @@ export function AppSidebar({
       // géolocalisation → IA → maintenance → coûts → alertes/escalades).
       // Les alertes ne sont pas un point d'entrée mais un point de sortie :
       // on les consulte une fois qu'on a déjà observé la flotte ailleurs.
-      items: [
-        { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
-        { id: "diagnostics", labelKey: "nav.diagnostics", icon: Activity },
-        { id: "geo", labelKey: "nav.geo", icon: MapPin },
-        { id: "machines", labelKey: "nav.machines", icon: Cpu },
-        { id: "ia", labelKey: "nav.ia", icon: Brain },
-        { id: "maintenance", labelKey: "nav.maintenance", icon: Wrench },
-        { id: "couts", labelKey: "nav.costs", icon: DollarSign },
-        {
-          id: "alertes",
-          labelKey: "nav.alerts",
-          icon: Bell,
-          badge: activeCaseCount || undefined,
-        },
-      ],
+      items: isAdmin
+        ? [
+            { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+            { id: "diagnostics", labelKey: "nav.diagnostics", icon: Activity },
+            { id: "geo", labelKey: "nav.geo", icon: MapPin },
+            { id: "machines", labelKey: "nav.machines", icon: Cpu },
+            { id: "ia", labelKey: "nav.ia", icon: Brain },
+            { id: "maintenance", labelKey: "nav.maintenance", icon: Wrench },
+            { id: "couts", labelKey: "nav.costs", icon: DollarSign },
+            {
+              id: "alertes",
+              labelKey: "nav.alerts",
+              icon: Bell,
+              badge: activeCaseCount || undefined,
+            },
+          ]
+        : [
+            { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+            { id: "diagnostics", labelKey: "nav.diagnostics", icon: Activity },
+            { id: "ia", labelKey: "nav.ia", icon: Brain },
+            { id: "maintenance", labelKey: "nav.maintenance", icon: Wrench },
+            { id: "couts", labelKey: "nav.costs", icon: DollarSign },
+            {
+              id: "alertes",
+              labelKey: "nav.alerts",
+              icon: Bell,
+              badge: activeCaseCount || undefined,
+            },
+          ],
     },
     ...(isAdmin
       ? [

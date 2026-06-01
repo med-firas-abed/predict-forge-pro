@@ -181,7 +181,7 @@ describe("Index routing", () => {
     expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
   });
 
-  it("lets approved users open the machines page", async () => {
+  it("blocks approved users from opening the machines page", async () => {
     mockUseAuth.mockReturnValue({
       loading: false,
       isAuthenticated: true,
@@ -195,8 +195,8 @@ describe("Index routing", () => {
 
     renderIndex("/machines");
 
-    expect(await screen.findByText("Machines page")).toBeInTheDocument();
-    expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Acces refuse/i })).toBeInTheDocument();
+    expect(screen.queryByText("Machines page")).not.toBeInTheDocument();
   });
 
   it("lets approved users open the costs page", async () => {
@@ -215,6 +215,24 @@ describe("Index routing", () => {
 
     expect(await screen.findByText("Costs page")).toBeInTheDocument();
     expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
+  });
+
+  it("blocks approved users from opening geolocation", async () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      isAuthenticated: true,
+      currentUser: {
+        role: "user",
+        status: "approved",
+        fullName: "Regular User",
+        email: "user@example.com",
+      },
+    });
+
+    renderIndex("/geo");
+
+    expect(await screen.findByRole("heading", { name: /Acces refuse/i })).toBeInTheDocument();
+    expect(screen.queryByText("Geo page")).not.toBeInTheDocument();
   });
 
   it("still blocks users from thresholds and admin pages", async () => {
