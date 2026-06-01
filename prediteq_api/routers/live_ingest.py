@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -6,7 +7,9 @@ from typing import Literal
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from core.auth import CurrentUser
 from core.config import settings
+from core.demo_context import get_demo_scenario
 from core.labview_demo import PROFILE_NAMES, SCENARIOS, build_runtime_history
 from core.supabase_client import get_supabase
 from ml.engine_manager import get_manager
@@ -16,6 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 _MACHINE_CODE_RE = re.compile(r"^[A-Z]{2,5}-[A-Z0-9]{1,5}$")
+_STANDARD_USER_MACHINE_AUTOSEED_LOCKS: dict[str, asyncio.Lock] = {}
 
 
 class LiveIngestRequest(BaseModel):
@@ -171,6 +175,165 @@ def _apply_bootstrap_metric_overrides(
 
     if cycles_per_day_override is not None or power_avg_30j_override is not None:
         cached["metrics_updated"] = datetime.now(timezone.utc).isoformat()
+
+
+def _stable_machine_seed(machine_code: str) -> int:
+    score = sum((idx + 1) * ord(char) for idx, char in enumerate(machine_code))
+    return max(1, score % 9_973)
+
+
+def _machine_has_runtime_snapshot(manager, machine_code: str) -> bool:
+    if manager.last_raw.get(machine_code):
+        return True
+    if manager.last_results.get(machine_code):
+        return True
+    history = manager.sensor_history.get(machine_code)
+    return bool(history and len(history) > 0)
+
+
+def _scenario_from_health_state(health_state: str | None) -> Literal["healthy", "surveillance", "critical"] | None:
+    normalized = str(health_state or "").strip().lower()
+    if normalized in {"healthy", "good", "operational", "excellent"}:
+        return "healthy"
+    if normalized in {"surveillance", "watch", "degraded", "maintenance"}:
+        return "surveillance"
+    if normalized == "critical":
+        return "critical"
+    return None
+
+
+def _resolve_standard_user_autoseed_plan(machine_code: str, machine_row: dict, manager) -> dict:
+    if machine_code == "ARO-01":
+        return {
+            "scenario": "healthy",
+            "profile": "A_linear",
+            "cycles_per_day_override": 280.0,
+            "power_avg_30j_override": 1.18,
+        }
+
+    demo_scenario = get_demo_scenario(machine_code) or {}
+    mapped_demo_scenario = _scenario_from_health_state(demo_scenario.get("health_state"))
+    if mapped_demo_scenario is not None:
+        cycles_per_day = demo_scenario.get("cycles_per_day")
+        power_avg = demo_scenario.get("power_avg_30j_kw")
+        return {
+            "scenario": mapped_demo_scenario,
+            "profile": demo_scenario.get("profile"),
+            "cycles_per_day_override": float(cycles_per_day) if cycles_per_day is not None else None,
+            "power_avg_30j_override": float(power_avg) if power_avg is not None else None,
+        }
+
+    live = dict(manager.last_results.get(machine_code) or {})
+    hi_raw = live.get("hi_smooth")
+    if hi_raw is None:
+        hi_raw = machine_row.get("hi_courant")
+
+    try:
+        hi_value = float(hi_raw) if hi_raw is not None else None
+    except (TypeError, ValueError):
+        hi_value = None
+
+    zone = str(live.get("zone") or "").strip().lower()
+    statut = str(machine_row.get("statut") or "").strip().lower()
+    scenario = "surveillance"
+    if zone == "critical" or statut == "critical" or (hi_value is not None and hi_value <= 0.30):
+        scenario = "critical"
+    elif zone in {"excellent", "good"} or statut == "operational" or (hi_value is not None and hi_value >= 0.80):
+        scenario = "healthy"
+
+    cycles_per_day = machine_row.get("cycles_avg_7j")
+    power_avg = machine_row.get("power_avg_30j")
+    return {
+        "scenario": scenario,
+        "profile": None,
+        "cycles_per_day_override": float(cycles_per_day) if cycles_per_day is not None else None,
+        "power_avg_30j_override": float(power_avg) if power_avg is not None else None,
+    }
+
+
+async def ensure_standard_user_machine_runtime_ready(
+    machine_code: str,
+    user: CurrentUser,
+    *,
+    manager=None,
+    machine_row: dict | None = None,
+) -> dict | None:
+    machine_code = str(machine_code or "").strip().upper()
+    if not _MACHINE_CODE_RE.match(machine_code):
+        return None
+    if user.is_admin or not user.is_approved or not user.machine_id:
+        return None
+    if not settings.STANDARD_USER_MACHINE_AUTOSEED_ENABLED:
+        return None
+
+    manager = manager or get_manager()
+
+    try:
+        if machine_row is None:
+            machine_row = _ensure_machine_cached(machine_code, manager)
+        else:
+            manager.machine_cache[machine_code] = {
+                **manager.machine_cache.get(machine_code, {}),
+                **machine_row,
+            }
+    except Exception as exc:
+        logger.warning(
+            "Standard-user autoseed: could not resolve machine %s for %s: %s",
+            machine_code,
+            user.id,
+            exc,
+        )
+        return None
+
+    if str(machine_row.get("id") or "") != str(user.machine_id):
+        return None
+    if _machine_has_runtime_snapshot(manager, machine_code):
+        return None
+
+    lock = _STANDARD_USER_MACHINE_AUTOSEED_LOCKS.setdefault(machine_code, asyncio.Lock())
+    async with lock:
+        if _machine_has_runtime_snapshot(manager, machine_code):
+            return None
+
+        plan = _resolve_standard_user_autoseed_plan(machine_code, machine_row, manager)
+        source_label = "simulator_user_machine"
+        try:
+            payload = await asyncio.to_thread(
+                bootstrap_live_machine,
+                machine_code,
+                scenario=plan["scenario"],
+                profile=plan["profile"],
+                duration_s=3600,
+                seed=_stable_machine_seed(machine_code),
+                source=source_label,
+                persist_machine_metrics=True,
+                cycles_per_day_override=plan["cycles_per_day_override"],
+                power_avg_30j_override=plan["power_avg_30j_override"],
+            )
+        except HTTPException as exc:
+            logger.warning(
+                "Standard-user autoseed skipped for %s (%s): %s",
+                machine_code,
+                user.id,
+                exc.detail,
+            )
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Standard-user autoseed failed for %s (%s): %s",
+                machine_code,
+                user.id,
+                exc,
+            )
+            return None
+
+        logger.info(
+            "Standard-user autoseed prepared %s for user %s with scenario %s",
+            machine_code,
+            user.id,
+            plan["scenario"],
+        )
+        return payload
 
 
 def _persist_bootstrap_state(

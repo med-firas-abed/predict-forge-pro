@@ -113,7 +113,7 @@ def _get_public_rul_snapshot(manager, code: str) -> tuple[dict | None, dict | No
         return fallback, None
 
 
-def _gather_context(
+async def _gather_context(
     code: str,
     user: CurrentUser,
     audience: ReportAudience = "dual",
@@ -161,6 +161,15 @@ def _gather_context(
         costs_res = type('R', (), {'data': []})()
 
     manager = get_manager()
+    if not user.is_admin:
+        from routers.live_ingest import ensure_standard_user_machine_runtime_ready
+
+        await ensure_standard_user_machine_runtime_ready(
+            code,
+            user,
+            manager=manager,
+            machine_row=machine,
+        )
     last_result = manager.last_results.get(code)
     rul_result, calibrated_rul_payload = _get_public_rul_snapshot(manager, code)
     engine_status = manager.get_status(code)
@@ -238,7 +247,11 @@ async def generate_report(body: ReportRequest, user: CurrentUser = Depends(requi
     if not check_user_rate(user.id, limit=10, window=3600):
         raise HTTPException(429, "Limite atteinte — max 10 rapports par heure")
 
-    machine, context_data, user_prompt = _gather_context(body.machine_id, user, body.audience)
+    machine, context_data, user_prompt = await _gather_context(
+        body.machine_id,
+        user,
+        body.audience,
+    )
 
     from groq import AsyncGroq
     client = AsyncGroq(api_key=settings.GROQ_API_KEY, timeout=30.0)
@@ -278,7 +291,11 @@ async def generate_pdf_report(body: ReportRequest,
     if not check_user_rate(user.id, limit=10, window=3600):
         raise HTTPException(429, "Limite atteinte — max 10 rapports par heure")
 
-    machine, context_data, user_prompt = _gather_context(body.machine_id, user, body.audience)
+    machine, context_data, user_prompt = await _gather_context(
+        body.machine_id,
+        user,
+        body.audience,
+    )
     code = body.machine_id
 
     # Generate full report (non-streaming) — run in thread to avoid blocking event loop

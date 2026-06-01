@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     APP_MODE: str = "demo"
     AUTO_START_DEMO_SIMULATOR: bool | None = None
+    AUTOSEED_STANDARD_USER_MACHINE: bool | None = None
 
     MQTT_BROKER: str = "broker.emqx.io"
     MQTT_PORT: int = 8883
@@ -100,6 +101,12 @@ class Settings(BaseSettings):
         if self.IS_RENDER_RUNTIME:
             return False
         return True
+
+    @property
+    def STANDARD_USER_MACHINE_AUTOSEED_ENABLED(self) -> bool:
+        if self.AUTOSEED_STANDARD_USER_MACHINE is not None:
+            return bool(self.AUTOSEED_STANDARD_USER_MACHINE)
+        return str(self.APP_MODE).strip().lower() == "demo"
 
 
 settings = Settings()

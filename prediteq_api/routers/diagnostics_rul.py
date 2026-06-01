@@ -70,7 +70,7 @@ def _get_machine_from_supabase(machine_code: str) -> dict:
     try:
         sb = get_supabase()
         res = sb.table("machines").select(
-            "code, hi_courant, rul_courant, statut, derniere_maj"
+            "id, code, hi_courant, rul_courant, statut, derniere_maj"
         ).eq("code", machine_code).limit(1).execute()
         rows = res.data or []
         return rows[0] if rows else {}
@@ -133,6 +133,23 @@ def _check_access(manager, machine_code: str, user: CurrentUser) -> None:
         uuid = manager.get_uuid(machine_code)
         if not uuid or uuid != machine_filter:
             raise HTTPException(403, "Accès interdit à cette machine")
+
+
+async def _prime_runtime_for_standard_user(
+    manager,
+    machine_code: str,
+    user: CurrentUser,
+) -> None:
+    if user.is_admin:
+        return
+
+    from routers.live_ingest import ensure_standard_user_machine_runtime_ready
+
+    await ensure_standard_user_machine_runtime_ready(
+        machine_code,
+        user,
+        manager=manager,
+    )
 
 
 def _build_feature_vector(manager, machine_code: str) -> np.ndarray:
@@ -270,6 +287,7 @@ async def rul_with_interval(machine_code: str,
     d'erreur.
     """
     manager = get_manager()
+    await _prime_runtime_for_standard_user(manager, machine_code, user)
     _check_access(manager, machine_code, user)
 
     # Simulator override : si le simulateur a posé un RUL physique, on
@@ -333,6 +351,7 @@ async def diagnose_machine(machine_code: str,
                             user: CurrentUser = Depends(require_auth)):
     """Règles expertes déterministes ISO/IEC/IEEE — 0 % ML, 100 % auditables."""
     manager = get_manager()
+    await _prime_runtime_for_standard_user(manager, machine_code, user)
     _check_access(manager, machine_code, user)
 
     if machine_code not in manager.engines:
@@ -373,6 +392,7 @@ async def stress_index(machine_code: str,
     Détails complets dans `prediteq_ml/diagnostics/stress.py`.
     """
     manager = get_manager()
+    await _prime_runtime_for_standard_user(manager, machine_code, user)
     _check_access(manager, machine_code, user)
 
     if machine_code not in manager.engines:
@@ -417,6 +437,7 @@ async def explain_rul(machine_code: str,
             "requirements.txt.",
         )
     manager = get_manager()
+    await _prime_runtime_for_standard_user(manager, machine_code, user)
     _check_access(manager, machine_code, user)
 
     try:
@@ -720,6 +741,7 @@ async def calibrated_rul(machine_code: str,
       - "prediction" : RUL chiffré + cycles + IC80 + référence + disclosures
     """
     manager = get_manager()
+    await _prime_runtime_for_standard_user(manager, machine_code, user)
     _check_access(manager, machine_code, user)
     return build_calibrated_rul_response(manager, machine_code)
 
@@ -751,6 +773,7 @@ async def diagnostics_all(
     restent utilisables séparément pour les usages ciblés.
     """
     manager = get_manager()
+    await _prime_runtime_for_standard_user(manager, machine_code, user)
     _check_access(manager, machine_code, user)
 
     response: dict = {

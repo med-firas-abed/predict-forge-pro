@@ -10,10 +10,10 @@ from starlette.requests import Request
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-role-key")
 
-from core.auth import require_admin_or_local_demo
+from core.auth import CurrentUser, require_admin_or_local_demo
 from core.config import settings
 from core.labview_demo import _resolve_scenario_config, build_labview_demo_samples
-from routers import simulator
+from routers import live_ingest, simulator
 from routers.live_ingest import _apply_bootstrap_metric_overrides
 from routers.simulator import (
     REAL_MACHINE_SIM_STAGE_CONFIG,
@@ -75,6 +75,144 @@ class BootstrapMetricOverrideTests(unittest.TestCase):
         self.assertEqual(manager.machine_cache["ARO-01"]["cycles_avg_7j"], 160.0)
         self.assertEqual(manager.machine_cache["ARO-01"]["power_avg_30j"], 1.24)
         self.assertIn("metrics_updated", manager.machine_cache["ARO-01"])
+
+
+class StandardUserMachineAutoseedTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self._lock_snapshot = dict(live_ingest._STANDARD_USER_MACHINE_AUTOSEED_LOCKS)
+        live_ingest._STANDARD_USER_MACHINE_AUTOSEED_LOCKS = {}
+
+    async def asyncTearDown(self):
+        live_ingest._STANDARD_USER_MACHINE_AUTOSEED_LOCKS = dict(self._lock_snapshot)
+
+    async def test_standard_user_autoseeds_only_assigned_machine(self):
+        class FakeManager:
+            def __init__(self):
+                self.machine_cache = {}
+                self.last_raw = {}
+                self.last_results = {}
+                self.sensor_history = {}
+
+        manager = FakeManager()
+        user = CurrentUser(
+            id="user-1",
+            email="user@example.com",
+            role="user",
+            status="approved",
+            machine_id="machine-uuid-1",
+        )
+        machine_row = {
+            "id": "machine-uuid-1",
+            "code": "ARO-01",
+            "statut": "operational",
+            "hi_courant": 0.95,
+        }
+
+        with patch.object(settings, "APP_MODE", "demo"):
+            with patch.object(settings, "AUTOSEED_STANDARD_USER_MACHINE", None, create=True):
+                with patch(
+                    "routers.live_ingest.asyncio.to_thread",
+                    new=AsyncMock(side_effect=lambda func, *args, **kwargs: func(*args, **kwargs)),
+                ):
+                    with patch(
+                        "routers.live_ingest.bootstrap_live_machine",
+                        return_value={"status": "ok", "machine_code": "ARO-01"},
+                    ) as bootstrap_mock:
+                        payload = await live_ingest.ensure_standard_user_machine_runtime_ready(
+                            "ARO-01",
+                            user,
+                            manager=manager,
+                            machine_row=machine_row,
+                        )
+
+        self.assertEqual(payload, {"status": "ok", "machine_code": "ARO-01"})
+        bootstrap_mock.assert_called_once()
+        self.assertIn("ARO-01", manager.machine_cache)
+        self.assertEqual(
+            bootstrap_mock.call_args.kwargs,
+            {
+                "scenario": "healthy",
+                "profile": "A_linear",
+                "duration_s": 3600,
+                "seed": live_ingest._stable_machine_seed("ARO-01"),
+                "source": "simulator_user_machine",
+                "persist_machine_metrics": True,
+                "cycles_per_day_override": 280.0,
+                "power_avg_30j_override": 1.18,
+            },
+        )
+
+    async def test_standard_user_autoseed_skips_when_runtime_already_exists(self):
+        class FakeManager:
+            def __init__(self):
+                self.machine_cache = {}
+                self.last_raw = {"ASC-A1": {"source": "live_runtime"}}
+                self.last_results = {}
+                self.sensor_history = {}
+
+        manager = FakeManager()
+        user = CurrentUser(
+            id="user-2",
+            email="user@example.com",
+            role="user",
+            status="approved",
+            machine_id="machine-uuid-2",
+        )
+        machine_row = {
+            "id": "machine-uuid-2",
+            "code": "ASC-A1",
+            "statut": "operational",
+            "hi_courant": 0.96,
+        }
+
+        with patch.object(settings, "APP_MODE", "demo"):
+            with patch.object(settings, "AUTOSEED_STANDARD_USER_MACHINE", None, create=True):
+                with patch("routers.live_ingest.bootstrap_live_machine") as bootstrap_mock:
+                    payload = await live_ingest.ensure_standard_user_machine_runtime_ready(
+                        "ASC-A1",
+                        user,
+                        manager=manager,
+                        machine_row=machine_row,
+                    )
+
+        self.assertIsNone(payload)
+        bootstrap_mock.assert_not_called()
+
+    async def test_standard_user_autoseed_stays_disabled_in_prod_mode(self):
+        class FakeManager:
+            def __init__(self):
+                self.machine_cache = {}
+                self.last_raw = {}
+                self.last_results = {}
+                self.sensor_history = {}
+
+        manager = FakeManager()
+        user = CurrentUser(
+            id="user-3",
+            email="user@example.com",
+            role="user",
+            status="approved",
+            machine_id="machine-uuid-3",
+        )
+        machine_row = {
+            "id": "machine-uuid-3",
+            "code": "ASC-B2",
+            "statut": "degraded",
+            "hi_courant": 0.62,
+        }
+
+        with patch.object(settings, "APP_MODE", "prod"):
+            with patch.object(settings, "AUTOSEED_STANDARD_USER_MACHINE", None, create=True):
+                with patch("routers.live_ingest.bootstrap_live_machine") as bootstrap_mock:
+                    payload = await live_ingest.ensure_standard_user_machine_runtime_ready(
+                        "ASC-B2",
+                        user,
+                        manager=manager,
+                        machine_row=machine_row,
+                    )
+
+        self.assertIsNone(payload)
+        bootstrap_mock.assert_not_called()
 
 
 class AroTeqSimulatorReplayTests(unittest.TestCase):

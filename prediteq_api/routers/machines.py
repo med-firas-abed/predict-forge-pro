@@ -137,6 +137,25 @@ def _load_machine_record(machine_code: str, manager) -> dict:
     return machine
 
 
+async def _ensure_standard_user_machine_runtime(
+    machine_code: str,
+    user: CurrentUser,
+    manager,
+    machine_row: dict | None = None,
+) -> None:
+    if user.is_admin:
+        return
+
+    from routers.live_ingest import ensure_standard_user_machine_runtime_ready
+
+    await ensure_standard_user_machine_runtime_ready(
+        machine_code,
+        user,
+        manager=manager,
+        machine_row=machine_row,
+    )
+
+
 def _infer_prepare_live_scenario(machine_code: str, machine: dict, manager) -> str:
     demo_scenario = get_surfaceable_demo_scenario(machine_code) or {}
     demo_health_state = str(demo_scenario.get("health_state") or "").strip().lower()
@@ -312,6 +331,12 @@ async def list_machines(user: CurrentUser = Depends(require_auth)):
 
     manager = get_manager()
     for machine in machines:
+        await _ensure_standard_user_machine_runtime(
+            machine["code"],
+            user,
+            manager,
+            machine_row=machine,
+        )
         _attach_runtime_view(machine, manager)
     _attach_decision_bundle(machines, manager)
 
@@ -520,6 +545,12 @@ async def get_machine(machine_code: str, user: CurrentUser = Depends(require_aut
         raise HTTPException(403, "Acces interdit a cette machine")
 
     manager = get_manager()
+    await _ensure_standard_user_machine_runtime(
+        machine_code,
+        user,
+        manager,
+        machine_row=machine,
+    )
     _attach_runtime_view(machine, manager)
     _attach_decision_bundle([machine], manager)
 
@@ -531,13 +562,22 @@ async def get_sensor_history(
     machine_code: str,
     user: CurrentUser = Depends(require_auth),
 ):
+    machine_code = _lookup_machine_code_or_400(machine_code)
     manager = get_manager()
+    machine_row = _load_machine_record(machine_code, manager)
 
     machine_filter = get_machine_filter(user)
     if machine_filter:
-        uuid = manager.get_uuid(machine_code)
+        uuid = machine_row.get("id") or manager.get_uuid(machine_code)
         if not uuid or uuid != machine_filter:
             raise HTTPException(403, "Acces interdit a cette machine")
+
+    await _ensure_standard_user_machine_runtime(
+        machine_code,
+        user,
+        manager,
+        machine_row=machine_row,
+    )
 
     history = manager.sensor_history.get(machine_code)
     if history:
