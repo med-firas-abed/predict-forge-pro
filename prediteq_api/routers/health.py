@@ -14,18 +14,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 _FALLBACK_METRICS = {
-    "generated_at_utc": "2026-04-27T23:49:30.117619+00:00",
+    "generated_at_utc": "2026-05-08T13:29:04.695639+00:00",
     "pipeline_version": "2.0-no-leakage",
     "hybrid_ensemble": {
-        "precision": 0.9468951741832591,
-        "recall": 0.9300457986537586,
-        "f1": 0.9383948576534484,
+        "precision": 0.9705858217460679,
+        "recall": 0.9583601339245968,
+        "f1": 0.9644342345407708,
     },
     "rul_regression": {
         "holdout": {
-            "rmse_days": 5.051103997022318,
-            "mae_days": 2.3617192080419893,
-            "r2": 0.9474814198564139,
+            "rmse_days": 2.4928280578596627,
+            "mae_days": 1.6469234524173357,
+            "r2": 0.9795514540507717,
         },
     },
 }

@@ -637,9 +637,9 @@ function Metrics() {
   const dark = theme === "dark";
   const [metrics, setMetrics] = useState<LandingPublicMetrics | null>(null);
   const DEFAULT_MARKETING_CARDS = {
-    r2_pct: 95,
-    rmse_days: 5.1,
-    hybrid_f1_pct: 94,
+    r2_pct: 98,
+    rmse_days: 2.5,
+    hybrid_f1_pct: 96,
     cmapss_r2_pct: 89,
   };
   const INITIAL_STATS: { value: string; label: string; orange?: boolean; animate?: { from: number; to: number; suffix: string; duration: number } }[] = [

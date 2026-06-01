@@ -214,6 +214,43 @@ class StandardUserMachineAutoseedTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(payload)
         bootstrap_mock.assert_not_called()
 
+    async def test_render_runtime_keeps_standard_user_autoseed_disabled_by_default(self):
+        class FakeManager:
+            def __init__(self):
+                self.machine_cache = {}
+                self.last_raw = {}
+                self.last_results = {}
+                self.sensor_history = {}
+
+        manager = FakeManager()
+        user = CurrentUser(
+            id="user-4",
+            email="user@example.com",
+            role="user",
+            status="approved",
+            machine_id="machine-uuid-4",
+        )
+        machine_row = {
+            "id": "machine-uuid-4",
+            "code": "ASC-C3",
+            "statut": "critical",
+            "hi_courant": 0.12,
+        }
+
+        with patch.dict(os.environ, {"RENDER": "true"}, clear=False):
+            with patch.object(settings, "APP_MODE", "demo"):
+                with patch.object(settings, "AUTOSEED_STANDARD_USER_MACHINE", None, create=True):
+                    with patch("routers.live_ingest.bootstrap_live_machine") as bootstrap_mock:
+                        payload = await live_ingest.ensure_standard_user_machine_runtime_ready(
+                            "ASC-C3",
+                            user,
+                            manager=manager,
+                            machine_row=machine_row,
+                        )
+
+        self.assertIsNone(payload)
+        bootstrap_mock.assert_not_called()
+
 
 class AroTeqSimulatorReplayTests(unittest.TestCase):
     def test_aroteq_real_machine_joins_demo_mode_simulator(self):

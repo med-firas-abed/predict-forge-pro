@@ -106,7 +106,11 @@ class Settings(BaseSettings):
     def STANDARD_USER_MACHINE_AUTOSEED_ENABLED(self) -> bool:
         if self.AUTOSEED_STANDARD_USER_MACHINE is not None:
             return bool(self.AUTOSEED_STANDARD_USER_MACHINE)
-        return str(self.APP_MODE).strip().lower() == "demo"
+        if str(self.APP_MODE).strip().lower() != "demo":
+            return False
+        if self.IS_RENDER_RUNTIME:
+            return False
+        return True
 
 
 settings = Settings()
