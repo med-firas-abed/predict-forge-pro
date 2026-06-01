@@ -16,6 +16,40 @@ def _ensure_ml_path():
             sys.path.insert(0, p)
 
 
+def _apply_runtime_rf_limit(rf_model, estimator_limit: int | None):
+    """Trim the RF ensemble for memory-constrained hosted runtimes.
+
+    The production/demo app only needs inference. On small hosted instances,
+    keeping all 300 trees in memory can exceed RAM even though a smaller
+    ensemble produces near-identical demo outputs. Local development keeps the
+    full model by default; Render-hosted runtimes use a safer cap unless an
+    explicit env override is provided.
+    """
+    if estimator_limit is None:
+        return rf_model
+
+    estimators = getattr(rf_model, "estimators_", None)
+    if not isinstance(estimators, list):
+        return rf_model
+
+    current = len(estimators)
+    if estimator_limit <= 0 or estimator_limit >= current:
+        return rf_model
+
+    rf_model.estimators_ = estimators[:estimator_limit]
+    try:
+        rf_model.n_estimators = int(estimator_limit)
+    except Exception:
+        pass
+
+    logger.warning(
+        "  Runtime RF estimator cap active: %d -> %d trees to reduce memory pressure",
+        current,
+        estimator_limit,
+    )
+    return rf_model
+
+
 def load_all() -> tuple:
     """
     Load all ML artifacts from MODEL_DIR.
@@ -42,6 +76,10 @@ def load_all() -> tuple:
     logger.info("  Loaded isolation_forest.pkl")
 
     rf_model = joblib.load(os.path.join(model_dir, 'random_forest_rul.pkl'))
+    rf_model = _apply_runtime_rf_limit(
+        rf_model,
+        settings.EFFECTIVE_RUNTIME_RF_ESTIMATOR_LIMIT,
+    )
     logger.info("  Loaded random_forest_rul.pkl (%d trees)", len(rf_model.estimators_))
 
     with open(os.path.join(model_dir, 'scaler_params.json')) as f:

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     APP_MODE: str = "demo"
     AUTO_START_DEMO_SIMULATOR: bool | None = None
     AUTOSEED_STANDARD_USER_MACHINE: bool | None = None
+    RUNTIME_RF_ESTIMATOR_LIMIT: int | None = None
 
     MQTT_BROKER: str = "broker.emqx.io"
     MQTT_PORT: int = 8883
@@ -111,6 +112,18 @@ class Settings(BaseSettings):
         if self.IS_RENDER_RUNTIME:
             return False
         return True
+
+    @property
+    def EFFECTIVE_RUNTIME_RF_ESTIMATOR_LIMIT(self) -> int | None:
+        if self.RUNTIME_RF_ESTIMATOR_LIMIT is not None:
+            try:
+                value = int(self.RUNTIME_RF_ESTIMATOR_LIMIT)
+            except (TypeError, ValueError):
+                return None
+            return value if value > 0 else None
+        if self.IS_RENDER_RUNTIME:
+            return 96
+        return None
 
 
 settings = Settings()

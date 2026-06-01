@@ -52,6 +52,11 @@ async def lifespan(app: FastAPI):
 
     # 2. Load ML models (crash early if missing — cannot operate without them)
     from ml.loader import load_all
+    if settings.EFFECTIVE_RUNTIME_RF_ESTIMATOR_LIMIT:
+        logger.info(
+            "Hosted-safe RF limit enabled: %d trees",
+            settings.EFFECTIVE_RUNTIME_RF_ESTIMATOR_LIMIT,
+        )
     if_model, rf_model, scaler_params, hi_params, hybrid_params, engine_cls = load_all()
 
     # 3. Initialize engine manager

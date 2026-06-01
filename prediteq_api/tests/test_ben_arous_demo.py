@@ -13,6 +13,7 @@ os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-role-key")
 from core.auth import CurrentUser, require_admin_or_local_demo
 from core.config import settings
 from core.labview_demo import _resolve_scenario_config, build_labview_demo_samples
+from ml.loader import _apply_runtime_rf_limit
 from routers import live_ingest, simulator
 from routers.live_ingest import _apply_bootstrap_metric_overrides
 from routers.simulator import (
@@ -250,6 +251,38 @@ class StandardUserMachineAutoseedTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(payload)
         bootstrap_mock.assert_not_called()
+
+
+class RuntimeHostedMemoryGuardTests(unittest.TestCase):
+    def test_render_runtime_uses_a_safe_rf_limit_by_default(self):
+        with patch.dict(os.environ, {"RENDER": "true"}, clear=False):
+            with patch.object(settings, "RUNTIME_RF_ESTIMATOR_LIMIT", None, create=True):
+                self.assertEqual(settings.EFFECTIVE_RUNTIME_RF_ESTIMATOR_LIMIT, 96)
+
+    def test_runtime_rf_limit_trims_extra_estimators_without_breaking_shape(self):
+        class DummyRf:
+            def __init__(self, count):
+                self.estimators_ = list(range(count))
+                self.n_estimators = count
+
+        dummy = DummyRf(300)
+        trimmed = _apply_runtime_rf_limit(dummy, 96)
+
+        self.assertIs(trimmed, dummy)
+        self.assertEqual(len(trimmed.estimators_), 96)
+        self.assertEqual(trimmed.n_estimators, 96)
+
+    def test_runtime_rf_limit_keeps_full_model_when_cap_is_absent(self):
+        class DummyRf:
+            def __init__(self, count):
+                self.estimators_ = list(range(count))
+                self.n_estimators = count
+
+        dummy = DummyRf(300)
+        kept = _apply_runtime_rf_limit(dummy, None)
+
+        self.assertEqual(len(kept.estimators_), 300)
+        self.assertEqual(kept.n_estimators, 300)
 
 
 class AroTeqSimulatorReplayTests(unittest.TestCase):
