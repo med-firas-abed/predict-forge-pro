@@ -809,18 +809,32 @@ async function mockCostsAndTasks(page: Page) {
   ];
 
   await page.route(/\/runtime-data\/costs(?:\?.*)?$/, async (route) => {
+    const machineFilter = new URL(route.request().url()).searchParams.get("machine_id");
+    const machineCode =
+      MOCK_MACHINE_ROWS.find((row) => row.id === machineFilter || row.code === machineFilter)?.code ?? machineFilter;
+    const filteredCosts = machineCode
+      ? costRows.filter((row) => row.machineCode === machineCode)
+      : costRows;
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(costRows),
+      body: JSON.stringify(filteredCosts),
     });
   });
 
   await page.route(/\/runtime-data\/tasks(?:\?.*)?$/, async (route) => {
+    const machineFilter = new URL(route.request().url()).searchParams.get("machine_id");
+    const machineCode =
+      MOCK_MACHINE_ROWS.find((row) => row.id === machineFilter || row.code === machineFilter)?.code ?? machineFilter;
+    const filteredTasks = machineFilter
+      ? taskStore.filter((task) => task.machineId === machineFilter || task.machineCode === machineCode)
+      : taskStore;
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(taskStore),
+      body: JSON.stringify(filteredTasks),
     });
   });
 }
@@ -1198,6 +1212,22 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByText(/G[ée]n[ée]rer un rapport clair/i)).toBeVisible();
     await expect(page.getByText(/Plan d'action/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Preparer les actions/i })).toHaveCount(0);
+  });
+
+  test("shows only the calendar reading module on maintenance for standard users", async ({ page }) => {
+    await seedAuth(page, OPERATOR_USER, [OPERATOR_USER]);
+    await mockMachines(page);
+    await mockCostsAndTasks(page);
+
+    await page.goto("/maintenance");
+    await expect(page.getByText(/Calendrier des actions confirm(?:é|e)es/i)).toBeVisible();
+    await expect(page.getByText(/Consultez uniquement le calendrier déjà confirmé/i)).toBeVisible();
+    await expect(page.getByText(/Exécution dans le calendrier/i)).toBeVisible();
+    await expect(page.getByText(/Ce jour-là/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Exporter$/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Ajouter une tâche manuelle/i })).toHaveCount(0);
+    await expect(page.getByText(/Actions en attente de validation/i)).toHaveCount(0);
+    await expect(page.getByText(/À venir/i)).toHaveCount(0);
   });
 
   test("lets admins open the simulator", async ({ page }) => {

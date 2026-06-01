@@ -495,19 +495,20 @@ export function MaintenancePage() {
         <div>
           <div className="section-title">Calendrier des actions confirmées</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ici, on suit seulement les tâches déjà confirmées. La décision se fait avant, puis le
-            calendrier suit l'exécution.
+            {isAdmin
+              ? "Ici, on suit seulement les tâches déjà confirmées. La décision se fait avant, puis le calendrier suit l'exécution."
+              : "Consultez uniquement le calendrier déjà confirmé pour votre machine."}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={exportCsv}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-3 px-4 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Exporter
-          </button>
-          {isAdmin ? (
+        {isAdmin ? (
+          <div className="flex gap-2">
+            <button
+              onClick={exportCsv}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-3 px-4 py-2 text-xs font-semibold text-foreground transition-all hover:bg-border-subtle"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exporter
+            </button>
             <button
               onClick={() => openCreateModal()}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
@@ -515,29 +516,24 @@ export function MaintenancePage() {
               <Plus className="h-3.5 w-3.5" />
               Ajouter une tâche manuelle
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
 
-      {!isAdmin ? (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
-          Lecture seule : vous voyez uniquement les informations de votre machine. Les ajouts, éditions,
-          suppressions et reconfigurations restent réservés à l’administrateur.
+      {isAdmin ? (
+        <div className="order-1 grid grid-cols-1 gap-3 md:grid-cols-3">
+          {statusCards.map((card) => (
+            <div key={card.title} className="rounded-2xl border border-border bg-card p-4 shadow-premium">
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${card.dot}`} />
+                <div className="industrial-label">{card.title}</div>
+              </div>
+              <div className={`mt-3 text-3xl font-bold ${card.valueClassName}`}>{card.count}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{card.helper}</div>
+            </div>
+          ))}
         </div>
       ) : null}
-
-      <div className="order-1 grid grid-cols-1 gap-3 md:grid-cols-3">
-        {statusCards.map((card) => (
-          <div key={card.title} className="rounded-2xl border border-border bg-card p-4 shadow-premium">
-            <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${card.dot}`} />
-              <div className="industrial-label">{card.title}</div>
-            </div>
-            <div className={`mt-3 text-3xl font-bold ${card.valueClassName}`}>{card.count}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{card.helper}</div>
-          </div>
-        ))}
-      </div>
 
       <div className="order-2 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.75fr)_380px]">
         <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
@@ -548,7 +544,9 @@ export function MaintenancePage() {
                 <div className="section-title">Exécution dans le calendrier</div>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Cette vue montre uniquement les tâches déjà placées après validation.
+                {isAdmin
+                  ? "Cette vue montre uniquement les tâches déjà placées après validation."
+                  : "Cette vue montre uniquement les interventions déjà confirmées pour votre machine."}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -753,7 +751,7 @@ export function MaintenancePage() {
               <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                 {isAdmin
                   ? "Cette date est libre pour l'instant. Vous pouvez y ajouter une tâche manuelle, ou ouvrir l'espace priorités pour confirmer une action avant de l'envoyer ici."
-                  : "Cette date est libre pour l'instant. Vous pouvez consulter les prochaines actions confirmées et ouvrir l'analyse machine pour suivre votre situation."}
+                  : "Cette date est libre pour l'instant. Consultez les prochaines actions confirmées de votre machine."}
               </div>
 
               {fallbackEvents.length > 0 && (
@@ -798,58 +796,52 @@ export function MaintenancePage() {
             </div>
           )}
 
-          {/* === Actions en attente de validation — encart integre au panneau Planning ===
-              Anciennement une carte séparée placée au-dessus du calendrier. Elle est
-              désormais montée sous le planning de la date sélectionnée pour regrouper,
-              dans une même boîte, les deux espaces qui touchent à la décision côté
-              maintenance (interventions du jour + suggestions en attente de revue).
-              Justification UX : limiter le « scroll-and-scan » en gardant la totalité
-              du contexte décisionnel dans un seul cadre visuel. */}
-          <div className="mt-5 rounded-2xl border border-border bg-surface-3 p-4">
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Brain className="h-4 w-4 text-primary" />
-                <div className="industrial-label">Actions en attente de validation</div>
+          {isAdmin ? (
+            <div className="mt-5 rounded-2xl border border-border bg-surface-3 p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-primary" />
+                  <div className="industrial-label">Actions en attente de validation</div>
+                </div>
+                <span className="rounded-full bg-card px-2.5 py-1 text-[0.6rem] font-semibold text-muted-foreground">
+                  {isRefreshingInsights ? "Mise à jour..." : "Actualisation 5 s"}
+                </span>
               </div>
-              <span className="rounded-full bg-card px-2.5 py-1 text-[0.6rem] font-semibold text-muted-foreground">
-                {isRefreshingInsights ? "Mise à jour..." : "Actualisation 5 s"}
-              </span>
+
+              <p className="mb-3 text-xs text-muted-foreground">
+                L'espace priorités reste le lieu de décision. Une fois confirmées, les tâches arrivent
+                ici automatiquement ; l'ajout manuel reste aussi possible.
+              </p>
+
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="text-2xl font-bold text-foreground">{aiPendingSummary.total}</div>
+                <div className="text-xs font-semibold text-foreground">
+                  proposition{aiPendingSummary.total > 1 ? "s" : ""} en attente
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap gap-1.5 text-[0.65rem]">
+                  <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
+                    {aiPendingSummary.critical} critique{aiPendingSummary.critical > 1 ? "s" : ""}
+                  </span>
+                  <span className="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-warning">
+                    {aiPendingSummary.priority} à planifier
+                  </span>
+                  <span className="rounded-full bg-surface-3 px-2 py-0.5 font-semibold text-foreground">
+                    {overdueTasks.length} tâche{overdueTasks.length > 1 ? "s" : ""} en retard
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => navigate("/ia?tab=planner")}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90"
+              >
+                <Brain className="h-3.5 w-3.5" />
+                Ouvrir l'espace priorités
+              </button>
             </div>
-
-            <p className="mb-3 text-xs text-muted-foreground">
-              {isAdmin
-                ? "L'espace priorités reste le lieu de décision. Une fois confirmées, les tâches arrivent ici automatiquement ; l'ajout manuel reste aussi possible."
-                : "L'analyse machine reste le lieu de lecture. Une fois confirmées, les tâches de votre machine apparaissent ici automatiquement."}
-            </p>
-
-            <div className="rounded-xl border border-border bg-card p-3">
-              <div className="text-2xl font-bold text-foreground">{aiPendingSummary.total}</div>
-              <div className="text-xs font-semibold text-foreground">
-                proposition{aiPendingSummary.total > 1 ? "s" : ""} en attente
-              </div>
-
-              <div className="mt-2.5 flex flex-wrap gap-1.5 text-[0.65rem]">
-                <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
-                  {aiPendingSummary.critical} critique{aiPendingSummary.critical > 1 ? "s" : ""}
-                </span>
-                <span className="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-warning">
-                  {aiPendingSummary.priority} à planifier
-                </span>
-                <span className="rounded-full bg-surface-3 px-2 py-0.5 font-semibold text-foreground">
-                  {overdueTasks.length} tâche{overdueTasks.length > 1 ? "s" : ""} en retard
-                </span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => navigate(isAdmin ? "/ia?tab=planner" : "/ia?tab=report")}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90"
-            >
-              <Brain className="h-3.5 w-3.5" />
-              {isAdmin ? "Ouvrir l'espace priorités" : "Ouvrir l'analyse machine"}
-            </button>
-          </div>
+          ) : null}
         </div>
       </div>
 

@@ -255,11 +255,12 @@ describe("MaintenancePage", () => {
 
     renderPage();
 
-    expect(
-      screen.getByText(/lecture seule\s*: vous voyez uniquement les informations de votre machine/i),
-    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /ajouter une tâche manuelle/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /exporter/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /ajouter sur ce jour/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/actions en attente de validation/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/à venir/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/ce jour-là/i)).toBeInTheDocument();
 
     const taskTitles = await screen.findAllByText(/controle cabine/i);
     fireEvent.click(taskTitles[0]);
