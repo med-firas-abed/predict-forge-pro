@@ -101,33 +101,35 @@ const T = {
   cases: {
     title: { fr: "Nos etudes de cas", en: "Our case studies" },
     featured: {
-      tag: { fr: "MACHINE PILOTE", en: "PILOT MACHINE" },
-      title: { fr: "Machine AroTeq", en: "AroTeq machine" },
+      tag: { fr: "1ER CAS D'ETUDE", en: "FIRST CASE STUDY" },
+      title: { fr: "Stockeur rotatif AroTeq", en: "AroTeq rotary storage carousel" },
       desc: {
-        fr: "Le projet PrediTeq prend appui sur cette machine pilote AroTeq pour relier lecture des signaux, diagnostic, rapport machine et future continuite CSV / PLC / LabVIEW.",
-        en: "The PrediTeq project is built around this AroTeq pilot machine to connect signal reading, diagnosis, machine reporting, and future CSV / PLC / LabVIEW continuity.",
+        fr: "Ce stockeur rotatif constitue notre premier cas d'etude. PrediTeq y centralise lecture machine, diagnostic, alertes et rapport dans une meme experience de maintenance.",
+        en: "This rotary storage carousel is our first case study. PrediTeq brings together machine reading, diagnosis, alerts, and reporting in one maintenance experience.",
       },
       points: {
-        fr: ["Point de depart du cas industriel AroTeq", "Base de la future chaine CSV / PLC / LabVIEW", "Lecture machine, alertes et rapports dans la meme application"],
-        en: ["Starting point of the AroTeq industrial case", "Foundation of the future CSV / PLC / LabVIEW chain", "Machine reading, alerts, and reports in the same application"],
+        fr: ["Premier cas industriel visible dans la plateforme", "Lecture claire de l'etat machine et des alertes", "Base d'extension vers d'autres equipements"],
+        en: ["First industrial case visible in the platform", "Clear reading of machine condition and alerts", "Base for future extension to other equipment"],
       },
     },
     items: [
       {
-        tag: { fr: "PLANIFICATION", en: "PLANNING" },
-        title: { fr: "Calendrier de maintenance - suivi terrain", en: "Maintenance calendar - field follow-up" },
+        tag: { fr: "A VENIR", en: "COMING SOON" },
+        title: { fr: "Autres machines en preparation", en: "More machines in preparation" },
         desc: {
-          fr: "Les actions deja validees sont visibles par machine pour garder une lecture simple du terrain.",
-          en: "Validated actions stay visible per machine to keep the field view simple and operational.",
+          fr: "La plateforme est pensee pour accueillir d'autres cas machines au fur et a mesure des futurs projets.",
+          en: "The platform is designed to welcome more machine cases as future projects arrive.",
         },
+        loading: true,
       },
       {
-        tag: { fr: "RAPPORTS", en: "REPORTS" },
-        title: { fr: "Rapport machine - synthese claire et export PDF", en: "Machine report - clear summary and PDF export" },
+        tag: { fr: "CHARGEMENT", en: "LOADING" },
+        title: { fr: "Extension vers de nouveaux equipements", en: "Extension to new equipment" },
         desc: {
-          fr: "Chaque machine peut etre relue a travers un rapport cible, sans melanger les autres equipements.",
-          en: "Each machine can be reviewed through a focused report, without mixing in other equipment.",
+          fr: "Ce bloc reste volontairement ouvert pour les prochains cas d'usage industriels couverts par PrediTeq.",
+          en: "This block intentionally stays open for the next industrial use cases covered by PrediTeq.",
         },
+        loading: true,
       },
     ],
   },
@@ -796,6 +798,13 @@ function CaseStudiesSection() {
                 </span>
                 <h3 className={`text-lg font-bold leading-snug ${dark ? 'text-white' : 'text-gray-900'}`}>{c.title[lang]}</h3>
                 <p className={`mt-3 text-sm leading-6 ${dark ? 'text-gray-300' : 'text-gray-600'}`}>{c.desc[lang]}</p>
+                {c.loading ? (
+                  <div className="mt-6 space-y-3">
+                    <div className={`h-2.5 w-5/6 rounded-full animate-pulse ${dark ? 'bg-white/10' : 'bg-teal-700/10'}`} />
+                    <div className={`h-2.5 w-3/4 rounded-full animate-pulse ${dark ? 'bg-white/10' : 'bg-teal-700/10'}`} />
+                    <div className={`h-2.5 w-2/3 rounded-full animate-pulse ${dark ? 'bg-white/10' : 'bg-teal-700/10'}`} />
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
