@@ -113,31 +113,40 @@ export function getLiveCostProjection(
   historicalAverage: number,
   fleetHistoricalAverage = 0,
 ) {
-  const hasMachineHistory = historicalAverage > 0;
-  const hasFleetHistory = fleetHistoricalAverage > 0;
-  const historyReference = hasMachineHistory
-    ? historicalAverage
-    : hasFleetHistory
-      ? fleetHistoricalAverage
-      : 0;
-  const baseCost = getBudgetReferenceCost(insight.taskTemplate.type, historyReference);
-  const baseSource = hasMachineHistory
-    ? "machine_history"
-    : hasFleetHistory
-      ? "fleet_history"
-      : "task_baseline";
-  const multiplier = clamp(insight.budgetMultiplier || 1, 0.85, 3.2);
-  const projectedCost = Math.round(baseCost * multiplier);
-  const delayMultiplier = clamp(insight.delayMultiplier || 1.05, 1.01, 3.2);
-  const delayedCost = Math.round(projectedCost * delayMultiplier);
+  void historicalAverage;
+  void fleetHistoricalAverage;
+
+  const baseCost = getBudgetReferenceCost(insight.taskTemplate.type);
+  const urgencyMultiplier =
+    {
+      stable: 1,
+      watch: 1.1,
+      priority: 1.25,
+      critical: 1.45,
+    }[insight.urgencyBand] ?? 1;
+  const modelAdjustment = clamp(insight.budgetMultiplier || 1, 0.95, 1.2);
+  const projectedCost = Math.round(baseCost * urgencyMultiplier * modelAdjustment);
+  const extraRiskRate = clamp(
+    {
+      stable: 0.08,
+      watch: 0.12,
+      priority: 0.18,
+      critical: 0.3,
+    }[insight.urgencyBand] ?? 0.12,
+    0.08,
+    0.3,
+  );
+  const delaySignalRate = clamp((insight.delayMultiplier || 1.05) - 1, 0.05, 0.25);
+  const delayPenalty = Math.round(projectedCost * Math.max(extraRiskRate, delaySignalRate));
+  const delayedCost = projectedCost + delayPenalty;
 
   return {
     baseCost,
-    baseSource,
-    multiplier,
+    baseSource: "local_scale",
+    multiplier: urgencyMultiplier * modelAdjustment,
     projectedCost,
     delayedCost,
-    delayPenalty: delayedCost - projectedCost,
+    delayPenalty,
   };
 }
 

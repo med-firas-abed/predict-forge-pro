@@ -11,7 +11,6 @@ import {
   YAxis,
 } from "recharts";
 import {
-  AlertTriangle,
   Brain,
   CalendarClock,
   DollarSign,
@@ -28,7 +27,6 @@ import { useFleetPredictiveInsights } from "@/hooks/useFleetPredictiveInsights";
 import { useMachines } from "@/hooks/useMachines";
 import {
   getTaskCostReference,
-  LABOR_RATE_PER_HOUR,
 } from "@/lib/costModel";
 import {
   getMachinePublicLabel,
@@ -55,12 +53,10 @@ function formatMonthLabel(year: number, month: number) {
 
 function getBaseExplanation(source: string) {
   switch (source) {
-    case "machine_history":
-      return "Base de calcul : moyenne mensuelle de cette machine";
-    case "fleet_history":
-      return "Base de calcul : moyenne mensuelle de la flotte";
+    case "local_scale":
+      return "Base de calcul : barème simple de maintenance locale";
     default:
-      return "Base de calcul : forfait standard du type d'action";
+      return "Base de calcul : forfait simple selon le type d'action";
   }
 }
 
@@ -85,6 +81,9 @@ export function CostsPage() {
   const { couts: rows } = useCouts(currentUser?.machineId);
   const { machines } = useMachines(currentUser?.machineId);
   const { insights, isFetching } = useFleetPredictiveInsights(machines);
+  const inspectionReference = getTaskCostReference("inspection");
+  const preventiveReference = getTaskCostReference("preventive");
+  const correctiveReference = getTaskCostReference("corrective");
 
   const monthlyData = useMemo(() => {
     const map = new Map<
@@ -150,8 +149,13 @@ export function CostsPage() {
         .map(([machineCode, history]) => ({
           machineCode,
           ...history,
+          averageMonthly: history.count > 0 ? history.total / history.count : 0,
         }))
-        .sort((left, right) => right.total - left.total),
+        .sort((left, right) => {
+          const averageDelta = right.averageMonthly - left.averageMonthly;
+          if (averageDelta !== 0) return averageDelta;
+          return right.total - left.total;
+        }),
     [historyByMachine],
   );
 
@@ -215,6 +219,10 @@ export function CostsPage() {
   const totalLabor = rows.reduce((sum, row) => sum + row.mainOeuvre, 0);
   const totalParts = rows.reduce((sum, row) => sum + row.pieces, 0);
   const loadedPeriods = monthlyData.length;
+  const latestRecordedPeriod = monthlyData[monthlyData.length - 1] ?? null;
+  const averageMonthlyTotal = loadedPeriods > 0 ? totalHistoricalCost / loadedPeriods : 0;
+  const averageMonthlyLabor = loadedPeriods > 0 ? totalLabor / loadedPeriods : 0;
+  const averageMonthlyParts = loadedPeriods > 0 ? totalParts / loadedPeriods : 0;
   const projectedBudget = budgetFocusEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
   const delayedExposure = budgetFocusEntries.reduce((sum, entry) => sum + entry.delayPenalty, 0);
   const routineProjectionBudget = routineCostEntries.reduce((sum, entry) => sum + entry.projectedCost, 0);
@@ -290,13 +298,15 @@ export function CostsPage() {
         <div>
           <div className="section-title">Lecture simple des couts maintenance</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            La page separe les couts reels deja enregistres et les estimations de prochaine action.
+            La page separe les couts reels deja saisis et le budget simple de la prochaine intervention.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Une ligne de cout correspond a un cumul mensuel par machine. Une estimation de maintenance
-            n'est pas le prix d'achat ou de remplacement du moteur.
+            Le haut de page se lit par mois. Le bas de page estime une intervention de maintenance,
+            pas un achat ni un remplacement complet du moteur.
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">{historyWindowLabel}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Graphe historique : 6 derniers mois saisis. {historyWindowLabel}
+          </p>
         </div>
         <button
           onClick={exportCsv}
@@ -311,59 +321,64 @@ export function CostsPage() {
         <div className="mb-4">
           <div className="section-title">Historique enregistre</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Montants reels deja saisis dans la base.
+            Montants reels deja saisis dans la base, lus mois par mois.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             icon={<DollarSign className="h-5 w-5" />}
-            label="Depenses enregistrees"
+            label="Dernier mois saisi"
             value={
               <>
-                {totalHistoricalCost.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
+                {formatCurrency(latestRecordedPeriod?.total ?? 0)}
               </>
             }
-            sub="Somme des lignes mensuelles deja saisies"
+            sub={latestRecordedPeriod ? latestRecordedPeriod.label : "Aucun mois saisi"}
             variant="blue"
           />
           <KpiCard
             icon={<Wrench className="h-5 w-5" />}
-            label="Main-d'oeuvre enregistree"
+            label="Moyenne mensuelle"
             value={
               <>
-                {totalLabor.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
+                {formatCurrency(averageMonthlyTotal)}
               </>
             }
-            sub="Montant reel saisi"
+            sub={loadedPeriods > 0 ? `${loadedPeriods} mois charges` : "Aucune periode chargee"}
             variant="green"
           />
           <KpiCard
             icon={<Package className="h-5 w-5" />}
-            label="Pieces enregistrees"
+            label="Main-d'oeuvre moyenne"
             value={
               <>
-                {totalParts.toLocaleString("fr-FR")} <span className="text-sm opacity-40">TND</span>
+                {formatCurrency(averageMonthlyLabor)}
               </>
             }
-            sub="Montant reel saisi"
+            sub={`Pieces moyennes : ${formatCurrency(averageMonthlyParts)}`}
             variant="warn"
           />
           <KpiCard
             icon={<CalendarClock className="h-5 w-5" />}
-            label="Periodes chargees"
-            value={String(loadedPeriods)}
-            sub={`${machineHistoryRows.length} machine${machineHistoryRows.length > 1 ? "s" : ""} avec historique`}
+            label="Machines avec historique"
+            value={String(machineHistoryRows.length)}
+            sub={`Cumul charge : ${formatCurrency(totalHistoricalCost)}`}
             variant="blue"
           />
+        </div>
+
+        <div className="mt-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
+          Une ligne de cout correspond a un cumul mensuel par machine. Le cumul charge additionne plusieurs
+          mois et plusieurs machines : ce n'est pas le prix d'un moteur.
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="rounded-2xl border border-border bg-surface-3 p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Depenses mensuelles enregistrees</h3>
+              <h3 className="text-sm font-semibold text-foreground">6 derniers mois saisis</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Seulement les couts reels deja saisis.
+                Main-d'oeuvre et pieces deja saisies dans l'historique reel.
               </p>
             </div>
 
@@ -406,9 +421,9 @@ export function CostsPage() {
 
           <div className="rounded-2xl border border-border bg-surface-3 p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Repartition chargee par machine</h3>
+              <h3 className="text-sm font-semibold text-foreground">Lecture par machine</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Cumuls deja charges dans la base.
+                Moyenne mensuelle observee pour chaque machine ayant un historique.
               </p>
             </div>
 
@@ -428,10 +443,14 @@ export function CostsPage() {
                       </span>
                     </div>
                     <div className="mt-2 text-lg font-bold text-foreground">
-                      {formatCurrency(entry.total)}
+                      {formatCurrency(entry.averageMonthly)}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      Main-d'oeuvre : {formatCurrency(entry.labor)} / Pieces : {formatCurrency(entry.parts)}
+                      Moyenne mensuelle
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Cumul charge : {formatCurrency(entry.total)} / Main-d'oeuvre : {formatCurrency(entry.labor)} /
+                      Pieces : {formatCurrency(entry.parts)}
                     </div>
                   </div>
                 ))}
@@ -448,13 +467,13 @@ export function CostsPage() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="section-title">Prochaine action estimee</div>
+            <div className="section-title">Budget simple de la prochaine intervention</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Estimations de maintenance pour les machines affichees ci-dessous.
+              Chaque montant ci-dessous correspond a une action de maintenance simple a prevoir sur la machine.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Base minimale sans historique : main-d'oeuvre a {LABOR_RATE_PER_HOUR} DT/h avec un
-              forfait pieces selon le type d'action.
+              Bareme simple PrediTeq pour un stockeur vertical en Tunisie : inspection {formatCurrency(inspectionReference.totalCost)},
+              preventif {formatCurrency(preventiveReference.totalCost)}, correctif {formatCurrency(correctiveReference.totalCost)}.
             </p>
           </div>
           <span className="rounded-full bg-surface-3 px-3 py-1 text-[0.65rem] font-semibold text-muted-foreground">
@@ -465,18 +484,17 @@ export function CostsPage() {
         {routineCostEntries.length > 0 && hasActionableBudgetCases ? (
           <div className="mb-4 rounded-xl border border-border bg-surface-3 px-4 py-3 text-sm text-muted-foreground">
             {routineCostEntries.length} machine{routineCostEntries.length > 1 ? "s" : ""} stable
-            {routineCostEntries.length > 1 ? "s restent" : " reste"} suivie
-            {routineCostEntries.length > 1 ? "s" : ""} en routine (
-            {formatCurrency(routineProjectionBudget)}), hors priorite immediate.
+            {routineCostEntries.length > 1 ? "s restent" : " reste"} en entretien courant (
+            {formatCurrency(routineProjectionBudget)}). Elles restent visibles plus bas, sans passer devant les urgences.
           </div>
         ) : null}
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
           <div className="rounded-2xl border border-border bg-surface-3 p-5">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Projection et surcout du report</h3>
+              <h3 className="text-sm font-semibold text-foreground">Prochaine intervention par machine</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Vert = prochaine action. Orange = surcout si on reporte encore.
+                Vert = estimation maintenant. Orange = supplement si l'on repousse encore.
               </p>
             </div>
 
@@ -494,7 +512,7 @@ export function CostsPage() {
                     tick={{ fill: "hsl(215,12%,55%)", fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(value: number) => `${Math.round(value / 1000)}k`}
+                    tickFormatter={(value: number) => `${Math.round(value)}`}
                   />
                   <Tooltip
                     contentStyle={{
@@ -521,37 +539,37 @@ export function CostsPage() {
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-3 p-5">
               <div className="industrial-label">
-                {hasActionableBudgetCases ? "Total des actions a lancer" : "Total des actions de routine"}
+                {hasActionableBudgetCases ? "Budget a prevoir maintenant" : "Budget d'entretien courant"}
               </div>
               <div className="mt-3 text-3xl font-bold text-foreground">{formatCurrency(projectedBudget)}</div>
               <p className="mt-2 text-sm leading-relaxed text-secondary-foreground">
                 {hasActionableBudgetCases
-                  ? "Somme des prochaines actions des machines a traiter en premier."
-                  : "Somme des prochaines actions des machines stables affichees."}
+                  ? "Somme des prochaines interventions des machines a traiter en premier."
+                  : "Somme des prochaines interventions des machines stables affichees."}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Surcout si report</div>
+                <div className="industrial-label">Supplement si on attend</div>
                 <div className="mt-2 text-xl font-bold text-destructive">+{formatCurrency(delayedExposure)}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Difference supplementaire si la prochaine fenetre est encore repoussee
+                  Cout supplementaire estime si la prochaine fenetre de maintenance est encore repoussee
                 </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
                 <div className="industrial-label">
-                  {hasActionableBudgetCases ? "Machines a traiter" : "Machines lues"}
+                  {hasActionableBudgetCases ? "Machines concernees" : "Machines lues"}
                 </div>
                 <div className="mt-2 text-xl font-bold text-warning">{shownMachineCount}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {hasActionableBudgetCases ? "Machines non stables affichees ici" : "Machines affichees dans cette lecture"}
+                  {hasActionableBudgetCases ? "Machines non stables retenues dans ce budget" : "Machines affichees dans cette lecture"}
                 </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Plus gros engagement</div>
+                <div className="industrial-label">Machine la plus couteuse</div>
                 <div className="mt-2 text-base font-bold text-foreground">
                   {topProjectedMachine ? getMachinePublicLabel(topProjectedMachine.insight.machine) : "-"}
                 </div>
@@ -561,10 +579,13 @@ export function CostsPage() {
               </div>
 
               <div className="rounded-2xl border border-border bg-surface-3 p-4">
-                <div className="industrial-label">Sans historique</div>
-                <div className="mt-2 text-base font-bold text-foreground">{LABOR_RATE_PER_HOUR} DT/h</div>
+                <div className="industrial-label">Bareme simple</div>
+                <div className="mt-2 text-base font-bold text-foreground">
+                  {formatCurrency(inspectionReference.totalCost)} a {formatCurrency(correctiveReference.totalCost)}
+                </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Avec un forfait pieces selon le type d'action
+                  Inspection {formatCurrency(inspectionReference.totalCost)} / Preventif {formatCurrency(preventiveReference.totalCost)} /
+                  Correctif {formatCurrency(correctiveReference.totalCost)}
                 </div>
               </div>
             </div>
@@ -575,7 +596,7 @@ export function CostsPage() {
                 <div className="text-sm font-semibold text-foreground">Etape suivante</div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Choisir la prochaine action, la valider, puis l'envoyer vers le calendrier.
+                Confirmer l'action utile, puis l'envoyer vers le calendrier de maintenance.
               </p>
               <button
                 type="button"
@@ -594,16 +615,16 @@ export function CostsPage() {
         data-testid="budget-action-section"
         className="rounded-2xl border border-border bg-card p-5 shadow-premium"
       >
-        <div className="mb-4">
-          <div className="section-title">
-            {hasActionableBudgetCases ? "Machines a traiter en premier" : "Machines lues"}
+          <div className="mb-4">
+            <div className="section-title">
+              {hasActionableBudgetCases ? "Machines a traiter maintenant" : "Machines lues"}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {hasActionableBudgetCases
+                ? "Les machines non stables apparaissent ici en premier, avec une estimation simple de maintenance."
+                : "Toutes les machines lues sont stables pour l'instant."}
+            </p>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {hasActionableBudgetCases
-              ? "Les machines non stables apparaissent ici en premier."
-              : "Toutes les machines lues sont stables pour l'instant."}
-          </p>
-        </div>
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
           {budgetFocusEntries.slice(0, 3).map((entry) => {
@@ -657,7 +678,7 @@ export function CostsPage() {
 
                 <div className="mt-4">
                   <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-                    Prochaine action estimee
+                    Prochaine intervention
                   </div>
                   <div className="mt-1 text-lg font-bold text-foreground">
                     {formatCurrency(entry.projectedCost)}
@@ -666,11 +687,11 @@ export function CostsPage() {
                     {getBaseExplanation(entry.baseSource)}
                   </div>
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                    Reference standard : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
+                    Bareme local : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
                     {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pieces
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    +{formatCurrency(entry.delayPenalty)} si report
+                    +{formatCurrency(entry.delayPenalty)} si l'on attend encore
                   </div>
                 </div>
 
@@ -704,9 +725,9 @@ export function CostsPage() {
           className="rounded-2xl border border-border bg-card p-5 shadow-premium"
         >
           <div className="mb-4">
-            <div className="section-title">Suivi de routine</div>
+            <div className="section-title">Machines stables</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Les machines stables restent visibles sans passer devant les cas urgents.
+              Les machines stables restent visibles avec un cout d'entretien simple, sans passer devant les cas urgents.
             </p>
           </div>
 
@@ -751,7 +772,7 @@ export function CostsPage() {
 
                   <div className="mt-4">
                     <div className="text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-                      Projection routine
+                      Entretien courant estime
                     </div>
                     <div className="mt-1 text-lg font-bold text-foreground">
                       {formatCurrency(entry.projectedCost)}
@@ -760,7 +781,7 @@ export function CostsPage() {
                       {getBaseExplanation(entry.baseSource)}
                     </div>
                     <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                      Reference standard : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
+                      Bareme local : {costReference.laborHours} h x {costReference.laborRate} DT +{" "}
                       {Math.round(costReference.partsCost).toLocaleString("fr-FR")} DT pieces
                     </div>
                   </div>

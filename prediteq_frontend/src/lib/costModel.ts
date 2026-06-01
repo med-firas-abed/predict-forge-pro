@@ -1,25 +1,25 @@
 import type { TacheType } from "@/lib/runtimeDataRepository";
 
-export const LABOR_RATE_PER_HOUR = 30;
+export const LABOR_RATE_PER_HOUR = 35;
 
 const TASK_COST_ASSUMPTIONS: Record<
   TacheType,
   { laborHours: number; partsCost: number; label: string }
 > = {
   preventive: {
-    laborHours: 2,
-    partsCost: 200,
+    laborHours: 4,
+    partsCost: 140,
     label: "Visite preventive",
   },
   inspection: {
-    laborHours: 3,
-    partsCost: 230,
-    label: "Inspection renforcee",
+    laborHours: 2,
+    partsCost: 70,
+    label: "Inspection terrain",
   },
   corrective: {
     laborHours: 6,
-    partsCost: 300,
-    label: "Intervention corrective",
+    partsCost: 410,
+    label: "Intervention corrective ciblee",
   },
 };
 

@@ -152,19 +152,21 @@ describe("CostsPage", () => {
     });
   });
 
-  it("keeps stable machines in the routine section even when their projected cost is high", () => {
+  it("keeps stable machines in the routine section and shows simple intervention costs", () => {
     renderPage();
 
     expect(
       screen.getByText(/Une ligne de cout correspond a un cumul mensuel par machine/i),
     ).toBeInTheDocument();
+    expect(screen.getAllByText(/Budget simple de la prochaine intervention/i).length).toBeGreaterThan(0);
 
     const actionSection = screen.getByTestId("budget-action-section");
     expect(within(actionSection).getByText("Machine 2")).toBeInTheDocument();
     expect(within(actionSection).queryByText("Machine 1")).not.toBeInTheDocument();
+    expect(within(actionSection).getByText("244 TND")).toBeInTheDocument();
 
     const routineSection = screen.getByTestId("budget-routine-section");
     expect(within(routineSection).getByText("Machine 1")).toBeInTheDocument();
-    expect(within(routineSection).getByText(/projection routine/i)).toBeInTheDocument();
+    expect(within(routineSection).getByText(/entretien courant estime/i)).toBeInTheDocument();
   });
 });
