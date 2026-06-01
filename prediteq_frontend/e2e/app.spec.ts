@@ -1196,7 +1196,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i })).toHaveCount(0);
 
     await page.goto("/maintenance");
-    await expect(page.getByText(/Calendrier des actions confirmees/i)).toBeVisible();
+    await expect(page.getByText(/Calendrier des actions confirm(?:é|e)es/i)).toBeVisible();
     await expect(page.getByText(repeatedTaskTitle).first()).toBeVisible();
   });
 
@@ -1422,7 +1422,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByText(/Machine 3/i).first()).toBeVisible();
 
     await page.goto("/maintenance");
-    await expect(page.getByText(/Calendrier des actions confirmees/i)).toBeVisible();
+    await expect(page.getByText(/Calendrier des actions confirm(?:é|e)es/i)).toBeVisible();
 
     await page.goto("/administration");
     await expect(page.getByText(/Gestion des comptes/i)).toBeVisible();
