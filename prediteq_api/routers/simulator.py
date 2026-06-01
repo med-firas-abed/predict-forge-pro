@@ -76,6 +76,170 @@ _state: dict = {
     "machines": {},
 }
 
+
+def _set_main_replay_task(task: asyncio.Task) -> None:
+    global _task
+    _task = task
+
+    def _on_done(done: asyncio.Task) -> None:
+        global _task
+        if _task is done:
+            _task = None
+        if done.cancelled():
+            return
+        exc = done.exception()
+        if exc:
+            logger.error("Simulator task crashed: %s", exc)
+
+    task.add_done_callback(_on_done)
+
+
+async def _cancel_task(task: asyncio.Task | None, *, label: str) -> None:
+    if task is None or task.done():
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        logger.info("Simulator: %s task cancelled", label)
+
+
+async def _stop_background_runtime(*, require_running: bool) -> bool:
+    global _task, _demo_prewarm_task, _state
+
+    had_running_replay = bool(_state.get("running"))
+    if require_running and not had_running_replay:
+        return False
+
+    _state["running"] = False
+    replay_task = _task
+    prewarm_task = _demo_prewarm_task
+    _task = None
+    _demo_prewarm_task = None
+
+    await _cancel_task(replay_task, label="replay")
+    await _cancel_task(prewarm_task, label="prewarm")
+
+    pending_notifications = list(_notification_tasks)
+    _notification_tasks.clear()
+    for notification_task in pending_notifications:
+        await _cancel_task(notification_task, label="notification")
+
+    return had_running_replay
+
+
+async def _wait_for_runtime_seed(*, demo_mode: bool, timeout_s: float = 8.0) -> bool:
+    manager = get_manager()
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(timeout_s, 0.1)
+    simulator_codes = _get_simulator_machine_codes(demo_mode=demo_mode)
+
+    while loop.time() < deadline:
+        if any(manager.last_raw.get(code) for code in simulator_codes):
+            return True
+        await asyncio.sleep(0.2)
+
+    return any(manager.last_raw.get(code) for code in simulator_codes)
+
+
+async def _start_simulator_session(
+    *,
+    speed: int,
+    reset: bool,
+    demo_mode: bool,
+    email_notifications: bool,
+) -> list[str]:
+    global _state
+
+    if _state["running"]:
+        raise HTTPException(409, "Simulator already running")
+
+    if speed < 1 or speed > 1000:
+        raise HTTPException(400, "Speed must be between 1 and 1000")
+
+    await _stop_background_runtime(require_running=False)
+
+    manager = get_manager()
+    simulator_codes = _get_simulator_machine_codes(demo_mode=demo_mode)
+    _refresh_simulator_machine_cache(manager, demo_mode=demo_mode)
+    for code in simulator_codes:
+        manager.reset(code)
+
+    if reset:
+        try:
+            sb = get_supabase()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            for code, hi in INITIAL_HI.items():
+                uuid = manager.get_uuid(code)
+                if uuid:
+                    statut = 'operational' if hi >= 0.8 else ('degraded' if hi >= 0.3 else 'critical')
+                    sb.table('machines').update({
+                        'hi_courant': round(hi, 4),
+                        'rul_courant': None,
+                        'statut': statut,
+                        'derniere_maj': now_iso,
+                    }).eq('id', uuid).execute()
+            logger.info("Simulator: reset HI values written to Supabase")
+        except Exception as e:
+            logger.warning("Could not reset Supabase HI: %s", e)
+
+    _state = {
+        "running": True,
+        "speed": speed,
+        "tick": 0,
+        "demo_mode": demo_mode,
+        "machines": {},
+    }
+    task = asyncio.create_task(
+        _replay_loop(speed, reset, demo_mode, email_notifications)
+    )
+    _set_main_replay_task(task)
+    return simulator_codes
+
+
+async def ensure_demo_simulator_running(
+    *,
+    speed: int = 60,
+    reset: bool = True,
+    email_notifications: bool = False,
+    wait_for_seed: bool = True,
+    timeout_s: float = 8.0,
+) -> bool:
+    if not settings.DEMO_SIMULATOR_AUTO_START_ENABLED:
+        logger.info("Simulator auto-start disabled by configuration")
+        return False
+
+    if _state.get("running"):
+        logger.info("Simulator auto-start skipped: replay already running")
+        return False
+
+    await _start_simulator_session(
+        speed=speed,
+        reset=reset,
+        demo_mode=True,
+        email_notifications=email_notifications,
+    )
+    logger.info(
+        "Simulator auto-start launched in demo mode at x%s (reset=%s)",
+        speed,
+        reset,
+    )
+
+    if wait_for_seed:
+        if await _wait_for_runtime_seed(demo_mode=True, timeout_s=timeout_s):
+            logger.info("Simulator auto-start ready: telemetry seed is available")
+        else:
+            logger.warning(
+                "Simulator auto-start launched, but telemetry seed was not ready within %.1fs",
+                timeout_s,
+            )
+
+    return True
+
+
+async def shutdown_simulator_runtime() -> None:
+    await _stop_background_runtime(require_running=False)
+
 # All 3 demo machines participate in the simulation
 MACHINE_CODES = get_demo_machine_codes()
 
@@ -1665,64 +1829,12 @@ async def start_simulator(speed: int = 60, reset: bool = False,
     speed = ticks per real second (60 = 1 minute of data per second).
     reset = true to reset all machines to initial HI (fresh start).
     """
-    global _task, _state
-
-    if _state["running"]:
-        raise HTTPException(409, "Simulator already running")
-
-    if speed < 1 or speed > 1000:
-        raise HTTPException(400, "Speed must be between 1 and 1000")
-
-    # Cancel any lingering task from a previous run to prevent two loops
-    if _task is not None and not _task.done():
-        _task.cancel()
-        try:
-            await _task
-        except asyncio.CancelledError:
-            pass
-
-    # Reset engines for all machines
-    manager = get_manager()
-    simulator_codes = _get_simulator_machine_codes(demo_mode=demo_mode)
-    _refresh_simulator_machine_cache(manager, demo_mode=demo_mode)
-    for code in simulator_codes:
-        manager.reset(code)
-
-    # If resetting, write INITIAL_HI to Supabase so next reads are consistent
-    if reset:
-        try:
-            sb = get_supabase()
-            now_iso = datetime.now(timezone.utc).isoformat()
-            for code, hi in INITIAL_HI.items():
-                uuid = manager.get_uuid(code)
-                if uuid:
-                    statut = 'operational' if hi >= 0.8 else ('degraded' if hi >= 0.3 else 'critical')
-                    sb.table('machines').update({
-                        'hi_courant': round(hi, 4),
-                        'rul_courant': None,
-                        'statut': statut,
-                        'derniere_maj': now_iso,
-                    }).eq('id', uuid).execute()
-            logger.info("Simulator: reset HI values written to Supabase")
-        except Exception as e:
-            logger.warning("Could not reset Supabase HI: %s", e)
-
-    _state = {
-        "running": True,
-        "speed": speed,
-        "tick": 0,
-        "demo_mode": demo_mode,
-        "machines": {},
-    }
-    _task = asyncio.create_task(
-        _replay_loop(speed, reset, demo_mode, email_notifications)
+    simulator_codes = await _start_simulator_session(
+        speed=speed,
+        reset=reset,
+        demo_mode=demo_mode,
+        email_notifications=email_notifications,
     )
-
-    def _on_done(t: asyncio.Task):
-        exc = t.exception() if not t.cancelled() else None
-        if exc:
-            logger.error("Simulator task crashed: %s", exc)
-    _task.add_done_callback(_on_done)
 
     return {
         "status": "started",
@@ -1741,17 +1853,8 @@ async def start_simulator(speed: int = 60, reset: bool = False,
 @router.post("/stop")
 async def stop_simulator(admin: CurrentUser = Depends(require_admin_or_local_demo)):
     """Stop the running simulator."""
-    global _task, _state
-    if not _state["running"]:
+    if not await _stop_background_runtime(require_running=True):
         raise HTTPException(409, "Simulator not running")
-
-    _state["running"] = False
-    if _task is not None and not _task.done():
-        _task.cancel()
-        try:
-            await _task
-        except asyncio.CancelledError:
-            pass
     return {"status": "stopped", "tick": _state["tick"]}
 
 

@@ -115,6 +115,21 @@ async def lifespan(app: FastAPI):
     from scheduler import start as start_scheduler
     start_scheduler()
 
+    # 8. Auto-start the demo simulator so read-only users still see live
+    # machine data during soutenance mode without needing simulator controls.
+    if settings.DEMO_SIMULATOR_AUTO_START_ENABLED:
+        try:
+            from routers.simulator import ensure_demo_simulator_running
+            await ensure_demo_simulator_running(
+                speed=60,
+                reset=True,
+                email_notifications=False,
+                wait_for_seed=True,
+                timeout_s=8.0,
+            )
+        except Exception as e:
+            logger.warning("Could not auto-start demo simulator: %s", e)
+
     logger.info("PrediTeq API ready")
     yield
 
@@ -122,6 +137,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down PrediTeq API ...")
     from scheduler import stop as stop_scheduler
     stop_scheduler()
+    try:
+        from routers.simulator import shutdown_simulator_runtime
+        await shutdown_simulator_runtime()
+    except Exception:
+        pass
     try:
         await mqtt.disconnect()
     except Exception:

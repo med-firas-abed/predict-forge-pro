@@ -1,7 +1,7 @@
 import asyncio
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -13,6 +13,7 @@ os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-role-key")
 from core.auth import require_admin_or_local_demo
 from core.config import settings
 from core.labview_demo import _resolve_scenario_config, build_labview_demo_samples
+from routers import simulator
 from routers.live_ingest import _apply_bootstrap_metric_overrides
 from routers.simulator import (
     REAL_MACHINE_SIM_STAGE_CONFIG,
@@ -148,6 +149,54 @@ class LocalDemoSimulatorAuthTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 401)
 
+
+class DemoSimulatorAutoStartTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self._state_snapshot = dict(simulator._state)
+
+    async def asyncTearDown(self):
+        simulator._state = dict(self._state_snapshot)
+
+    async def test_demo_mode_autostart_starts_background_replay(self):
+        simulator._state = {
+            "running": False,
+            "speed": 60,
+            "tick": 0,
+            "demo_mode": True,
+            "machines": {},
+        }
+
+        with patch.object(settings, "APP_MODE", "demo"):
+            with patch.object(settings, "AUTO_START_DEMO_SIMULATOR", None, create=True):
+                with patch("routers.simulator._start_simulator_session", new=AsyncMock(return_value=SIMULATOR_DEMO_MODE_CODES)) as start_mock:
+                    with patch("routers.simulator._wait_for_runtime_seed", new=AsyncMock(return_value=True)) as wait_mock:
+                        started = await simulator.ensure_demo_simulator_running()
+
+        self.assertTrue(started)
+        start_mock.assert_awaited_once_with(
+            speed=60,
+            reset=True,
+            demo_mode=True,
+            email_notifications=False,
+        )
+        wait_mock.assert_awaited_once()
+
+    async def test_prod_mode_keeps_autostart_disabled_by_default(self):
+        simulator._state = {
+            "running": False,
+            "speed": 60,
+            "tick": 0,
+            "demo_mode": True,
+            "machines": {},
+        }
+
+        with patch.object(settings, "APP_MODE", "prod"):
+            with patch.object(settings, "AUTO_START_DEMO_SIMULATOR", None, create=True):
+                with patch("routers.simulator._start_simulator_session", new=AsyncMock()) as start_mock:
+                    started = await simulator.ensure_demo_simulator_running()
+
+        self.assertFalse(started)
+        start_mock.assert_not_awaited()
 
 if __name__ == "__main__":
     unittest.main()

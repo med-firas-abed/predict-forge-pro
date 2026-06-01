@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str
 
     APP_MODE: str = "demo"
+    AUTO_START_DEMO_SIMULATOR: bool | None = None
 
     MQTT_BROKER: str = "broker.emqx.io"
     MQTT_PORT: int = 8883
@@ -76,6 +77,12 @@ class Settings(BaseSettings):
             return self.BREVO_SENDER_NAME
         name, _email = parseaddr(self.SMTP_FROM)
         return name or "PrediTeq Alerts"
+
+    @property
+    def DEMO_SIMULATOR_AUTO_START_ENABLED(self) -> bool:
+        if self.AUTO_START_DEMO_SIMULATOR is not None:
+            return bool(self.AUTO_START_DEMO_SIMULATOR)
+        return str(self.APP_MODE).strip().lower() == "demo"
 
 
 settings = Settings()
