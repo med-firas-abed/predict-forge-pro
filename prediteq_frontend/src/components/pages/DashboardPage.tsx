@@ -4,6 +4,7 @@ import {
   Clock,
   Activity,
   Play,
+  RefreshCw,
   Thermometer,
   Zap,
   Gauge,
@@ -289,7 +290,7 @@ export function DashboardPage() {
           `#${selectedRank}/${Math.max(totalRankedMachines, 1)} fleet`,
         )
       : null;
-  const { data: diagnostics, isLoading: isLoadingDiagnostics } = useDiagnostics(
+  const { data: diagnostics, isLoading: isLoadingDiagnostics, refetch: refetchDiagnostics } = useDiagnostics(
     selected?.id,
     DASHBOARD_DIAGNOSTICS_OPTIONS,
   );
@@ -299,7 +300,21 @@ export function DashboardPage() {
     latest: latestSensorPoint,
     spanMinutes: sensorSpanMinutes,
     isLoading: isLoadingSensors,
+    refetch: refetchSensors,
   } = useMachineSensors(selected?.id);
+  const [isRefreshingUserView, setIsRefreshingUserView] = useState(false);
+
+  const refreshUserMachineView = useCallback(async () => {
+    if (isAdmin) return;
+
+    setIsRefreshingUserView(true);
+    try {
+      await refetchMachines();
+      await Promise.all([refetchDiagnostics(), refetchSensors()]);
+    } finally {
+      setIsRefreshingUserView(false);
+    }
+  }, [isAdmin, refetchDiagnostics, refetchMachines, refetchSensors]);
 
   const selectedDecision = selected?.decision ?? null;
   const calibratedRul = getCalibratedRul(diagnostics);
@@ -1181,17 +1196,32 @@ export function DashboardPage() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-5 flex items-center gap-4">
           <div className="section-title flex-1">{t("dash.selectMachine")}</div>
-          <select
-            value={selectedId}
-            onChange={(event) => updateSelectedMachine(event.target.value)}
-            className="rounded-xl border border-border bg-surface-3 px-4 py-2.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            {machines.map((machine) => (
-              <option key={machine.id} value={machine.id}>
-                {getMachinePublicLabel(machine)}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {!isAdmin ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => void refreshUserMachineView()}
+                disabled={isRefreshingUserView}
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshingUserView ? "animate-spin" : ""}`} />
+                {l("Actualiser les données", "Refresh data", "Refresh data")}
+              </Button>
+            ) : null}
+            <select
+              value={selectedId}
+              onChange={(event) => updateSelectedMachine(event.target.value)}
+              className="rounded-xl border border-border bg-surface-3 px-4 py-2.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {machines.map((machine) => (
+                <option key={machine.id} value={machine.id}>
+                  {getMachinePublicLabel(machine)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -7,6 +7,7 @@ import {
   Clock3,
   Gauge,
   Info,
+  RefreshCw,
   ShieldAlert,
   Sparkles,
   Thermometer,
@@ -247,7 +248,7 @@ export function DiagnosticsPage() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { machines, isLoading: isLoadingMachines } = useMachines(currentUser?.machineId);
+  const { machines, isLoading: isLoadingMachines, refetch: refetchMachines } = useMachines(currentUser?.machineId);
   const { byMachineId } = useFleetPredictiveInsights(machines);
   const requestedMachineId = searchParams.get("machine");
   const selected =
@@ -278,14 +279,31 @@ export function DiagnosticsPage() {
     navigate("/dashboard");
   };
 
-  const { data: diagnostics, isLoading: isLoadingDiagnostics } = useDiagnostics(selected?.id);
-  const { latest: latestSensorPoint } = useMachineSensors(selected?.id ?? undefined);
+  const {
+    data: diagnostics,
+    isLoading: isLoadingDiagnostics,
+    refetch: refetchDiagnostics,
+  } = useDiagnostics(selected?.id);
+  const { latest: latestSensorPoint, refetch: refetchSensors } = useMachineSensors(selected?.id ?? undefined);
+  const [isRefreshingUserView, setIsRefreshingUserView] = useState(false);
 
   const l = useCallback(
     (fr: string, en: string, ar: string) =>
       repairText(lang === "fr" ? fr : lang === "en" ? en : ar),
     [lang],
   );
+  const isAdmin = currentUser?.role === "admin";
+  const refreshUserMachineView = useCallback(async () => {
+    if (isAdmin) return;
+
+    setIsRefreshingUserView(true);
+    try {
+      await refetchMachines();
+      await Promise.all([refetchDiagnostics(), refetchSensors()]);
+    } finally {
+      setIsRefreshingUserView(false);
+    }
+  }, [isAdmin, refetchDiagnostics, refetchMachines, refetchSensors]);
   const numberLocale = lang === "fr" ? "fr-FR" : lang === "en" ? "en-GB" : "ar-TN";
 
   const selectedInsight = selected ? byMachineId[selected.id] : null;
@@ -605,6 +623,19 @@ export function DiagnosticsPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {!isAdmin ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => void refreshUserMachineView()}
+                disabled={isRefreshingUserView}
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshingUserView ? "animate-spin" : ""}`} />
+                {l("Actualiser les données", "Refresh data", "Refresh data")}
+              </Button>
+            ) : null}
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
               {l("Machine", "Machine", "Machine")}
             </div>

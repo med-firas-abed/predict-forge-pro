@@ -116,7 +116,7 @@ const TR: Record<string, TranslationEntry> = {
   "dash.sensorCharts": { fr: "Capteurs â€” 6 derniÃ¨res heures", en: "Sensors â€” Last 6 Hours", ar: "Ø§Ù„Ù…Ø³ØªØ´Ø¹Ø±Ø§Øª â€” Ø¢Ø®Ø± 6 Ø³Ø§Ø¹Ø§Øª" },
   "dash.hiTrend7d": { fr: "Tendance HI â€” 7 derniers jours", en: "HI Trend â€” Last 7 Days", ar: "Ø§ØªØ¬Ø§Ù‡ HI â€” Ø¢Ø®Ø± 7 Ø£ÙŠØ§Ù…" },
   "dash.loadingSensors": { fr: "Chargement des capteursâ€¦", en: "Loading sensorsâ€¦", ar: "Ø¬Ø§Ø±ÙŠ ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø³ØªØ´Ø¹Ø±Ø§Øªâ€¦" },
-  "dash.awaitingSensors": { fr: "En attente de donnÃ©es capteurs â€” dÃ©marrez le simulateur", en: "Awaiting sensor data â€” start the simulator", ar: "ÙÙŠ Ø§Ù†ØªØ¸Ø§Ø± Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø³ØªØ´Ø¹Ø±Ø§Øª â€” Ø§Ø¨Ø¯Ø£ Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
+  "dash.awaitingSensors": { fr: "En attente de donnÃ©es capteurs â€” actualisez ou patientez quelques secondes", en: "Awaiting sensor data â€” refresh or wait a few seconds", ar: "ÙÙŠ Ø§Ù†ØªØ¸Ø§Ø± Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø³ØªØ´Ø¹Ø±Ø§Øª â€” Ø­Ø¯Ù‘Ø« Ø£Ùˆ Ø§Ù†ØªØ¸Ø± Ø¨Ø¶Ø¹ Ø«ÙˆØ§Ù†Ù" },
   "dash.noData": { fr: "Aucune donnÃ©e disponible", en: "No data available", ar: "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª Ù…ØªØ§Ø­Ø©" },
 
   // Geo
@@ -302,7 +302,7 @@ const TR: Record<string, TranslationEntry> = {
   "planner.subtitle": { fr: "Classe la flotte, propose les prochaines actions et prepare les taches de maintenance", en: "Ranks the fleet, suggests next actions, and prepares maintenance tasks", ar: "ÙŠØ±ØªØ¨ Ø§Ù„Ø£Ø³Ø·ÙˆÙ„ ÙˆÙŠÙ‚ØªØ±Ø­ Ø§Ù„Ø®Ø·ÙˆØ§Øª Ø§Ù„ØªØ§Ù„ÙŠØ© ÙˆÙŠØ¬Ù‡Ø² Ù…Ù‡Ø§Ù… Ø§Ù„ØµÙŠØ§Ù†Ø©" },
   "planner.fleetRisk": { fr: "Classement des risques", en: "Risk Ranking", ar: "ØªØµÙ†ÙŠÙ Ø§Ù„Ù…Ø®Ø§Ø·Ø±" },
   "planner.loadingRisk": { fr: "Chargement...", en: "Loading...", ar: "Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­Ù…ÙŠÙ„..." },
-  "planner.noData": { fr: "Aucune donnÃ©e â€” dÃ©marrez le simulateur", en: "No data â€” start the simulator", ar: "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª â€” Ø§Ø¨Ø¯Ø£ Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
+  "planner.noData": { fr: "Aucune donnÃ©e â€” actualisez ou attendez la prochaine lecture", en: "No data â€” refresh or wait for the next reading", ar: "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª â€” Ø­Ø¯Ù‘Ø« Ø£Ùˆ Ø§Ù†ØªØ¸Ø± Ø§Ù„Ù‚Ø±Ø§Ø¡Ø© Ø§Ù„ØªØ§Ù„ÙŠØ©" },
   "planner.openTasks": { fr: "tÃ¢che(s) ouverte(s)", en: "open task(s)", ar: "Ù…Ù‡Ù…Ø© Ù…ÙØªÙˆØ­Ø©" },
   "planner.fullPlan": { fr: "Plan de maintenance complet", en: "Full maintenance plan", ar: "Ø®Ø·Ø© Ø§Ù„ØµÙŠØ§Ù†Ø© Ø§Ù„ÙƒØ§Ù…Ù„Ø©" },
   "planner.generate": { fr: "GÃ©nÃ©rer le plan", en: "Generate Plan", ar: "Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø®Ø·Ø©" },
@@ -346,7 +346,7 @@ const TR: Record<string, TranslationEntry> = {
   "modal.noAnomaly": { fr: "Aucune anomalie dÃ©tectÃ©e.", en: "No anomalies detected.", ar: "Ù„Ù… ÙŠØªÙ… Ø§ÙƒØªØ´Ø§Ù Ø£ÙŠ Ø´Ø°ÙˆØ°." },
   "modal.shapFeatures": { fr: "Features influentes (SHAP)", en: "Influential Features (SHAP)", ar: "Ø§Ù„Ù…ÙŠØ²Ø§Øª Ø§Ù„Ù…Ø¤Ø«Ø±Ø© (SHAP)" },
   "modal.shapLoading": { fr: "Chargement SHAP...", en: "Loading SHAP...", ar: "Ø¬Ø§Ø±ÙŠ ØªØ­Ù…ÙŠÙ„ SHAP..." },
-  "modal.shapEmpty": { fr: "DÃ©marrez le simulateur pour obtenir les contributions SHAP.", en: "Start the simulator to get SHAP contributions.", ar: "Ø§Ø¨Ø¯Ø£ Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ Ù„Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ù…Ø³Ø§Ù‡Ù…Ø§Øª SHAP." },
+  "modal.shapEmpty": { fr: "Actualisez les donnÃ©es pour obtenir les contributions SHAP.", en: "Refresh data to get SHAP contributions.", ar: "Ø­Ø¯Ù‘Ø« Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ù„Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ù…Ø³Ø§Ù‡Ù…Ø§Øª SHAP." },
   "modal.vibration": { fr: "Vibration moteur", en: "Motor Vibration", ar: "Ø§Ù‡ØªØ²Ø§Ø² Ø§Ù„Ù…Ø­Ø±Ùƒ" },
   "modal.current": { fr: "Courant moteur", en: "Motor Current", ar: "ØªÙŠØ§Ø± Ø§Ù„Ù…Ø­Ø±Ùƒ" },
   "modal.temperature": { fr: "TempÃ©rature moteur", en: "Motor Temperature", ar: "Ø­Ø±Ø§Ø±Ø© Ø§Ù„Ù…Ø­Ø±Ùƒ" },
