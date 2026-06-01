@@ -1388,7 +1388,7 @@ test.describe("Authenticated app flows", () => {
     await page.getByRole("button", { name: /Pause/i }).click();
     await expect(page.getByText(/Session arr.t.e au pas|Last session stopped at tick/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /Rafraîchir/i }).click();
+    await page.getByRole("main").getByRole("button", { name: /Rafraîchir/i }).click();
     await expect(page.getByRole("main").getByText(/^x500$/)).toBeVisible();
   });
 
