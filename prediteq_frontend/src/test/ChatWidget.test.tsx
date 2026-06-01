@@ -43,6 +43,7 @@ describe("ChatWidget", () => {
 
     useAuthMock.mockReturnValue({
       currentUser: {
+        role: "admin",
         machineId: null,
       },
     });
@@ -93,6 +94,48 @@ describe("ChatWidget", () => {
     expect(
       screen.queryByRole("button", { name: "Technicien" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps chat suggestions scoped to the assigned machine for a standard user", () => {
+    useAuthMock.mockReturnValue({
+      currentUser: {
+        role: "user",
+        machineId: "uuid-c3",
+        machineCode: "ASC-C3",
+        machineName: "Machine 3",
+      },
+    });
+
+    useMachinesMock.mockReturnValue({
+      machines: [
+        {
+          id: "ASC-C3",
+          name: "Machine 3",
+          status: "critical",
+          hi: 0.16,
+          rul: 22,
+          decision: { urgencyScore: 92 },
+        },
+      ],
+    });
+
+    render(<ChatWidget />);
+
+    fireEvent.click(screen.getByRole("button", { name: /lecture rapide/i }));
+
+    expect(screen.getAllByText(/Machine 3, alertes et lecture/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Questions sur Machine 3, ses alertes et sa lecture actuelle\./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Discussion centrée sur Machine 3/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/^État de Machine 3$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Alertes ouvertes sur Machine 3$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Cause principale sur Machine 3$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Point à vérifier sur Machine 3$/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText((content) => /^etat general de la flotte$/i.test(normalizeText(content))),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Question sur Machine 3..."),
+    ).toBeInTheDocument();
   });
 
   it("replaces the pending assistant placeholder when the streamed reply fails", async () => {

@@ -63,8 +63,40 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLInputElement>(null);
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
+  const isStandardUser = currentUser?.role === "user";
   const { primary: primaryMachineLabel, secondary: secondaryMachineLabel } =
     getSuggestionMachineLabels(machines);
+  const assignedMachineLabel =
+    currentUser?.machineCode || currentUser?.machineName || machines[0]
+      ? repairText(
+          getMachinePublicLabel({
+            id: currentUser?.machineCode ?? machines[0]?.id ?? undefined,
+            name: currentUser?.machineName ?? machines[0]?.name ?? undefined,
+          }),
+        )
+      : "";
+  const assignedMachineReference = assignedMachineLabel || l("votre machine", "your machine", "your machine");
+  const chatSubtitle = isStandardUser
+    ? l(
+        `${assignedMachineReference}, alertes et lecture`,
+        `${assignedMachineReference}, alerts and reading`,
+        `${assignedMachineReference}, alerts and reading`,
+      )
+    : t("chat.subtitle");
+  const welcomeText = isStandardUser
+    ? l(
+        `Questions sur ${assignedMachineReference}, ses alertes et sa lecture actuelle.`,
+        `Questions about ${assignedMachineReference}, its alerts, and its current reading.`,
+        `Questions about ${assignedMachineReference}, its alerts, and its current reading.`,
+      )
+    : t("chat.welcome");
+  const inputPlaceholder = isStandardUser
+    ? l(
+        `Question sur ${assignedMachineReference}...`,
+        `Question about ${assignedMachineReference}...`,
+        `Question about ${assignedMachineReference}...`,
+      )
+    : t("chat.placeholder");
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -164,61 +196,92 @@ export function ChatWidget() {
     }
   };
 
-  const helperText = l(
-    "Flotte, alertes, causes probables et actions recommandees.",
-    "Fleet status, alerts, likely causes, and recommended actions.",
-    "Fleet status, alerts, likely causes, and recommended actions.",
-  );
+  const helperText = isStandardUser
+    ? l(
+        `Discussion centrée sur ${assignedMachineReference}: état, alertes, cause dominante et point de contrôle.`,
+        `Discussion focused on ${assignedMachineReference}: status, alerts, main cause, and checkpoint.`,
+        `Discussion focused on ${assignedMachineReference}: status, alerts, main cause, and checkpoint.`,
+      )
+    : l(
+        "Flotte, alertes, causes probables et actions recommandées.",
+        "Fleet status, alerts, likely causes, and recommended actions.",
+        "Fleet status, alerts, likely causes, and recommended actions.",
+      );
 
-  const suggestions = [
-    l(
-      "Machine prioritaire aujourd'hui",
-      "Priority machine today",
-      "Priority machine today",
-    ),
-    primaryMachineLabel
-      ? l(
-          `Etat de ${primaryMachineLabel}`,
-          `Status of ${primaryMachineLabel}`,
-          `Status of ${primaryMachineLabel}`,
-        )
-      : l(
-          "Etat de la machine la plus sensible",
-          "Status of the most sensitive machine",
-          "Status of the most sensitive machine",
+  const suggestions = isStandardUser
+    ? [
+        l(
+          `État de ${assignedMachineReference}`,
+          `Status of ${assignedMachineReference}`,
+          `Status of ${assignedMachineReference}`,
         ),
-    l(
-      "Etat general de la flotte",
-      "Overall fleet status",
-      "Overall fleet status",
-    ),
-    primaryMachineLabel
-      ? l(
-          `Cause principale pour ${primaryMachineLabel}`,
-          `Main cause for ${primaryMachineLabel}`,
-          `Main cause for ${primaryMachineLabel}`,
-        )
-      : l(
-          "Cause principale de la priorite",
-          "Main cause of the priority",
-          "Main cause of the priority",
+        l(
+          `Alertes ouvertes sur ${assignedMachineReference}`,
+          `Open alerts on ${assignedMachineReference}`,
+          `Open alerts on ${assignedMachineReference}`,
         ),
-  ];
+        l(
+          `Cause principale sur ${assignedMachineReference}`,
+          `Main cause on ${assignedMachineReference}`,
+          `Main cause on ${assignedMachineReference}`,
+        ),
+        l(
+          `Point à vérifier sur ${assignedMachineReference}`,
+          `Checkpoint on ${assignedMachineReference}`,
+          `Checkpoint on ${assignedMachineReference}`,
+        ),
+      ]
+    : [
+        l(
+          "Machine prioritaire aujourd'hui",
+          "Priority machine today",
+          "Priority machine today",
+        ),
+        primaryMachineLabel
+          ? l(
+              `Etat de ${primaryMachineLabel}`,
+              `Status of ${primaryMachineLabel}`,
+              `Status of ${primaryMachineLabel}`,
+            )
+          : l(
+              "Etat de la machine la plus sensible",
+              "Status of the most sensitive machine",
+              "Status of the most sensitive machine",
+            ),
+        l(
+          "Etat general de la flotte",
+          "Overall fleet status",
+          "Overall fleet status",
+        ),
+        primaryMachineLabel
+          ? l(
+              `Cause principale pour ${primaryMachineLabel}`,
+              `Main cause for ${primaryMachineLabel}`,
+              `Main cause for ${primaryMachineLabel}`,
+            )
+          : l(
+              "Cause principale de la priorite",
+              "Main cause of the priority",
+              "Main cause of the priority",
+            ),
+      ];
   const fallbackPriorityLabel = l(
     "la machine prioritaire",
     "the priority machine",
     "the priority machine",
   );
-  const visibleSuggestions = suggestions.map((suggestion) =>
-    repairText(
-      suggestion
-        .replace(/\bMachine 2\b/g, primaryMachineLabel ?? fallbackPriorityLabel)
-        .replace(
-          /\bMachine 3\b/g,
-          secondaryMachineLabel ?? primaryMachineLabel ?? fallbackPriorityLabel,
+  const visibleSuggestions = isStandardUser
+    ? suggestions.map((suggestion) => repairText(suggestion))
+    : suggestions.map((suggestion) =>
+        repairText(
+          suggestion
+            .replace(/\bMachine 2\b/g, primaryMachineLabel ?? fallbackPriorityLabel)
+            .replace(
+              /\bMachine 3\b/g,
+              secondaryMachineLabel ?? primaryMachineLabel ?? fallbackPriorityLabel,
+            ),
         ),
-    ),
-  );
+      );
 
   return (
     <>
@@ -245,7 +308,7 @@ export function ChatWidget() {
                 {t("chat.title")}
               </div>
               <div className="mt-0.5 hidden text-[0.72rem] leading-tight text-muted-foreground sm:block">
-                {t("chat.subtitle")}
+                {chatSubtitle}
               </div>
             </div>
             <div className="relative hidden h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-background/70 text-muted-foreground transition-all group-hover:border-primary/20 group-hover:text-primary sm:flex">
@@ -269,7 +332,7 @@ export function ChatWidget() {
                   PrediTeq
                 </span>
               </div>
-              <div className="mt-0.5 text-[0.76rem] leading-5 text-muted-foreground">{t("chat.subtitle")}</div>
+              <div className="mt-0.5 text-[0.76rem] leading-5 text-muted-foreground">{chatSubtitle}</div>
               <div className="mt-1 text-[0.74rem] leading-5 text-muted-foreground">{helperText}</div>
             </div>
             <button
@@ -288,7 +351,7 @@ export function ChatWidget() {
                   <div className="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-primary/80">
                     PrediTeq
                   </div>
-                  <p className="text-[0.95rem] leading-7 text-foreground/88">{t("chat.welcome")}</p>
+                  <p className="text-[0.95rem] leading-7 text-foreground/88">{welcomeText}</p>
                   <p className="mt-3 text-[0.82rem] leading-6 text-muted-foreground">{helperText}</p>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -376,7 +439,7 @@ export function ChatWidget() {
                     void sendMessage();
                   }
                 }}
-                placeholder={t("chat.placeholder")}
+                placeholder={inputPlaceholder}
                 maxLength={2000}
                 className="flex-1 rounded-xl bg-transparent px-3 py-2.5 text-[0.95rem] text-foreground outline-none placeholder:text-[0.92rem] placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20"
                 disabled={loading}

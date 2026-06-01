@@ -271,6 +271,23 @@ def _known_machine_labels(user: CurrentUser) -> list[str]:
     ]
 
 
+def _is_admin_user(user: object) -> bool:
+    return bool(getattr(user, "is_admin", False) or getattr(user, "role", None) == "admin")
+
+
+def _machine_scope_error(user: CurrentUser) -> dict[str, object]:
+    if _is_admin_user(user):
+        return {
+            "error": "Machine introuvable dans la flotte actuelle",
+            "available_machines": _known_machine_labels(user),
+        }
+
+    return {
+        "error": "Machine non disponible pour ce compte",
+        "available_machines": _known_machine_labels(user),
+    }
+
+
 def _resolve_machine_code_reference(machine_reference: str | None, user: CurrentUser) -> str | None:
     raw_reference = (machine_reference or "").strip()
     if not raw_reference:
@@ -310,9 +327,28 @@ def _resolve_machine_code_reference(machine_reference: str | None, user: Current
 def _build_live_fleet_context(user: CurrentUser) -> str:
     catalog = _list_accessible_machines(user)
     if not catalog:
+        if _is_admin_user(user):
+            return (
+                "Flotte accessible actuelle: aucune machine chargee.\n"
+                "Si une question vise une machine precise, commence par demander une vue de flotte."
+            )
         return (
-            "Flotte accessible actuelle: aucune machine chargee.\n"
-            "Si une question vise une machine precise, commence par demander une vue de flotte."
+            "Machine accessible actuelle: aucune machine chargee.\n"
+            "Si l'utilisateur pose une question generale, rappelle que seule sa machine assignee peut etre consultee."
+        )
+
+    if not _is_admin_user(user) and len(catalog) == 1:
+        entry = catalog[0]
+        location = f", site {entry['region']}" if entry["region"] else ""
+        return "\n".join(
+            [
+                "Machine accessible actuelle:",
+                f"- {entry['public_label']} => code {entry['code']}{location}",
+                "N'utilise que cette machine pour tes reponses.",
+                "Ramene les questions generales a cette machine.",
+                "Si l'utilisateur demande une autre machine ou une vue de flotte, explique que son acces est limite a cette machine.",
+                "Si l'utilisateur cite le libelle public, convertis-le vers le code interne avant d'appeler un outil.",
+            ]
         )
 
     lines = ["Flotte accessible actuelle:"]
@@ -328,6 +364,19 @@ def _build_live_fleet_context(user: CurrentUser) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _chat_tools_for_user(user: CurrentUser) -> list[dict]:
+    if _is_admin_user(user):
+        return TOOLS
+
+    allowed = {
+        "get_machine_status",
+        "get_alerts",
+        "get_shap_explanation",
+        "get_maintenance_tasks",
+    }
+    return [tool for tool in TOOLS if tool["function"]["name"] in allowed]
 
 
 def _public_rul_snapshot(manager, machine_code: str) -> dict | None:
@@ -357,10 +406,7 @@ def _public_rul_snapshot(manager, machine_code: str) -> dict | None:
 def _exec_get_machine_status(machine_code: str, user: CurrentUser) -> dict:
     resolved_code = _resolve_machine_code_reference(machine_code, user)
     if not resolved_code:
-        return {
-            "error": "Machine introuvable dans la flotte actuelle",
-            "available_machines": _known_machine_labels(user),
-        }
+        return _machine_scope_error(user)
 
     machine_code = resolved_code
     manager = get_manager()
@@ -412,10 +458,7 @@ def _exec_get_alerts(user: CurrentUser, machine_code: str | None = None,
     manager = get_manager()
     resolved_code = _resolve_machine_code_reference(machine_code, user) if machine_code else None
     if machine_code and not resolved_code:
-        return {
-            "error": "Machine introuvable dans la flotte actuelle",
-            "available_machines": _known_machine_labels(user),
-        }
+        return _machine_scope_error(user)
 
     query = sb.table('alertes').select('*, machines!inner(code, nom)') \
         .order('created_at', desc=True).limit(limit)
@@ -450,10 +493,7 @@ def _exec_get_shap(machine_code: str, user: CurrentUser) -> dict:
     manager = get_manager()
     resolved_code = _resolve_machine_code_reference(machine_code, user)
     if not resolved_code:
-        return {
-            "error": "Machine introuvable dans la flotte actuelle",
-            "available_machines": _known_machine_labels(user),
-        }
+        return _machine_scope_error(user)
 
     machine_code = resolved_code
 
@@ -585,7 +625,7 @@ def _exec_get_tasks(user: CurrentUser, machine_code: str | None = None) -> list:
     manager = get_manager()
     resolved_code = _resolve_machine_code_reference(machine_code, user) if machine_code else None
     if machine_code and not resolved_code:
-        return [{"error": "Machine introuvable dans la flotte actuelle"}]
+        return [dict(_machine_scope_error(user))]
 
     query = sb.table('gmao_taches').select('*, machines!inner(code, nom)') \
         .order('created_at', desc=True).limit(10)
@@ -618,7 +658,7 @@ def _exec_get_costs(user: CurrentUser, machine_code: str | None = None) -> list:
     manager = get_manager()
     resolved_code = _resolve_machine_code_reference(machine_code, user) if machine_code else None
     if machine_code and not resolved_code:
-        return [{"error": "Machine introuvable dans la flotte actuelle"}]
+        return [dict(_machine_scope_error(user))]
 
     query = sb.table('couts').select('*, machines!inner(code)') \
         .order('annee', desc=True).order('mois', desc=True).limit(12)
@@ -720,7 +760,7 @@ async def chat(body: ChatRequest, user: CurrentUser = Depends(require_auth)):
                 model="llama-3.3-70b-versatile",
                 max_tokens=1024,
                 messages=messages,
-                tools=TOOLS,
+                tools=_chat_tools_for_user(user),
                 tool_choice="auto",
             )
         except Exception as e:
