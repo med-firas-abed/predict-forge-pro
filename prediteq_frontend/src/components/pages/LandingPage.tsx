@@ -101,16 +101,15 @@ const T = {
   cases: {
     title: { fr: "Nos etudes de cas", en: "Our case studies" },
     featured: {
-      tag: { fr: "CAS AROTEQ", en: "AROTEQ CASE" },
-      title: { fr: "Machine AroTeq - photo avant du stockeur pilote", en: "AroTeq machine - front view of the pilot carousel" },
+      tag: { fr: "MACHINE PILOTE", en: "PILOT MACHINE" },
+      title: { fr: "Machine AroTeq", en: "AroTeq machine" },
       desc: {
-        fr: "Cette machine pilote AroTeq sert de point de depart a notre cas PrediTeq. A partir de cette base physique, la plateforme relie signaux, diagnostic, rapport et future integration CSV / PLC / LabVIEW.",
-        en: "This AroTeq pilot machine is the starting point of our PrediTeq case study. From this physical base, the platform connects signals, diagnosis, reporting, and future CSV / PLC / LabVIEW integration.",
+        fr: "Le projet PrediTeq prend appui sur cette machine pilote AroTeq pour relier lecture des signaux, diagnostic, rapport machine et future continuite CSV / PLC / LabVIEW.",
+        en: "The PrediTeq project is built around this AroTeq pilot machine to connect signal reading, diagnosis, machine reporting, and future CSV / PLC / LabVIEW continuity.",
       },
-      caption: { fr: "Photo avant de la machine pilote reelle", en: "Front photo of the real pilot machine" },
       points: {
-        fr: ["Machine pilote reelle chez AroTeq", "Base de la future chaine CSV / PLC / LabVIEW", "Lecture HI, RUL, alertes et rapports dans la meme application"],
-        en: ["Real pilot machine at AroTeq", "Foundation of the future CSV / PLC / LabVIEW chain", "HI, RUL, alerts, and reports in the same application"],
+        fr: ["Point de depart du cas industriel AroTeq", "Base de la future chaine CSV / PLC / LabVIEW", "Lecture machine, alertes et rapports dans la meme application"],
+        en: ["Starting point of the AroTeq industrial case", "Foundation of the future CSV / PLC / LabVIEW chain", "Machine reading, alerts, and reports in the same application"],
       },
     },
     items: [
@@ -751,18 +750,12 @@ function CaseStudiesSection() {
             className={`overflow-hidden rounded-[28px] border ${dark ? 'border-white/5 bg-white/[0.03]' : 'border-gray-200 bg-white shadow-[0_24px_48px_-32px_rgba(15,23,42,0.22)]'}`}
           >
             <div className="grid lg:grid-cols-[1.05fr_0.95fr] h-full">
-              <div className="relative min-h-[320px] overflow-hidden">
+              <div className={`flex min-h-[360px] items-center justify-center overflow-hidden p-4 ${dark ? 'bg-[#07111f]' : 'bg-slate-100'}`}>
                 <img
-                  src="/landing-aroteq-photo-avant.jpg?v=20260601a"
-                  alt={lang === "fr" ? "Photo avant de la machine AroTeq" : "Front photo of the AroTeq machine"}
-                  className="absolute inset-0 h-full w-full object-cover"
+                  src="/landing-aroteq-photo-avant.jpg?v=20260601b"
+                  alt={lang === "fr" ? "Machine AroTeq" : "AroTeq machine"}
+                  className="h-full max-h-[560px] w-full object-contain object-center"
                 />
-                <div className={`absolute inset-0 ${dark ? 'bg-gradient-to-t from-[#0a1628]/80 via-[#0a1628]/15 to-transparent' : 'bg-gradient-to-t from-slate-900/65 via-slate-900/10 to-transparent'}`} />
-                <div className="absolute bottom-0 left-0 right-0 p-6">
-                  <span className="inline-flex rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-900">
-                    {featured.caption[lang]}
-                  </span>
-                </div>
               </div>
 
               <div className="p-8 sm:p-10">
