@@ -1,7 +1,8 @@
 import { Brain, FileText } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { PlannerPage } from "@/components/pages/PlannerPage";
 import { RapportIAPage } from "@/components/pages/RapportIAPage";
 import { repairText } from "@/lib/repairText";
@@ -23,17 +24,43 @@ function getRequestedTab(pathname: string, search: string): IATab {
 
 export function IAPage() {
   const { lang } = useApp();
+  const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const isAdmin = currentUser?.role === "admin";
   const l = (fr: string, en: string, ar: string) =>
     repairText(lang === "fr" ? fr : lang === "en" ? en : ar);
 
-  const activeTab = useMemo(
+  const requestedTab = useMemo(
     () => getRequestedTab(location.pathname, location.search),
     [location.pathname, location.search],
   );
+  const activeTab: IATab = isAdmin ? requestedTab : "report";
+
+  useEffect(() => {
+    if (isAdmin) return;
+    const params = new URLSearchParams(location.search);
+    const alreadyOnReport = location.pathname === "/ia" && params.get("tab") === "report";
+    if (!alreadyOnReport) {
+      navigate("/ia?tab=report", { replace: true });
+    }
+  }, [isAdmin, location.pathname, location.search, navigate]);
+
+  const pageTitle = isAdmin
+    ? l(
+        "Analyse, actions & rapports",
+        "Analysis, actions & reports",
+        "Analysis, actions & reports",
+      )
+    : l("Analyse & rapports", "Analysis & reports", "Analysis & reports");
   const pageLead =
-    activeTab === "planner"
+    !isAdmin
+      ? l(
+          "Consultez le rapport de votre machine, son historique et l'export PDF.",
+          "Review your machine report, its history, and the PDF export.",
+          "Review your machine report, its history, and the PDF export.",
+        )
+      : activeTab === "planner"
       ? l(
           "Partir de l'etat machine, choisir les priorites flotte, puis valider les actions utiles.",
           "Start from machine status, choose fleet priorities, then validate the useful actions.",
@@ -45,30 +72,44 @@ export function IAPage() {
           "Gather machine status, history, and actions into a clear report ready to export.",
         );
 
-  const tabs = [
-    {
-      id: "planner" as const,
-      label: l("Plan d'action", "Action plan", "Plan d'action"),
-      icon: Brain,
-      description: l(
-        "Priorites machine, actions utiles et preparation du calendrier.",
-        "Machine priorities, useful actions, and calendar preparation.",
-        "Machine priorities, useful actions, and calendar preparation.",
-      ),
-    },
-    {
-      id: "report" as const,
-      label: l("Rapports", "Reports", "Reports"),
-      icon: FileText,
-      description: l(
-        "Synthese, historique et export PDF.",
-        "Summary, history, and PDF export.",
-        "Summary, history, and PDF export.",
-      ),
-    },
-  ];
+  const tabs = isAdmin
+    ? [
+        {
+          id: "planner" as const,
+          label: l("Plan d'action", "Action plan", "Plan d'action"),
+          icon: Brain,
+          description: l(
+            "Priorites machine, actions utiles et preparation du calendrier.",
+            "Machine priorities, useful actions, and calendar preparation.",
+            "Machine priorities, useful actions, and calendar preparation.",
+          ),
+        },
+        {
+          id: "report" as const,
+          label: l("Rapports", "Reports", "Reports"),
+          icon: FileText,
+          description: l(
+            "Synthese, historique et export PDF.",
+            "Summary, history, and PDF export.",
+            "Summary, history, and PDF export.",
+          ),
+        },
+      ]
+    : [
+        {
+          id: "report" as const,
+          label: l("Rapport machine", "Machine report", "Machine report"),
+          icon: FileText,
+          description: l(
+            "Synthese de votre machine, historique et export PDF.",
+            "Your machine summary, history, and PDF export.",
+            "Your machine summary, history, and PDF export.",
+          ),
+        },
+      ];
 
   const switchTab = (tab: IATab) => {
+    if (!isAdmin && tab !== "report") return;
     navigate(tab === "report" ? "/ia?tab=report" : "/ia?tab=planner");
   };
 
@@ -77,19 +118,23 @@ export function IAPage() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="section-title">
-              {l("Analyse, actions & rapports", "Analysis, actions & reports", "Analysis, actions & reports")}
-            </div>
+            <div className="section-title">{pageTitle}</div>
             <p className="mt-1 text-sm text-muted-foreground">
               {pageLead}
             </p>
           </div>
           <div className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
-            {l("Lire -> prioriser -> valider -> suivre", "Review -> prioritize -> validate -> track", "Review -> prioritize -> validate -> track")}
+            {isAdmin
+              ? l(
+                  "Lire -> prioriser -> valider -> suivre",
+                  "Review -> prioritize -> validate -> track",
+                  "Review -> prioritize -> validate -> track",
+                )
+              : l("Lire -> generer -> exporter", "Review -> generate -> export", "Review -> generate -> export")}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-3 ${isAdmin ? "md:grid-cols-2" : ""}`}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -104,6 +149,7 @@ export function IAPage() {
                     ? "border-primary/40 bg-primary/8 shadow-premium"
                     : "border-border bg-surface-3 hover:border-primary/20"
                 }`}
+                aria-pressed={active}
               >
                 <div className="flex items-center gap-3">
                   <div

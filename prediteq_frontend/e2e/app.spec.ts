@@ -1171,6 +1171,35 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByRole("button", { name: /Retour au tableau de bord/i })).toBeVisible();
   });
 
+  test("keeps standard users on the machine report when they try to open planner", async ({ page }) => {
+    await seedAuth(page, OPERATOR_USER, [OPERATOR_USER]);
+    await mockMachines(page);
+    await page.route(/\/report\/history$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "report-a1",
+            machine_code: "ASC-A1",
+            period: "7d",
+            lang: "fr",
+            titre: "Rapport ASC-A1 - Suivi hebdomadaire",
+            created_at: "2026-05-14T09:30:00.000Z",
+          },
+        ]),
+      });
+    });
+
+    await page.goto("/planner");
+    await expect(page).toHaveURL(/\/ia\?tab=report/);
+    await expect(page.getByRole("heading", { name: /Analyse & rapports/i })).toBeVisible();
+    await expect(page.getByText(/Rapport machine/i)).toBeVisible();
+    await expect(page.getByText(/G[ée]n[ée]rer un rapport clair/i)).toBeVisible();
+    await expect(page.getByText(/Plan d'action/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Preparer les actions/i })).toHaveCount(0);
+  });
+
   test("lets admins open the simulator", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);

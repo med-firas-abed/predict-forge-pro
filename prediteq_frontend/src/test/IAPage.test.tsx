@@ -1,13 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IAPage } from "@/components/pages/IAPage";
 
 const mockUseApp = vi.hoisted(() => vi.fn());
+const mockUseAuth = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AppContext", () => ({
   useApp: () => mockUseApp(),
+}));
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => mockUseAuth(),
 }));
 
 vi.mock("@/components/pages/PlannerPage", () => ({
@@ -29,6 +34,11 @@ function renderPage(initialEntry: string) {
 describe("IAPage", () => {
   beforeEach(() => {
     mockUseApp.mockReturnValue({ lang: "fr" });
+    mockUseAuth.mockReturnValue({
+      currentUser: {
+        role: "admin",
+      },
+    });
   });
 
   it("shows the planner view when opening /planner", () => {
@@ -44,6 +54,25 @@ describe("IAPage", () => {
 
     expect(screen.getByText("Rapports")).toBeInTheDocument();
     expect(screen.getByText("Report page")).toBeInTheDocument();
+    expect(screen.queryByText("Planner page")).not.toBeInTheDocument();
+  });
+
+  it("forces standard users to the report view only", async () => {
+    mockUseAuth.mockReturnValue({
+      currentUser: {
+        role: "user",
+      },
+    });
+
+    renderPage("/planner");
+
+    await waitFor(() => {
+      expect(screen.getByText("Report page")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Analyse & rapports")).toBeInTheDocument();
+    expect(screen.getByText("Rapport machine")).toBeInTheDocument();
+    expect(screen.queryByText("Plan d'action")).not.toBeInTheDocument();
     expect(screen.queryByText("Planner page")).not.toBeInTheDocument();
   });
 });
