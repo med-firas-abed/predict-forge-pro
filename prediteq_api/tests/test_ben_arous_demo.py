@@ -198,5 +198,23 @@ class DemoSimulatorAutoStartTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(started)
         start_mock.assert_not_awaited()
 
+    async def test_render_runtime_keeps_demo_autostart_disabled_by_default(self):
+        simulator._state = {
+            "running": False,
+            "speed": 60,
+            "tick": 0,
+            "demo_mode": True,
+            "machines": {},
+        }
+
+        with patch.dict(os.environ, {"RENDER": "true"}, clear=False):
+            with patch.object(settings, "APP_MODE", "demo"):
+                with patch.object(settings, "AUTO_START_DEMO_SIMULATOR", None, create=True):
+                    with patch("routers.simulator._start_simulator_session", new=AsyncMock()) as start_mock:
+                        started = await simulator.ensure_demo_simulator_running()
+
+        self.assertFalse(started)
+        start_mock.assert_not_awaited()
+
 if __name__ == "__main__":
     unittest.main()

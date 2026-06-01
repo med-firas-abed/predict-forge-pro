@@ -117,6 +117,8 @@ async def lifespan(app: FastAPI):
 
     # 8. Auto-start the demo simulator so read-only users still see live
     # machine data during soutenance mode without needing simulator controls.
+    # Hosted runtimes such as Render keep this opt-in to avoid RAM spikes on
+    # smaller instances; local demo mode stays unchanged.
     if settings.DEMO_SIMULATOR_AUTO_START_ENABLED:
         try:
             from routers.simulator import ensure_demo_simulator_running

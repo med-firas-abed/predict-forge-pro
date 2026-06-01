@@ -79,10 +79,27 @@ class Settings(BaseSettings):
         return name or "PrediTeq Alerts"
 
     @property
+    def IS_RENDER_RUNTIME(self) -> bool:
+        """Detect Render-hosted runtime processes.
+
+        Render injects service-scoped environment variables at runtime. We use
+        this to keep memory-heavy demo helpers opt-in on the hosted backend,
+        while preserving the current local demo defaults.
+        """
+        return any(
+            str(os.getenv(key, "")).strip()
+            for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_INSTANCE_ID")
+        )
+
+    @property
     def DEMO_SIMULATOR_AUTO_START_ENABLED(self) -> bool:
         if self.AUTO_START_DEMO_SIMULATOR is not None:
             return bool(self.AUTO_START_DEMO_SIMULATOR)
-        return str(self.APP_MODE).strip().lower() == "demo"
+        if str(self.APP_MODE).strip().lower() != "demo":
+            return False
+        if self.IS_RENDER_RUNTIME:
+            return False
+        return True
 
 
 settings = Settings()
