@@ -100,10 +100,36 @@ const T = {
   },
   cases: {
     title: { fr: "Nos etudes de cas", en: "Our case studies" },
+    featured: {
+      tag: { fr: "CAS AROTEQ", en: "AROTEQ CASE" },
+      title: { fr: "Machine AroTeq - photo avant du stockeur pilote", en: "AroTeq machine - front view of the pilot carousel" },
+      desc: {
+        fr: "Cette machine pilote AroTeq sert de point de depart a notre cas PrediTeq. A partir de cette base physique, la plateforme relie signaux, diagnostic, rapport et future integration CSV / PLC / LabVIEW.",
+        en: "This AroTeq pilot machine is the starting point of our PrediTeq case study. From this physical base, the platform connects signals, diagnosis, reporting, and future CSV / PLC / LabVIEW integration.",
+      },
+      caption: { fr: "Photo avant de la machine pilote reelle", en: "Front photo of the real pilot machine" },
+      points: {
+        fr: ["Machine pilote reelle chez AroTeq", "Base de la future chaine CSV / PLC / LabVIEW", "Lecture HI, RUL, alertes et rapports dans la meme application"],
+        en: ["Real pilot machine at AroTeq", "Foundation of the future CSV / PLC / LabVIEW chain", "HI, RUL, alerts, and reports in the same application"],
+      },
+    },
     items: [
-      { tag: { fr: "FABRICATION", en: "MANUFACTURING" }, title: { fr: "Maintenance Prédictive de Stockeurs Verticaux — Usine Ben Arous", en: "Vertical Storage Carousel Predictive Maintenance — Ben Arous Factory" } },
-      { tag: { fr: "PLANIFICATION", en: "PLANNING" }, title: { fr: "Calendrier de Maintenance — Planification terrain", en: "Maintenance Calendar — Field scheduling" } },
-      { tag: { fr: "RAPPORTS", en: "REPORTS" }, title: { fr: "Rapports de Maintenance — Syntheses automatisees", en: "Maintenance reports — automated summaries" } },
+      {
+        tag: { fr: "PLANIFICATION", en: "PLANNING" },
+        title: { fr: "Calendrier de maintenance - suivi terrain", en: "Maintenance calendar - field follow-up" },
+        desc: {
+          fr: "Les actions deja validees sont visibles par machine pour garder une lecture simple du terrain.",
+          en: "Validated actions stay visible per machine to keep the field view simple and operational.",
+        },
+      },
+      {
+        tag: { fr: "RAPPORTS", en: "REPORTS" },
+        title: { fr: "Rapport machine - synthese claire et export PDF", en: "Machine report - clear summary and PDF export" },
+        desc: {
+          fr: "Chaque machine peut etre relue a travers un rapport cible, sans melanger les autres equipements.",
+          en: "Each machine can be reviewed through a focused report, without mixing in other equipment.",
+        },
+      },
     ],
   },
   pricing: {
@@ -713,17 +739,62 @@ function CaseStudiesSection() {
   const { lang } = useLang();
   const { theme } = useTheme();
   const dark = theme === "dark";
+  const featured = T.cases.featured;
   return (
     <section className={`py-24 ${dark ? 'bg-[#0a1628]' : 'bg-white'}`}>
       <div className="max-w-6xl mx-auto px-6">
         <h2 className={`text-4xl sm:text-5xl font-extrabold mb-16 text-center ${dark ? 'text-white' : 'text-gray-900'}`}>
           {T.cases.title[lang]}
         </h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-[1.5fr_0.9fr] gap-6">
+          <article
+            className={`overflow-hidden rounded-[28px] border ${dark ? 'border-white/5 bg-white/[0.03]' : 'border-gray-200 bg-white shadow-[0_24px_48px_-32px_rgba(15,23,42,0.22)]'}`}
+          >
+            <div className="grid lg:grid-cols-[1.05fr_0.95fr] h-full">
+              <div className="relative min-h-[320px] overflow-hidden">
+                <img
+                  src="/landing-aroteq-photo-avant.jpg?v=20260601a"
+                  alt={lang === "fr" ? "Photo avant de la machine AroTeq" : "Front photo of the AroTeq machine"}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className={`absolute inset-0 ${dark ? 'bg-gradient-to-t from-[#0a1628]/80 via-[#0a1628]/15 to-transparent' : 'bg-gradient-to-t from-slate-900/65 via-slate-900/10 to-transparent'}`} />
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <span className="inline-flex rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-900">
+                    {featured.caption[lang]}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-8 sm:p-10">
+                <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-semibold uppercase tracking-[0.22em] ${dark ? 'bg-teal-500/15 text-teal-300' : 'bg-teal-700/10 text-teal-700'}`}>
+                  {featured.tag[lang]}
+                </span>
+                <h3 className={`mt-4 text-2xl sm:text-3xl font-extrabold leading-tight ${dark ? 'text-white' : 'text-gray-900'}`}>
+                  {featured.title[lang]}
+                </h3>
+                <p className={`mt-4 leading-7 ${dark ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {featured.desc[lang]}
+                </p>
+
+                <div className="mt-6 space-y-3">
+                  {featured.points[lang].map((point) => (
+                    <div key={point} className="flex items-start gap-3">
+                      <span className={`mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${dark ? 'bg-teal-500/15 text-teal-300' : 'bg-teal-700/10 text-teal-700'}`}>
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                      <p className={`text-sm leading-6 ${dark ? 'text-gray-200' : 'text-gray-700'}`}>{point}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-6">
           {T.cases.items.map((c) => (
             <div
               key={c.title.en}
-              className={`group relative rounded-2xl border transition-all overflow-hidden h-64 flex flex-col justify-end p-6 ${dark ? 'border-white/5 bg-gradient-to-br from-teal-900/10 to-cyan-900/5 hover:border-teal-500/20' : 'border-gray-200 bg-gradient-to-br from-teal-50 to-teal-100/30 hover:border-teal-700/40 hover:shadow-lg'}`}
+              className={`group relative rounded-2xl border transition-all overflow-hidden min-h-[220px] flex flex-col justify-end p-6 ${dark ? 'border-white/5 bg-gradient-to-br from-teal-900/10 to-cyan-900/5 hover:border-teal-500/20' : 'border-gray-200 bg-gradient-to-br from-teal-50 to-teal-100/30 hover:border-teal-700/40 hover:shadow-lg'}`}
             >
               <div className={`absolute inset-0 ${dark ? 'bg-gradient-to-t from-[#0a1628]/90 via-transparent to-transparent' : 'bg-gradient-to-t from-white/80 via-transparent to-transparent'}`} />
               <div className="relative z-10">
@@ -731,9 +802,11 @@ function CaseStudiesSection() {
                   {c.tag[lang]}
                 </span>
                 <h3 className={`text-lg font-bold leading-snug ${dark ? 'text-white' : 'text-gray-900'}`}>{c.title[lang]}</h3>
+                <p className={`mt-3 text-sm leading-6 ${dark ? 'text-gray-300' : 'text-gray-600'}`}>{c.desc[lang]}</p>
               </div>
             </div>
           ))}
+          </div>
         </div>
       </div>
     </section>
