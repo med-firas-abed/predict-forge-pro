@@ -199,7 +199,7 @@ describe("Index routing", () => {
     expect(screen.queryByText("Machines page")).not.toBeInTheDocument();
   });
 
-  it("lets approved users open the costs page", async () => {
+  it("blocks approved users from opening the costs page", async () => {
     mockUseAuth.mockReturnValue({
       loading: false,
       isAuthenticated: true,
@@ -213,8 +213,8 @@ describe("Index routing", () => {
 
     renderIndex("/couts");
 
-    expect(await screen.findByText("Costs page")).toBeInTheDocument();
-    expect(screen.queryByText("Dashboard page")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Acces refuse/i })).toBeInTheDocument();
+    expect(screen.queryByText("Costs page")).not.toBeInTheDocument();
   });
 
   it("blocks approved users from opening geolocation", async () => {

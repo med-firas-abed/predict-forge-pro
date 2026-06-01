@@ -157,7 +157,6 @@ const NON_ADMIN_ALLOWED_PAGES: PageId[] = [
   "dashboard",
   "maintenance",
   "calendrier",
-  "couts",
   "alertes",
   "ia",
   "diagnostics",

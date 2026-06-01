@@ -97,7 +97,7 @@ describe("MaintenancePage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /ajouter une tache manuelle/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ajouter une tâche manuelle/i }));
     fireEvent.change(screen.getByPlaceholderText("Titre de la tâche"), {
       target: { value: "Inspection cabine" },
     });
@@ -256,16 +256,16 @@ describe("MaintenancePage", () => {
     renderPage();
 
     expect(
-      screen.getByText(/lecture seule: vous voyez uniquement les informations de votre machine/i),
+      screen.getByText(/lecture seule\s*: vous voyez uniquement les informations de votre machine/i),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ajouter une tache manuelle/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ajouter une tâche manuelle/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /ajouter sur ce jour/i })).not.toBeInTheDocument();
 
     const taskTitles = await screen.findAllByText(/controle cabine/i);
     fireEvent.click(taskTitles[0]);
 
     expect(
-      screen.getByText(/lecture seule: cette fiche reste informative pour votre machine/i),
+      screen.getByText(/lecture seule\s*: cette fiche reste informative pour votre machine/i),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Modifier la tâche")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Supprimer la tâche")).not.toBeInTheDocument();

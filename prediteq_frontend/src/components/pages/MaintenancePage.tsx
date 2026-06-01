@@ -247,23 +247,23 @@ export function MaintenancePage() {
   const statusCards = useMemo(
     () => [
       {
-        title: "A venir",
+        title: "À venir",
         count: statusCounts.planifiee,
-        helper: "Taches deja validees a venir",
+        helper: "Tâches déjà validées à venir",
         dot: "bg-primary",
         valueClassName: "text-primary",
       },
       {
         title: "En cours",
         count: statusCounts.en_cours,
-        helper: "Interventions en cours d'execution",
+        helper: "Interventions en cours d'exécution",
         dot: "bg-warning",
         valueClassName: "text-warning",
       },
       {
-        title: "Cloturees",
+        title: "Clôturées",
         count: statusCounts.terminee,
-        helper: "Interventions terminees",
+        helper: "Interventions terminées",
         dot: "bg-success",
         valueClassName: "text-success",
       },
@@ -493,10 +493,10 @@ export function MaintenancePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="section-title">Calendrier des actions confirmees</div>
+          <div className="section-title">Calendrier des actions confirmées</div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ici, on suit seulement les taches deja confirmees. La decision se fait avant, puis le
-            calendrier suit l'execution.
+            Ici, on suit seulement les tâches déjà confirmées. La décision se fait avant, puis le
+            calendrier suit l'exécution.
           </p>
         </div>
         <div className="flex gap-2">
@@ -513,7 +513,7 @@ export function MaintenancePage() {
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
-              Ajouter une tache manuelle
+              Ajouter une tâche manuelle
             </button>
           ) : null}
         </div>
@@ -521,8 +521,8 @@ export function MaintenancePage() {
 
       {!isAdmin ? (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
-          Lecture seule: vous voyez uniquement les informations de votre machine. Les ajouts, editions,
-          suppressions et reconfigurations restent reserves a l'administrateur.
+          Lecture seule : vous voyez uniquement les informations de votre machine. Les ajouts, éditions,
+          suppressions et reconfigurations restent réservés à l’administrateur.
         </div>
       ) : null}
 
@@ -545,10 +545,10 @@ export function MaintenancePage() {
             <div>
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-primary" />
-                <div className="section-title">Execution dans le calendrier</div>
+                <div className="section-title">Exécution dans le calendrier</div>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Cette vue montre uniquement les taches deja placees apres validation.
+                Cette vue montre uniquement les tâches déjà placées après validation.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -652,7 +652,7 @@ export function MaintenancePage() {
             <div>
               <div className="flex items-center gap-2">
                 <Wrench className="h-4 w-4 text-primary" />
-                <div className="section-title">Ce jour-la</div>
+                <div className="section-title">Ce jour-là</div>
               </div>
               <p className="mt-1 text-sm font-semibold text-foreground">
                 {formatDate(selectedDate)}
@@ -660,8 +660,8 @@ export function MaintenancePage() {
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {selectedDateEvents.length > 0
-                  ? `${selectedDateEvents.length} tache${selectedDateEvents.length > 1 ? "s" : ""} validee${selectedDateEvents.length > 1 ? "s" : ""} ou en cours pour cette date.`
-                  : "Aucune tache validee pour cette date."}
+                  ? `${selectedDateEvents.length} tâche${selectedDateEvents.length > 1 ? "s" : ""} validée${selectedDateEvents.length > 1 ? "s" : ""} ou en cours pour cette date.`
+                  : "Aucune tâche validée pour cette date."}
               </p>
             </div>
             {isAdmin ? (
@@ -752,16 +752,16 @@ export function MaintenancePage() {
             <div className="space-y-3">
               <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                 {isAdmin
-                  ? "Cette date est libre pour l'instant. Vous pouvez y ajouter une tache manuelle, ou ouvrir l'espace priorites pour confirmer une action avant de l'envoyer ici."
-                  : "Cette date est libre pour l'instant. Vous pouvez consulter les prochaines actions confirmees et ouvrir l'analyse machine pour suivre votre situation."}
+                  ? "Cette date est libre pour l'instant. Vous pouvez y ajouter une tâche manuelle, ou ouvrir l'espace priorités pour confirmer une action avant de l'envoyer ici."
+                  : "Cette date est libre pour l'instant. Vous pouvez consulter les prochaines actions confirmées et ouvrir l'analyse machine pour suivre votre situation."}
               </div>
 
               {fallbackEvents.length > 0 && (
                 <div className="rounded-xl border border-border bg-surface-3 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="industrial-label">Prochaines taches deja placees</div>
+                    <div className="industrial-label">Prochaines tâches déjà placées</div>
                     <span className="text-[0.7rem] text-muted-foreground">
-                      Apres le {formatDate(selectedDate)}
+                      Après le {formatDate(selectedDate)}
                     </span>
                   </div>
 
@@ -818,8 +818,8 @@ export function MaintenancePage() {
 
             <p className="mb-3 text-xs text-muted-foreground">
               {isAdmin
-                ? "L'espace priorites reste le lieu de decision. Une fois confirmees, les taches arrivent ici automatiquement ; l'ajout manuel reste aussi possible."
-                : "L'analyse machine reste le lieu de lecture. Une fois confirmees, les taches de votre machine apparaissent ici automatiquement."}
+                ? "L'espace priorités reste le lieu de décision. Une fois confirmées, les tâches arrivent ici automatiquement ; l'ajout manuel reste aussi possible."
+                : "L'analyse machine reste le lieu de lecture. Une fois confirmées, les tâches de votre machine apparaissent ici automatiquement."}
             </p>
 
             <div className="rounded-xl border border-border bg-card p-3">
@@ -847,7 +847,7 @@ export function MaintenancePage() {
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90"
             >
               <Brain className="h-3.5 w-3.5" />
-              {isAdmin ? "Ouvrir l'espace priorites" : "Ouvrir l'analyse machine"}
+              {isAdmin ? "Ouvrir l'espace priorités" : "Ouvrir l'analyse machine"}
             </button>
           </div>
         </div>
@@ -1000,8 +1000,8 @@ export function MaintenancePage() {
 
                 {!isAdmin ? (
                   <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
-                    Lecture seule: cette fiche reste informative pour votre machine. Les modifications et
-                    validations de maintenance sont reservees a l'administrateur.
+                    Lecture seule : cette fiche reste informative pour votre machine. Les modifications et
+                    validations de maintenance sont réservées à l’administrateur.
                   </div>
                 ) : null}
 

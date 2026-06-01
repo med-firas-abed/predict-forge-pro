@@ -50,11 +50,11 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
       { label: t("nav.dashboard"), keywords: ["dashboard", "tableau", "bord", "prediction", "rul"], route: "/dashboard", group: L("g.pages") },
       { label: t("nav.diagnostics"), keywords: ["diagnostic", "diagnostics", "rul", "hi", "stress"], route: "/diagnostics", group: L("g.pages") },
       { label: t("nav.maintenance"), keywords: ["maintenance", "gmao", "tache", "intervention", "calendrier"], route: "/maintenance", group: L("g.pages") },
-      { label: t("nav.costs"), keywords: ["cout", "couts", "budget", "depense", "finance"], route: "/couts", group: L("g.pages") },
       { label: t("nav.alerts"), keywords: ["alerte", "alertes", "alerts", "notification", "anomalie"], route: "/alertes", group: L("g.pages") },
       { label: t("nav.ia"), keywords: ["rapport", "report", "agent", "planner", "ia", "ai", "pdf", "plan"], route: "/ia", group: L("g.pages") },
       ...(isAdmin
         ? [
+            { label: t("nav.costs"), keywords: ["cout", "couts", "budget", "depense", "finance"], route: "/couts", group: L("g.pages") },
             { label: t("nav.geo"), keywords: ["geo", "geolocalisation", "carte", "map", "localisation"], route: "/geo", group: L("g.pages") },
             { label: t("nav.machines"), keywords: ["machine", "machines", "stockeur", "carrousel", "parc"], route: "/machines", group: L("g.pages") },
           ]

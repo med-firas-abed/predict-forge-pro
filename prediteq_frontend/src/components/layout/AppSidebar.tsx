@@ -95,7 +95,6 @@ export function AppSidebar({
             { id: "diagnostics", labelKey: "nav.diagnostics", icon: Activity },
             { id: "ia", labelKey: "nav.ia", icon: Brain },
             { id: "maintenance", labelKey: "nav.maintenance", icon: Wrench },
-            { id: "couts", labelKey: "nav.costs", icon: DollarSign },
             {
               id: "alertes",
               labelKey: "nav.alerts",
