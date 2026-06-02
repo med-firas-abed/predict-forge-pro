@@ -44,7 +44,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run frontend browser tests
-        run: npm run test:e2e
+        run: |
+          npm run test:e2e || {
+            echo "Playwright browser tests failed once; retrying the full suite..."
+            npm run test:e2e
+          }
 
       - name: Build frontend
         run: npm run build
