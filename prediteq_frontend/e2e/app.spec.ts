@@ -1368,7 +1368,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page).toHaveURL(/\/diagnostics\?machine=ASC-C3/);
   });
 
-  test("lets admins export costs and follow the shortcut actions", async ({ page }) => {
+  test("lets admins read next intervention costs and follow the shortcut actions", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
     await mockAlertsData(page);
@@ -1376,10 +1376,9 @@ test.describe("Authenticated app flows", () => {
     await mockDiagnosticsAndSensors(page);
 
     await page.goto("/couts");
-    await expect(page.getByText(/Lecture simple des couts maintenance/i)).toBeVisible();
+    await expect(page.getByText(/Prochaine intervention de maintenance/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /Exporter CSV/i }).click();
-    await expect(page.getByText(/Export CSV pr[eê]t/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Exporter CSV/i })).toHaveCount(0);
 
     await page.getByRole("button", { name: /Voir diagnostic/i }).first().click();
     await expect(page).toHaveURL(/\/diagnostics\?machine=ASC-C3/);
