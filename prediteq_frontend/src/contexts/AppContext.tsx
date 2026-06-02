@@ -81,7 +81,7 @@ const TR: Record<string, TranslationEntry> = {
   "meta.simulator.title": { fr: "Simulateur", en: "Simulator", ar: "Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
   "meta.simulator.sub": { fr: "Suivre les indicateurs machine en temps reel avec le simulateur", en: "Follow machine indicators in real time with the simulator", ar: "Ù…ØªØ§Ø¨Ø¹Ø© Ù…Ø¤Ø´Ø±Ø§Øª Ø§Ù„Ø¢Ù„Ø§Øª ÙÙŠ Ø§Ù„ÙˆÙ‚Øª Ø§Ù„ÙØ¹Ù„ÙŠ Ø¹Ø¨Ø± Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ" },
   "meta.experiment.title": { fr: "ExpÃ©rience ESP32", en: "ESP32 Experiment", ar: "ØªØ¬Ø±Ø¨Ø© ESP32" },
-  "meta.experiment.sub": { fr: "Banc d'essai ESP32 â€” vibration, courant et lecture machine", en: "ESP32 bench test — vibration, current, and machine reading", ar: "Ù…Ù†ØµØ© Ø§Ø®ØªØ¨Ø§Ø± ESP32 â€” Ø§Ù‡ØªØ²Ø§Ø² ÙˆØªÙŠØ§Ø± ÙˆÙ‚Ø±Ø§Ø¡Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ø¢Ù„Ø©" },
+  "meta.experiment.sub": { fr: "", en: "", ar: "" },
 
   // Dashboard
   "dash.activeMachines": { fr: "Machines actives", en: "Active Machines", ar: "Ø§Ù„Ø¢Ù„Ø§Øª Ø§Ù„Ù†Ø´Ø·Ø©" },

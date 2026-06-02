@@ -11,7 +11,7 @@ import { getMachinePublicLabel } from "@/lib/machinePresentation";
 
 interface AppTopbarProps {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   onSearch?: (query: string) => void;
 }
 
@@ -148,11 +148,13 @@ export function AppTopbar({ title, subtitle, onSearch }: AppTopbarProps) {
       })
     : t("dash.noData") ?? "Flux en attente";
 
+  const hasSubtitle = Boolean(subtitle?.trim());
+
   return (
     <header className="h-[56px] min-h-[56px] bg-card/80 glass border-b border-border flex items-center gap-4 px-6 lg:px-8">
       <div>
         <h1 className="text-sm font-semibold text-foreground leading-tight">{title}</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        {hasSubtitle ? <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p> : null}
       </div>
 
       <div className="ml-4 flex items-center gap-2 px-3 py-1 rounded-xl bg-success/10 border border-success/20">
