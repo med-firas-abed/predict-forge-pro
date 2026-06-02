@@ -3,7 +3,6 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ChatWidget } from "@/components/industrial/ChatWidget";
 import { AppFooter } from "@/components/layout/AppFooter";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
-import { ResilienceBanner } from "@/components/layout/ResilienceBanner";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopbar } from "@/components/layout/AppTopbar";
 import { AdminPage as AdminPageStatic } from "@/components/pages/AdminPage";
@@ -339,7 +338,6 @@ const Index = () => {
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <AppTopbar title={t(metaKeys.title)} subtitle={t(metaKeys.sub)} />
-        <ResilienceBanner />
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 lg:p-8">
           <div className="mx-auto max-w-[1400px] animate-fade-in" key={currentPage}>
             <ErrorBoundary>

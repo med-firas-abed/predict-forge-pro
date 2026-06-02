@@ -300,8 +300,8 @@ describe("PlannerPage", () => {
     expect(
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
     ).toBeInTheDocument();
-    expect(toastWarningMock).toHaveBeenCalledWith(
-      expect.stringContaining("Service de plan indisponible"),
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining("Plan prepare avec les donnees disponibles."),
     );
   });
 
@@ -397,8 +397,8 @@ describe("PlannerPage", () => {
     expect(
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
     ).toBeInTheDocument();
-    expect(toastWarningMock).toHaveBeenCalledWith(
-      expect.stringContaining("Service de plan indisponible"),
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining("Plan prepare avec les donnees disponibles."),
     );
   });
 
@@ -499,8 +499,8 @@ describe("PlannerPage", () => {
     );
 
     await waitFor(() => {
-      expect(toastWarningMock).toHaveBeenCalledWith(
-        expect.stringMatching(/gardée localement et prête à être synchronisée/i),
+      expect(toastSuccessMock).toHaveBeenCalledWith(
+        expect.stringMatching(/enregistree dans l'application/i),
       );
     });
 

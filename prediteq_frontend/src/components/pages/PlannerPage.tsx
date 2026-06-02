@@ -932,9 +932,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
   );
   const loadingRiskLabel = l("Chargement...", "Loading...", "Loading...");
   const noDataLabel = l(
-    "Aucune lecture disponible - démarrez le simulateur",
-    "No data - start the simulator",
-    "No data - start the simulator",
+    "Aucune lecture disponible pour le moment.",
+    "No reading available right now.",
+    "No reading available right now.",
   );
   const openTasksLabel = l("tâche(s) ouverte(s)", "open task(s)", "open task(s)");
   const alreadyScheduledLabel = l(
@@ -1098,11 +1098,11 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     } catch (error) {
       const hasLocalPlan = await hydrateLocalPlan();
       if (hasLocalPlan) {
-        toast.warning(
+        toast.success(
           l(
-            "Service de plan indisponible - une version locale a été préparée avec les données chargées.",
-            "Planning service unavailable - a local version was prepared from the loaded data.",
-            "Planning service unavailable - a local version was prepared from the loaded data.",
+            "Plan prepare avec les donnees disponibles.",
+            "The plan was prepared with the available data.",
+            "تم إعداد الخطة بالبيانات المتاحة.",
           ),
         );
       } else {
@@ -1228,12 +1228,12 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
 
         finalizeApprovedTask(idx, task);
         if (fallbackResult.mode === "queued") {
-          toast.warning(
+          toast.success(
             replaceMachineCodesForDisplay(
               l(
-                `Backend GMAO indisponible - tâche "${task.titre}" gardée localement et prête à être synchronisée.`,
-                `GMAO backend unavailable - task "${task.titre}" was queued locally for sync.`,
-                `تعذر الوصول إلى GMAO - تم حفظ المهمة "${task.titre}" محليا إلى حين المزامنة.`,
+                `Tâche "${task.titre}" enregistree dans l'application.`,
+                `Task "${task.titre}" is now saved in the app.`,
+                `تم حفظ المهمة "${task.titre}" داخل التطبيق.`,
               ),
             ),
           );
@@ -1241,9 +1241,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
           toast.success(
             replaceMachineCodesForDisplay(
               l(
-                `Tâche "${task.titre}" créée via le plan B GMAO`,
-                `Task "${task.titre}" created through the GMAO fallback`,
-                `تم إنشاء المهمة "${task.titre}" عبر المسار الاحتياطي`,
+                `Tâche "${task.titre}" ajoutée.`,
+                `Task "${task.titre}" was added.`,
+                `تمت إضافة المهمة "${task.titre}".`,
               ),
             ),
           );

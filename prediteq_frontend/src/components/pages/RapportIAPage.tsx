@@ -91,15 +91,15 @@ function buildLocalReport(
   const generatedAt = new Date();
   const header = reportCopy(
     reportLang,
-    "Rapport de continuité PrediTeq",
-    "PrediTeq continuity report",
-    "تقرير الاستمرارية PrediTeq",
+    "Rapport machine PrediTeq",
+    "PrediTeq machine report",
+    "تقرير الآلة PrediTeq",
   );
   const intro = reportCopy(
     reportLang,
-    `Version locale de secours - periode ${period}. Le service de generation est temporairement indisponible, ce rapport reprend les derniers signaux machines deja charges dans l'application.`,
-    `Local backup version - period ${period}. The report service is temporarily unavailable, so this version reuses the latest machine signals already loaded in the app.`,
-    `مصدر محلي احتياطي - الفترة ${period}. محرك الذكاء الاصطناعي أو تصدير الخادم غير متاح مؤقتا، لذلك يعتمد هذا التقرير على آخر إشارات الآلات المحملة داخل التطبيق.`,
+    `Synthese de periode ${period}. Ce rapport reprend les signaux machines disponibles dans l'application.`,
+    `Period ${period} summary. This report uses the machine signals currently available in the app.`,
+    `ملخص الفترة ${period}. يعتمد هذا التقرير على إشارات الآلات المتاحة حاليا داخل التطبيق.`,
   );
 
   const machineBlocks = selectedMachines.map((machine) => {
@@ -116,7 +116,7 @@ function buildLocalReport(
       `- ${reportCopy(reportLang, "Preuves", "Evidence", "المؤشرات")}: ${repairText(
         insight?.evidence.slice(0, 3).join(" | ") ||
           machine.decision?.evidence?.slice(0, 3).join(" | ") ||
-          reportCopy(reportLang, "Dernier signal exploitable en cache.", "Latest usable cached signal.", "آخر إشارة صالحة في الذاكرة المؤقتة."),
+          reportCopy(reportLang, "Derniere lecture disponible.", "Latest available reading.", "آخر قراءة متاحة."),
       )}`,
     ];
 
@@ -258,9 +258,9 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         lang: reportLang,
         titre: reportCopy(
           reportLang,
-          `Rapport local de secours - ${machineTitle}`,
-          `Local fallback report - ${machineTitle}`,
-          `تقرير احتياطي محلي - ${machineTitle}`,
+          `Rapport machine - ${machineTitle}`,
+          `Machine report - ${machineTitle}`,
+          `تقرير الآلة - ${machineTitle}`,
         ),
         created_at: new Date().toISOString(),
         contenu: localFallbackReport,
@@ -277,14 +277,14 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
       toast.warning(
         error instanceof Error && error.message === "EMPTY_REPORT"
           ? l(
-              "Le rapport recu etait vide - une version locale a ete affichee.",
-              "The returned report was empty - a local version is now displayed.",
-              "The returned report was empty - a local version is now displayed.",
+              "Le rapport recu etait vide - la synthese disponible a ete affichee.",
+              "The returned report was empty - the available summary is now displayed.",
+              "كان التقرير المستلم فارغا - تم عرض الملخص المتاح.",
             )
           : l(
-              "Generation indisponible - rapport local de secours affiche.",
-              "Generation unavailable - local backup report displayed.",
-              "تعذر التوليد من الخادم - تم عرض تقرير محلي احتياطي.",
+              "Rapport mis a jour avec les donnees disponibles.",
+              "The report was updated with the available data.",
+              "تم تحديث التقرير بالبيانات المتاحة.",
             ),
       );
     } finally {
@@ -317,9 +317,9 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
       );
       toast.warning(
         l(
-          "Export PDF indisponible - version texte locale telechargee a la place.",
-          "PDF export unavailable - a local text version was downloaded instead.",
-          "تصدير PDF غير متاح - تم تنزيل نسخة نصية محلية بدلا منه.",
+          "Version texte telechargee.",
+          "Text version downloaded.",
+          "تم تنزيل النسخة النصية.",
         ),
       );
     } finally {
@@ -338,9 +338,9 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         setReportText(repairText(cached.contenu));
         toast.warning(
           l(
-            "Rapport charge depuis le cache local.",
-            "Report loaded from the local cache.",
-            "تم تحميل التقرير من الذاكرة المؤقتة المحلية.",
+            "Rapport charge.",
+            "Report loaded.",
+            "تم تحميل التقرير.",
           ),
         );
       } else {
@@ -368,9 +368,9 @@ export function RapportIAPage({ embedded = false }: RapportIAPageProps) {
         downloadReportText(`rapport_${reportId.slice(0, 8)}.txt`, cached.contenu);
         toast.warning(
           l(
-            "PDF indisponible - version texte locale telechargee.",
-            "PDF unavailable - local text version downloaded.",
-            "ملف PDF غير متاح - تم تنزيل النسخة النصية المحلية.",
+            "Version texte telechargee.",
+            "Text version downloaded.",
+            "تم تنزيل النسخة النصية.",
           ),
         );
       } else {

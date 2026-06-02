@@ -104,7 +104,7 @@ describe("RapportIAPage", () => {
     apiFetchMock.mockResolvedValue([]);
   });
 
-  it("shows a local fallback report when backend generation returns no content", async () => {
+  it("shows the available report summary when backend generation returns no content", async () => {
     apiStreamMock.mockResolvedValue({
       getReader: () => ({
         read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
@@ -121,13 +121,13 @@ describe("RapportIAPage", () => {
 
     await waitFor(() => {
       expect(toastWarningMock).toHaveBeenCalledWith(
-        "Le rapport recu etait vide - une version locale a ete affichee.",
+        "Le rapport recu etait vide - la synthese disponible a ete affichee.",
       );
     });
 
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(toastErrorMock).not.toHaveBeenCalled();
     expect(screen.getByText(/Contenu du rapport/i)).toBeInTheDocument();
-    expect(screen.getByText(/Rapport de continuité PrediTeq/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rapport machine PrediTeq/i)).toBeInTheDocument();
   });
 });

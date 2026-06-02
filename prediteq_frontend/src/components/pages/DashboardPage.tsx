@@ -1659,9 +1659,9 @@ export function DashboardPage() {
                   </div>
                   <div className="text-sm font-semibold text-foreground">
                     {l(
-                      "Lecture en direct indisponible. Référence stable affichée.",
-                      "A live reading is not available for this machine yet, so the dashboard keeps a simple stable reference.",
-                      "A live reading is not available for this machine yet, so the dashboard keeps a simple stable reference.",
+                      "Référence stable affichée pour le moment.",
+                      "A stable reference is displayed for now.",
+                      "A stable reference is displayed for now.",
                     )}
                   </div>
                   <div className="mt-3 text-xs leading-relaxed text-muted-foreground">
