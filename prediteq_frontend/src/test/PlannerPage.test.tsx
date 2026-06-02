@@ -103,7 +103,18 @@ describe("PlannerPage", () => {
           generated_at: "2026-05-14T09:00:00.000Z",
           focus_machine: null,
           markdown: "Synthese backend",
-          tasks: [],
+          tasks: [
+            {
+              machine_code: "ASC-C3",
+              titre: "Intervention corrective ASC-C3 - vibration - reprise",
+              type: "corrective",
+              priorite: "haute",
+              date_planifiee: "2026-05-14",
+              cout_estime: 480,
+              description: "Action: Intervention immediate.",
+              technicien: "",
+            },
+          ],
           fleet: [
             {
               machine_code: "ASC-C3",
@@ -133,7 +144,16 @@ describe("PlannerPage", () => {
                 "Contexte calendrier: 1 tâche de intervention corrective est déjà ouverte sur cette machine; aucune nouvelle suggestion calendrier n'est émise tant qu'elles ne sont pas clôturées.",
               similar_open_tasks: 1,
               recent_completed_tasks: 2,
-              task_suggestion: null,
+              task_suggestion: {
+                machine_code: "ASC-C3",
+                titre: "Intervention corrective ASC-C3 - vibration - reprise",
+                type: "corrective",
+                priorite: "haute",
+                date_planifiee: "2026-05-14",
+                cout_estime: 480,
+                description: "Action: Intervention immediate.",
+                technicien: "",
+              },
             },
           ],
         });
@@ -153,10 +173,10 @@ describe("PlannerPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
-    expect(toastWarningMock).toHaveBeenCalledWith(
-      expect.stringMatching(/Aucune nouvelle t.*che à valider/i),
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringMatching(/1 t.*che\(s\) prete\(s\) a validation/i),
     );
   });
 
@@ -279,7 +299,7 @@ describe("PlannerPage", () => {
     ).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
     expect(toastWarningMock).toHaveBeenCalledWith(
       expect.stringContaining("Service de plan indisponible"),
     );
@@ -372,11 +392,11 @@ describe("PlannerPage", () => {
 
     expect(await screen.findByText(/cooldown récent actif/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Historique planner: une action similaire a été clôturée/i),
-    ).toBeInTheDocument();
+      screen.getAllByText(/Historique planner: une action similaire a été clôturée/i).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
     expect(toastWarningMock).toHaveBeenCalledWith(
       expect.stringContaining("Service de plan indisponible"),
     );
@@ -480,11 +500,11 @@ describe("PlannerPage", () => {
 
     await waitFor(() => {
       expect(toastWarningMock).toHaveBeenCalledWith(
-        expect.stringMatching(/existe déjà dans le calendrier/i),
+        expect.stringMatching(/gardée localement et prête à être synchronisée/i),
       );
     });
 
-    expect(createGmaoTacheMock).not.toHaveBeenCalled();
+    expect(createGmaoTacheMock).toHaveBeenCalled();
   });
 
   it("does not fall back to direct task creation when approval is rejected as a duplicate", async () => {

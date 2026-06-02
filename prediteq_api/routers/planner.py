@@ -40,6 +40,7 @@ TASK_TYPE_LABELS = {
 
 class PlanRequest(BaseModel):
     focus_machine: str | None = None
+    allow_overlap: bool = False
 
 
 class ApproveTaskRequest(BaseModel):
@@ -51,6 +52,7 @@ class ApproveTaskRequest(BaseModel):
     cout_estime: float | None = None
     description: str = ""
     technicien: str = ""
+    allow_overlap: bool = False
 
 
 def _load_machines(focus_machine: str | None = None) -> list[dict[str, Any]]:
@@ -240,6 +242,8 @@ def _summarize_task_history(machine_tasks: list[dict[str, Any]], task_type: str)
 def _build_task_history_note(
     history_summary: dict[str, Any],
     repeat_guard: dict[str, Any] | None = None,
+    *,
+    allow_overlap: bool = False,
 ) -> str | None:
     task_label = TASK_TYPE_LABELS.get(
         str(history_summary.get("task_type") or ""),
@@ -251,6 +255,11 @@ def _build_task_history_note(
     latest_completed_at = history_summary.get("latest_completed_at")
 
     if open_same_type > 0:
+        if allow_overlap:
+            return (
+                f"Contexte calendrier: {open_same_type} tache(s) de {task_label} sont deja ouvertes sur cette machine; "
+                "une nouvelle action reste disponible si vous voulez renforcer le suivi."
+            )
         return (
             f"Contexte calendrier: {open_same_type} tache(s) de {task_label} sont deja ouvertes sur cette machine; "
             "aucune nouvelle suggestion calendrier n'est emise tant qu'elles ne sont pas cloturees."
@@ -264,6 +273,11 @@ def _build_task_history_note(
             else "date recente"
         )
         remaining_days = max(int(repeat_guard.get("remaining_days") or 0), 0)
+        if allow_overlap:
+            return (
+                f"Historique planner: une action similaire a ete cloturee le {latest}; "
+                "une nouvelle action reste disponible si vous voulez programmer un controle de suivi."
+            )
         return (
             f"Historique planner: une action similaire a ete cloturee le {latest}; "
             f"le planner attend encore {remaining_days} j ou une escalation nette avant de reproposer la meme intervention."
@@ -429,6 +443,8 @@ def _build_task_description(
     decision: dict[str, Any],
     history_summary: dict[str, Any],
     repeat_guard: dict[str, Any] | None = None,
+    *,
+    allow_overlap: bool = False,
 ) -> str:
     parts: list[str] = []
     recommended_action = _clean_task_fragment(decision.get("recommended_action"), max_length=260)
@@ -487,7 +503,11 @@ def _build_task_description(
     if field_check:
         parts.append(f"Controle terrain: {field_check}.")
 
-    history_note = _build_task_history_note(history_summary, repeat_guard)
+    history_note = _build_task_history_note(
+        history_summary,
+        repeat_guard,
+        allow_overlap=allow_overlap,
+    )
     if history_note:
         parts.append(history_note)
 
@@ -558,7 +578,48 @@ def _find_open_duplicate_message(
     return None
 
 
-def _build_planner_rows(machines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _build_open_overlap_note(
+    existing_tasks: list[dict[str, Any]],
+    *,
+    machine_code: str,
+    title: str,
+    task_type: str,
+) -> str | None:
+    same_title_open = 0
+    same_type_open = 0
+    normalized_title = title.strip().lower()
+
+    for task in existing_tasks:
+        status = str(task.get("statut") or "")
+        if status not in OPEN_TASK_STATUSES:
+            continue
+
+        if str(task.get("titre") or "").strip().lower() == normalized_title:
+            same_title_open += 1
+        if str(task.get("type") or "") == task_type:
+            same_type_open += 1
+
+    if same_title_open > 0:
+        return (
+            f'Contexte calendrier: une tache tres proche de "{title}" est deja ouverte pour {machine_code}; '
+            "cette nouvelle action complete le suivi recommande."
+        )
+
+    if same_type_open > 0:
+        task_label = TASK_TYPE_LABELS.get(task_type, task_type)
+        return (
+            f"Contexte calendrier: {same_type_open} tache(s) de {task_label} sont deja ouvertes pour {machine_code}; "
+            "cette nouvelle action complete le suivi recommande."
+        )
+
+    return None
+
+
+def _build_planner_rows(
+    machines: list[dict[str, Any]],
+    *,
+    allow_overlap: bool = False,
+) -> list[dict[str, Any]]:
     manager = get_manager()
     machine_ids = [str(machine["id"]) for machine in machines]
     alert_counts = fetch_alert_counts(machine_ids)
@@ -582,14 +643,27 @@ def _build_planner_rows(machines: list[dict[str, Any]]) -> list[dict[str, Any]]:
         projected_cost, delayed_cost = _projected_cost(avg_cost, decision, task_type)
         history_summary = _summarize_task_history(task_history.get(machine_id, []), task_type)
         repeat_guard = _evaluate_repeat_guard(history_summary, decision, task_template)
-        task_context = _build_task_history_note(history_summary, repeat_guard)
-        can_create_task = int(history_summary.get("open_same_type") or 0) <= 0 and not bool(
-            repeat_guard.get("blocked")
+        task_context = _build_task_history_note(
+            history_summary,
+            repeat_guard,
+            allow_overlap=allow_overlap,
+        )
+        can_create_task = str(decision.get("urgency_band") or "") != "stable" and (
+            allow_overlap
+            or (
+                int(history_summary.get("open_same_type") or 0) <= 0
+                and not bool(repeat_guard.get("blocked"))
+            )
         )
         task_suggestion = None
         if can_create_task:
             task_title = _build_task_title(machine, decision, task_template, history_summary)
-            task_description = _build_task_description(decision, history_summary, repeat_guard)
+            task_description = _build_task_description(
+                decision,
+                history_summary,
+                repeat_guard,
+                allow_overlap=allow_overlap,
+            )
             task_suggestion = {
                 "machine_code": machine["code"],
                 "titre": task_title,
@@ -768,7 +842,7 @@ async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_a
     if body.focus_machine and not machines:
         raise HTTPException(404, f"Machine '{body.focus_machine}' introuvable")
 
-    rows = _build_planner_rows(machines)
+    rows = _build_planner_rows(machines, allow_overlap=body.allow_overlap)
     markdown = _render_markdown(rows, body.focus_machine)
     tasks = [
         row["task_suggestion"]
@@ -816,8 +890,16 @@ async def approve_task(
         title=body.titre,
         task_type=body.type,
     )
-    if duplicate_message:
+    calendar_note = None
+    if duplicate_message and not body.allow_overlap:
         raise HTTPException(409, duplicate_message)
+    if duplicate_message and body.allow_overlap:
+        calendar_note = _build_open_overlap_note(
+            existing_tasks,
+            machine_code=body.machine_code,
+            title=body.titre,
+            task_type=body.type,
+        )
 
     repeat_note = _build_approval_repeat_note(
         existing_tasks,
@@ -825,6 +907,8 @@ async def approve_task(
     )
 
     description_parts = ["[Agent planificateur]"]
+    if calendar_note:
+        description_parts.append(calendar_note)
     if repeat_note:
         description_parts.append(repeat_note)
     if body.description.strip():
@@ -862,5 +946,6 @@ async def approve_task(
         "status": "ok",
         "message": f"Tache '{body.titre}' creee pour {body.machine_code}",
         "machine_code": body.machine_code,
+        "calendar_note": calendar_note,
         "repeat_note": repeat_note,
     }

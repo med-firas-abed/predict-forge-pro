@@ -272,6 +272,7 @@ async function mockMachines(page: Page) {
 async function mockPlannerCalendarFlow(page: Page) {
   const today = new Date().toISOString().slice(0, 10);
   const repeatedTaskTitle = "Intervention corrective ASC-C3 - Vibration moteur - reprise";
+  const followUpTaskTitle = "Intervention corrective ASC-C3 - Vibration moteur - suivi terrain";
 
   const taskStore = [
     {
@@ -297,7 +298,18 @@ async function mockPlannerCalendarFlow(page: Page) {
         generated_at: `${today}T09:00:00.000Z`,
         focus_machine: null,
         markdown: "Synthese planner backend pour la machine critique ASC-C3.",
-        tasks: [],
+        tasks: [
+          {
+            machine_code: "ASC-C3",
+            titre: followUpTaskTitle,
+            type: "corrective",
+            priorite: "haute",
+            date_planifiee: today,
+            cout_estime: 480,
+            description: "Action: Reprendre l'intervention corrective sans attendre.",
+            technicien: "",
+          },
+        ],
         fleet: [
           {
             machine_code: "ASC-C3",
@@ -324,10 +336,19 @@ async function mockPlannerCalendarFlow(page: Page) {
             delayed_cost: 560,
             delay_penalty: 80,
             task_context:
-              "Contexte calendrier: 1 tache de intervention corrective est deja ouverte sur cette machine; aucune nouvelle suggestion calendrier n'est emise tant qu'elles ne sont pas cloturees.",
+              "Contexte calendrier: 1 tache de intervention corrective est deja ouverte sur cette machine; une nouvelle action reste disponible si vous voulez renforcer le suivi.",
             similar_open_tasks: 1,
             recent_completed_tasks: 2,
-            task_suggestion: null,
+            task_suggestion: {
+              machine_code: "ASC-C3",
+              titre: followUpTaskTitle,
+              type: "corrective",
+              priorite: "haute",
+              date_planifiee: today,
+              cout_estime: 480,
+              description: "Action: Reprendre l'intervention corrective sans attendre.",
+              technicien: "",
+            },
           },
         ],
       }),
@@ -1238,25 +1259,27 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByRole("button", { name: /D[ée]marrer/i })).toBeVisible();
   });
 
-  test("shows already scheduled AI actions without proposing a duplicate approval", async ({ page }) => {
+  test("lets admins validate a follow-up AI action even when a similar task is already open", async ({ page }) => {
     await seedAuth(page, ADMIN_USER, [ADMIN_USER]);
     await mockMachines(page);
     await mockAlertsData(page);
     await mockPlannerCalendarFlow(page);
 
     const repeatedTaskTitle = "Intervention corrective Machine 3 - Vibration moteur - reprise";
+    const followUpTaskTitle = "Intervention corrective Machine 3 - Vibration moteur - suivi terrain";
 
     await page.goto("/planner");
     await page.getByRole("button", { name: /Preparer les actions/i }).click();
 
     await expect(page.getByText("Synthese planner backend pour la machine critique Machine 3.")).toBeVisible();
     await expect(page.getByText(/2 action\(s\) r.cente\(s\)/i)).toBeVisible();
-    await expect(page.getByRole("main").getByText(/Aucune nouvelle t.che . valider/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i })).toBeVisible();
+    await page.getByRole("button", { name: /Valider et cr[ée]er dans le calendrier/i }).click();
 
     await page.goto("/maintenance");
     await expect(page.getByText(/Calendrier des actions confirm(?:é|e)es/i)).toBeVisible();
     await expect(page.getByText(repeatedTaskTitle).first()).toBeVisible();
+    await expect(page.getByText(followUpTaskTitle).first()).toBeVisible();
   });
 
   test("keeps the selected machine stable when switching on the dashboard", async ({ page }) => {

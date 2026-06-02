@@ -92,6 +92,7 @@ interface ApproveTaskResponse {
   status: string;
   message: string;
   machine_code: string;
+  calendar_note?: string | null;
   repeat_note?: string | null;
 }
 
@@ -293,6 +294,7 @@ function buildLocalTaskDescription(
   options?: {
     taskContext?: string | null;
     useDefaultOpenTaskContext?: boolean;
+    allowOverlap?: boolean;
   },
 ) {
   const parts: string[] = [];
@@ -327,6 +329,10 @@ function buildLocalTaskDescription(
   if (fieldCheck) parts.push(`Contrôle terrain: ${fieldCheck}.`);
   if (options && "taskContext" in options) {
     if (options.taskContext) parts.push(options.taskContext);
+  } else if ((options?.useDefaultOpenTaskContext ?? true) && openTasks > 0 && options?.allowOverlap) {
+    parts.push(
+      `Contexte calendrier: ${openTasks} tâche(s) déjà ouverte(s) sur cette machine; une nouvelle action reste disponible si vous voulez renforcer le suivi.`,
+    );
   } else if ((options?.useDefaultOpenTaskContext ?? true) && openTasks > 0) {
     parts.push(
       `Contexte calendrier: ${openTasks} tâche(s) déjà ouverte(s) sur cette machine; aucune nouvelle suggestion calendrier n'est créée tant qu'elles ne sont pas clôturées.`,
@@ -344,10 +350,15 @@ function buildLocalTaskSuggestion(
     repeatCooldownActive?: boolean;
     taskContext?: string | null;
     useDefaultOpenTaskContext?: boolean;
+    allowOverlap?: boolean;
   },
 ): ProposedTask | undefined {
   const similarOpenTasks = options?.similarOpenTasks ?? (insight.machine.decision?.openTasks ?? 0);
-  if (insight.urgencyBand === "stable" || similarOpenTasks > 0 || options?.repeatCooldownActive) {
+  const allowOverlap = options?.allowOverlap ?? false;
+  if (
+    insight.urgencyBand === "stable" ||
+    (!allowOverlap && (similarOpenTasks > 0 || options?.repeatCooldownActive))
+  ) {
     return undefined;
   }
 
@@ -363,6 +374,7 @@ function buildLocalTaskSuggestion(
     description: buildLocalTaskDescription(insight, {
       taskContext: options?.taskContext,
       useDefaultOpenTaskContext: options?.useDefaultOpenTaskContext,
+      allowOverlap,
     }),
     technicien: "",
   };
@@ -504,10 +516,20 @@ function buildLocalTaskHistoryNote(
   taskType: ProposedTask["type"],
   historySummary: LocalTaskHistorySummary,
   repeatGuard?: LocalRepeatGuard,
+  options?: {
+    allowOverlap?: boolean;
+  },
 ) {
   const taskLabel = TASK_TYPE_LABELS[taskType] ?? taskType;
+  const allowOverlap = options?.allowOverlap ?? false;
 
   if (historySummary.openSameType > 0) {
+    if (allowOverlap) {
+      return (
+        `Contexte calendrier: ${historySummary.openSameType} tâche(s) de ${taskLabel} sont déjà ouvertes sur cette machine; ` +
+        "une nouvelle action reste disponible si vous voulez renforcer le suivi."
+      );
+    }
     return (
       `Contexte calendrier: ${historySummary.openSameType} tâche(s) de ${taskLabel} sont déjà ouvertes sur cette machine; ` +
       "aucune nouvelle suggestion calendrier n'est émise tant qu'elles ne sont pas clôturées."
@@ -515,6 +537,15 @@ function buildLocalTaskHistoryNote(
   }
 
   if (repeatGuard?.blocked) {
+    if (allowOverlap) {
+      const latest = repeatGuard.latestCompletedAt
+        ? repeatGuard.latestCompletedAt.toLocaleDateString("fr-FR")
+        : "date récente";
+      return (
+        `Historique planner: une action similaire a été clôturée le ${latest}; ` +
+        "une nouvelle action reste disponible si vous voulez programmer un contrôle de suivi."
+      );
+    }
     const latest = repeatGuard.latestCompletedAt
       ? repeatGuard.latestCompletedAt.toLocaleDateString("fr-FR")
       : "date récente";
@@ -685,7 +716,11 @@ function buildLocalGeneratePlanResponse(
 function buildFallbackPlannerRows(
   insights: PredictiveInsight[],
   taskHistoryByMachine?: Record<string, GmaoTache[]>,
+  options?: {
+    allowOverlap?: boolean;
+  },
 ): PlannerFleetRow[] {
+  const allowOverlap = options?.allowOverlap ?? false;
   return [...insights]
     .sort((left, right) => right.urgencyScore - left.urgencyScore)
     .map((insight) => {
@@ -701,7 +736,14 @@ function buildFallbackPlannerRows(
       const repeatGuard = historySummary ? evaluateLocalRepeatGuard(insight, historySummary) : null;
       const similarOpenTasks = historySummary ? historySummary.openSameType : openTasks;
       const taskContext = historySummary
-        ? buildLocalTaskHistoryNote(insight.taskTemplate.type, historySummary, repeatGuard ?? undefined)
+        ? buildLocalTaskHistoryNote(
+            insight.taskTemplate.type,
+            historySummary,
+            repeatGuard ?? undefined,
+            { allowOverlap },
+          )
+        : openTasks > 0 && allowOverlap
+          ? `Contexte calendrier: ${openTasks} tâche(s) déjà ouverte(s) sur cette machine; une nouvelle action reste disponible si vous voulez renforcer le suivi.`
         : openTasks > 0
           ? `Contexte calendrier: ${openTasks} tâche(s) déjà ouverte(s) sur cette machine; aucune nouvelle suggestion calendrier n'est créée tant qu'elles ne sont pas clôturées.`
           : null;
@@ -738,6 +780,7 @@ function buildFallbackPlannerRows(
           repeatCooldownActive: Boolean(repeatGuard?.blocked),
           taskContext,
           useDefaultOpenTaskContext: !hasTaskHistory,
+          allowOverlap,
         }),
       };
       return row;
@@ -841,8 +884,8 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     [location.search],
   );
   const fallbackPlannerRows = useMemo(
-    () => buildFallbackPlannerRows(insights),
-    [insights],
+    () => buildFallbackPlannerRows(insights, undefined, { allowOverlap: isAdmin }),
+    [insights, isAdmin],
   );
   const blockedCalendarRows = useMemo(
     () =>
@@ -936,9 +979,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
   const loadFallbackPlannerRowsWithHistory = async () => {
     try {
       const tasks = await listGmaoTaches(isAdmin ? undefined : currentUser?.machineId);
-      return buildFallbackPlannerRows(insights, buildTaskHistoryIndex(tasks));
+      return buildFallbackPlannerRows(insights, buildTaskHistoryIndex(tasks), { allowOverlap: isAdmin });
     } catch {
-      return buildFallbackPlannerRows(insights);
+      return buildFallbackPlannerRows(insights, undefined, { allowOverlap: isAdmin });
     }
   };
 
@@ -1033,7 +1076,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
 
       const backendResponse = await apiFetch("/planner/generate", {
         method: "POST",
-        body: JSON.stringify({ focus_machine: focusMachine }),
+        body: JSON.stringify({ focus_machine: focusMachine, allow_overlap: isAdmin }),
       });
       const data = normalizeGeneratePlanResponse(backendResponse);
       if (!data || (data.fleet.length === 0 && scopedRows.length === 0)) {
@@ -1115,7 +1158,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     try {
       const response = (await apiFetch("/planner/approve", {
         method: "POST",
-        body: JSON.stringify(task),
+        body: JSON.stringify({ ...task, allow_overlap: isAdmin }),
       })) as ApproveTaskResponse;
       toast.success(
         replaceMachineCodesForDisplay(
@@ -1128,6 +1171,9 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       );
       if (response?.repeat_note) {
         toast.warning(replaceMachineCodesForDisplay(response.repeat_note));
+      }
+      if (response?.calendar_note) {
+        toast.warning(replaceMachineCodesForDisplay(response.calendar_note));
       }
       finalizeApprovedTask(idx, task);
     } catch (error) {
@@ -1160,17 +1206,14 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       }
 
       try {
-        try {
+        if (!isAdmin) {
           const existingTasks = await listGmaoTaches();
           const duplicateMessage = findLocalDuplicateMessage(existingTasks, task);
           if (duplicateMessage) {
             toast.warning(duplicateMessage);
             return;
           }
-        } catch {
-          // Continue to the write fallback when task history cannot be loaded.
         }
-
         const targetMachine = machines.find((machine) => machine.id === task.machine_code);
         const fallbackResult = await createGmaoTache({
           machine_id: targetMachine?.uuid ?? targetMachine?.id ?? task.machine_code,
