@@ -1206,7 +1206,7 @@ test.describe("Authenticated app flows", () => {
     await expect(page.getByRole("button", { name: /Retour au tableau de bord/i })).toBeVisible();
   });
 
-  test("keeps standard users on the machine report when they try to open planner", async ({ page }) => {
+  test("lets approved machine users open planner from the dedicated route", async ({ page }) => {
     await seedAuth(page, OPERATOR_USER, [OPERATOR_USER]);
     await mockMachines(page);
     await page.route(/\/report\/history$/, async (route) => {
@@ -1227,12 +1227,11 @@ test.describe("Authenticated app flows", () => {
     });
 
     await page.goto("/planner");
-    await expect(page).toHaveURL(/\/ia\?tab=report/);
-    await expect(page.getByRole("heading", { name: /Analyse & rapports/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/planner/);
+    await expect(page.getByText(/Analyse, actions & rapports/i)).toBeVisible();
+    await expect(page.getByText(/Plan machine/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Preparer les actions/i })).toBeVisible();
     await expect(page.getByText(/Rapport machine/i)).toBeVisible();
-    await expect(page.getByText(/G[ée]n[ée]rer un rapport clair/i)).toBeVisible();
-    await expect(page.getByText(/Plan d'action/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Preparer les actions/i })).toHaveCount(0);
   });
 
   test("shows only the calendar reading module on maintenance for standard users", async ({ page }) => {
