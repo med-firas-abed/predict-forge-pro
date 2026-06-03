@@ -134,4 +134,30 @@ describe("AdminPage", () => {
       expect(apiFetchMock).toHaveBeenCalledWith("/seuils/recipients-preview");
     });
   });
+
+  it("does not show an error toast when recipient preview loading fails", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/auth/machines") {
+        return Promise.resolve([{ id: "uuid-a1", code: "ASC-A1", nom: "Machine 1" }]);
+      }
+      if (path === "/seuils/recipients-preview") {
+        return Promise.reject(new Error("preview unavailable"));
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    renderPage();
+
+    await screen.findByText("Pending User");
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith("/auth/machines");
+      expect(apiFetchMock).toHaveBeenCalledWith("/seuils/recipients-preview");
+    });
+    await waitFor(() => {
+      expect(toastErrorMock).not.toHaveBeenCalled();
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
 });

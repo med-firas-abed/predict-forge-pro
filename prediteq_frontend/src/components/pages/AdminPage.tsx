@@ -125,17 +125,10 @@ export function AdminPage() {
       setRecipientPreview(previewData);
     } catch (error) {
       console.error(error);
-      toast.error(
-        repairText(
-          lang === "fr"
-            ? "Impossible de charger le rattachement machine et l'aperÃ§u des destinataires."
-            : lang === "en"
-              ? "Could not load machine assignment and recipient preview."
-              : "ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø±Ø¨Ø· Ø§Ù„Ø¢Ù„Ø§Øª ÙˆÙ…Ø¹Ø§ÙŠÙ†Ø© Ø§Ù„Ù…Ø³ØªÙ„Ù…ÙŠÙ†.",
-        ),
-      );
+      setMachineOptions([]);
+      setRecipientPreview([]);
     }
-  }, [currentUser?.role, currentUser?.status, lang]);
+  }, [currentUser?.role, currentUser?.status]);
 
   useEffect(() => {
     if (currentUser?.role === "admin" && currentUser.status === "approved") {
