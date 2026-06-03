@@ -75,6 +75,7 @@ describe("PlannerPage", () => {
     useAuthMock.mockReturnValue({
       currentUser: {
         role: "admin",
+        status: "approved",
         machineId: undefined,
       },
     });
@@ -602,5 +603,114 @@ describe("PlannerPage", () => {
     expect(
       screen.getByRole("button", { name: /valider et cr(?:e|\u00e9)er dans le calendrier/i }),
     ).toBeInTheDocument();
+  });
+
+  it("lets approved machine users validate planner tasks with overlap enabled", async () => {
+    useAuthMock.mockReturnValue({
+      currentUser: {
+        role: "user",
+        status: "approved",
+        machineId: "machine-3",
+      },
+    });
+
+    apiFetchMock.mockImplementation((path: string, options?: { body?: string }) => {
+      if (path === "/planner/generate") {
+        return Promise.resolve({
+          generated_at: "2026-05-14T09:00:00.000Z",
+          focus_machine: null,
+          markdown: "Synthese backend",
+          tasks: [
+            {
+              machine_code: "ASC-C3",
+              titre: "Intervention corrective ASC-C3 - vibration",
+              type: "corrective",
+              priorite: "haute",
+              date_planifiee: "2026-05-14",
+              cout_estime: 480,
+              description: "Action: Intervention immediate.",
+              technicien: "",
+            },
+          ],
+          fleet: [
+            {
+              machine_code: "ASC-C3",
+              nom: "Machine 3",
+              region: "Sousse",
+              hi: 0.12,
+              rul_days: 4,
+              zone: "Critical",
+              risk_score: 93,
+              risk_level: "critical",
+              risk_label: "Urgent",
+              summary: "Machine critique",
+              recommended_action: "Intervention immediate",
+              maintenance_window: "Controle terrain prioritaire",
+              open_tasks: 1,
+              data_source: "live_runtime",
+              updated_at: "2026-05-14T09:00:00.000Z",
+              is_stale: false,
+              plain_reason: "Les indicateurs restent critiques.",
+              impact: "Risque d'arret eleve.",
+              evidence: ["HI 12 %", "RUL 4 j"],
+              field_checks: ["Verifier les roulements."],
+              projected_cost: 480,
+              delayed_cost: 560,
+              delay_penalty: 80,
+              task_context:
+                "Contexte calendrier: 1 tache de intervention corrective est deja ouverte sur cette machine; une nouvelle action reste disponible si vous voulez renforcer le suivi.",
+              similar_open_tasks: 1,
+              recent_completed_tasks: 0,
+              repeat_cooldown_active: false,
+              task_suggestion: {
+                machine_code: "ASC-C3",
+                titre: "Intervention corrective ASC-C3 - vibration",
+                type: "corrective",
+                priorite: "haute",
+                date_planifiee: "2026-05-14",
+                cout_estime: 480,
+                description: "Action: Intervention immediate.",
+                technicien: "",
+              },
+            },
+          ],
+        });
+      }
+
+      if (path === "/planner/approve") {
+        expect(options?.body).toBeTruthy();
+        const body = JSON.parse(options?.body ?? "{}");
+        expect(body.allow_overlap).toBe(true);
+
+        return Promise.resolve({
+          status: "ok",
+          message: "Tache creee",
+          machine_code: "ASC-C3",
+          calendar_note:
+            "Contexte calendrier: 1 tache de intervention corrective est deja ouverte pour ASC-C3; cette nouvelle action complete le suivi recommande.",
+        });
+      }
+
+      return Promise.reject(new Error(`Unexpected API path: ${path}`));
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /preparer les actions/i }));
+
+    const approveButton = await screen.findByRole("button", {
+      name: /valider et cr(?:e|\u00e9)er dans le calendrier/i,
+    });
+    expect(approveButton).not.toBeDisabled();
+
+    fireEvent.click(approveButton);
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenLastCalledWith(
+        expect.stringContaining("GMAO"),
+      );
+    });
+
+    expect(createGmaoTacheMock).not.toHaveBeenCalled();
   });
 });

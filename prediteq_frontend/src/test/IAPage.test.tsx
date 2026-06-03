@@ -57,22 +57,23 @@ describe("IAPage", () => {
     expect(screen.queryByText("Planner page")).not.toBeInTheDocument();
   });
 
-  it("forces standard users to the report view only", async () => {
+  it("keeps the planner view available for standard approved users", async () => {
     mockUseAuth.mockReturnValue({
       currentUser: {
         role: "user",
+        status: "approved",
       },
     });
 
     renderPage("/planner");
 
     await waitFor(() => {
-      expect(screen.getByText("Report page")).toBeInTheDocument();
+      expect(screen.getByText("Planner page")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Analyse & rapports")).toBeInTheDocument();
+    expect(screen.getByText("Analyse, actions & rapports")).toBeInTheDocument();
+    expect(screen.getByText("Plan machine")).toBeInTheDocument();
     expect(screen.getByText("Rapport machine")).toBeInTheDocument();
-    expect(screen.queryByText("Plan d'action")).not.toBeInTheDocument();
-    expect(screen.queryByText("Planner page")).not.toBeInTheDocument();
+    expect(screen.queryByText("Report page")).not.toBeInTheDocument();
   });
 });

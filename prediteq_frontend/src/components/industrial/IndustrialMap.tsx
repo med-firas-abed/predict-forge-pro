@@ -26,6 +26,7 @@ import { repairText } from "@/lib/repairText";
 
 type MapMode = "status" | "predictive";
 type TileMode = "roadmap" | "satellite";
+type MapProviderPreference = "auto" | "leaflet";
 type LocalizeText = (fr: string, en: string, ar: string) => string;
 
 interface IndustrialMapProps {
@@ -36,6 +37,7 @@ interface IndustrialMapProps {
   heightClass?: string;
   focusedMachineId?: string;
   onMachineSelect?: (machineId: string) => void;
+  providerPreference?: MapProviderPreference;
 }
 
 interface IndustrialMapCanvasProps {
@@ -726,6 +728,7 @@ export function IndustrialMap({
   heightClass = "h-[620px]",
   focusedMachineId,
   onMachineSelect,
+  providerPreference = "auto",
 }: IndustrialMapProps) {
   const { lang } = useApp();
   const { machines: fetchedMachines } = useMachines(machineScopeId);
@@ -762,7 +765,8 @@ export function IndustrialMap({
     ];
   }, [l, mode]);
 
-  const shouldUseGoogleMaps = googleMapsConfigured && !googleUnavailable;
+  const shouldUseGoogleMaps =
+    providerPreference === "auto" && googleMapsConfigured && !googleUnavailable;
 
   return (
     <div className="relative overflow-hidden rounded-[28px] border border-border bg-card shadow-lg shadow-black/20">

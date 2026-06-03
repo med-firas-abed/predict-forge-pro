@@ -137,6 +137,9 @@ export function AppSidebar({
     if (pageId === "diagnostics") {
       void import("@/components/pages/DiagnosticsPage");
     }
+    if (pageId === "geo") {
+      void import("@/components/pages/GeoPage");
+    }
   };
 
   return (

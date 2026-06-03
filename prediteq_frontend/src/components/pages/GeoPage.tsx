@@ -114,6 +114,7 @@ export function GeoPage() {
         heightClass="h-[560px] md:h-[620px] xl:h-[700px]"
         focusedMachineId={focusedMachineId}
         onMachineSelect={setFocusedMachineId}
+        providerPreference="leaflet"
       />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">

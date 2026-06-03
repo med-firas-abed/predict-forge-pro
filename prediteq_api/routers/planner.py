@@ -15,7 +15,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from core.auth import CurrentUser, require_admin
+from core.auth import CurrentUser, get_machine_filter, require_auth
 from core.cost_model import get_budget_reference_cost
 from core.decision_snapshot import (
     build_machine_decision_snapshot,
@@ -66,6 +66,37 @@ def _load_machines(focus_machine: str | None = None) -> list[dict[str, Any]]:
     except Exception as exc:
         logger.error("Planner machine load failed: %s", exc)
         raise HTTPException(502, "Erreur de base de donnees")
+
+
+def _resolve_scoped_machine_code(machine_code: str | None, user: CurrentUser) -> str | None:
+    requested_code = machine_code.strip() if machine_code else None
+    machine_filter = get_machine_filter(user)
+    if not machine_filter:
+        return requested_code
+
+    sb = get_supabase()
+    try:
+        machine_res = (
+            sb.table("machines")
+            .select("code")
+            .eq("id", machine_filter)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.error("Planner machine scope resolution failed: %s", exc)
+        raise HTTPException(502, "Erreur de base de donnees")
+
+    if not machine_res.data:
+        raise HTTPException(403, "Machine assignee introuvable")
+
+    allowed_code = str(machine_res.data[0].get("code") or "").strip()
+    if not allowed_code:
+        raise HTTPException(403, "Machine assignee invalide")
+    if requested_code and requested_code != allowed_code:
+        raise HTTPException(403, "Acces interdit a cette machine")
+
+    return allowed_code
 
 
 def _load_avg_costs(machine_ids: list[str]) -> dict[str, float]:
@@ -811,8 +842,12 @@ def _render_markdown(rows: list[dict[str, Any]], focus_machine: str | None = Non
 
 
 @router.get("/status")
-async def fleet_risk_status(user: CurrentUser = Depends(require_admin)):
-    rows = _build_planner_rows(_load_machines())
+async def fleet_risk_status(user: CurrentUser = Depends(require_auth)):
+    scoped_machine_code = _resolve_scoped_machine_code(None, user)
+    rows = _build_planner_rows(
+        _load_machines(scoped_machine_code),
+        allow_overlap=not user.is_admin,
+    )
     return [
         {
             "machine_code": row["machine_code"],
@@ -837,13 +872,15 @@ async def fleet_risk_status(user: CurrentUser = Depends(require_admin)):
 
 
 @router.post("/generate")
-async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_admin)):
-    machines = _load_machines(body.focus_machine)
-    if body.focus_machine and not machines:
-        raise HTTPException(404, f"Machine '{body.focus_machine}' introuvable")
+async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_auth)):
+    scoped_focus_machine = _resolve_scoped_machine_code(body.focus_machine, user)
+    machines = _load_machines(scoped_focus_machine)
+    if scoped_focus_machine and not machines:
+        raise HTTPException(404, f"Machine '{scoped_focus_machine}' introuvable")
 
-    rows = _build_planner_rows(machines, allow_overlap=body.allow_overlap)
-    markdown = _render_markdown(rows, body.focus_machine)
+    allow_overlap = body.allow_overlap or not user.is_admin
+    rows = _build_planner_rows(machines, allow_overlap=allow_overlap)
+    markdown = _render_markdown(rows, scoped_focus_machine)
     tasks = [
         row["task_suggestion"]
         for row in rows
@@ -852,7 +889,7 @@ async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_a
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "focus_machine": body.focus_machine,
+        "focus_machine": scoped_focus_machine,
         "markdown": markdown,
         "tasks": tasks,
         "fleet": rows,
@@ -862,14 +899,20 @@ async def generate_plan(body: PlanRequest, user: CurrentUser = Depends(require_a
 @router.post("/approve")
 async def approve_task(
     body: ApproveTaskRequest,
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_auth),
 ):
     manager = get_manager()
     sb = get_supabase()
 
-    uuid = manager.get_uuid(body.machine_code)
+    machine_code = _resolve_scoped_machine_code(body.machine_code, user)
+    if not machine_code:
+        raise HTTPException(404, f"Machine '{body.machine_code}' introuvable")
+
+    uuid = manager.get_uuid(machine_code)
     if not uuid:
-        raise HTTPException(404, f"Machine '{body.machine_code}' not found")
+        raise HTTPException(404, f"Machine '{machine_code}' not found")
+
+    allow_overlap = body.allow_overlap or not user.is_admin
 
     existing_tasks: list[dict[str, Any]] = []
     try:
@@ -886,17 +929,17 @@ async def approve_task(
 
     duplicate_message = _find_open_duplicate_message(
         existing_tasks,
-        machine_code=body.machine_code,
+        machine_code=machine_code,
         title=body.titre,
         task_type=body.type,
     )
     calendar_note = None
-    if duplicate_message and not body.allow_overlap:
+    if duplicate_message and not allow_overlap:
         raise HTTPException(409, duplicate_message)
-    if duplicate_message and body.allow_overlap:
+    if duplicate_message and allow_overlap:
         calendar_note = _build_open_overlap_note(
             existing_tasks,
-            machine_code=body.machine_code,
+            machine_code=machine_code,
             title=body.titre,
             task_type=body.type,
         )
@@ -938,14 +981,14 @@ async def approve_task(
     logger.info(
         "Planner approved task '%s' for %s by %s",
         body.titre,
-        body.machine_code,
+        machine_code,
         user.email,
     )
 
     return {
         "status": "ok",
-        "message": f"Tache '{body.titre}' creee pour {body.machine_code}",
-        "machine_code": body.machine_code,
+        "message": f"Tache '{body.titre}' creee pour {machine_code}",
+        "machine_code": machine_code,
         "calendar_note": calendar_note,
         "repeat_note": repeat_note,
     }

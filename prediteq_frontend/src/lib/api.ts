@@ -1,14 +1,13 @@
-﻿import {
+import {
   getAuthSession,
   refreshAuthSession,
   signOutAuth,
 } from "@/lib/authClient";
+import { API_BASE } from "@/lib/apiBase";
 
-const configuredApiBase = String(import.meta.env.VITE_API_URL ?? "").trim();
+export { API_BASE } from "@/lib/apiBase";
+
 const isBrowser = typeof window !== "undefined";
-const isLocalHost =
-  isBrowser && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
-export const API_BASE = isBrowser && !isLocalHost ? "/api" : configuredApiBase;
 
 if (!API_BASE && isBrowser) {
   console.error(
@@ -200,4 +199,3 @@ export async function apiBinary(
     clearTimeout(timeoutId);
   }
 }
-

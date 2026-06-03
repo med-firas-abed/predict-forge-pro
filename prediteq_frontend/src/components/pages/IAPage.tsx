@@ -1,5 +1,5 @@
 import { Brain, FileText } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,36 +35,33 @@ export function IAPage() {
     () => getRequestedTab(location.pathname, location.search),
     [location.pathname, location.search],
   );
-  const activeTab: IATab = isAdmin ? requestedTab : "report";
+  const activeTab: IATab = requestedTab;
 
-  useEffect(() => {
-    if (isAdmin) return;
-    const params = new URLSearchParams(location.search);
-    const alreadyOnReport = location.pathname === "/ia" && params.get("tab") === "report";
-    if (!alreadyOnReport) {
-      navigate("/ia?tab=report", { replace: true });
-    }
-  }, [isAdmin, location.pathname, location.search, navigate]);
-
-  const pageTitle = isAdmin
+  const pageTitle = activeTab === "planner"
     ? l(
         "Analyse, actions & rapports",
         "Analysis, actions & reports",
         "Analysis, actions & reports",
       )
-    : l("Analyse & rapports", "Analysis & reports", "Analysis & reports");
+    : isAdmin
+      ? l(
+          "Analyse, actions & rapports",
+          "Analysis, actions & reports",
+          "Analysis & reports",
+        )
+      : l("Analyse & rapports", "Analysis & reports", "Analysis & reports");
   const pageLead =
-    !isAdmin
+    activeTab === "planner"
+      ? l(
+          "Partir de l'etat machine, tenir compte des taches GMAO existantes, puis valider les actions utiles.",
+          "Start from machine status, consider existing GMAO tasks, then validate the useful actions.",
+          "Start from machine status, consider existing GMAO tasks, then validate the useful actions.",
+        )
+      : !isAdmin
       ? l(
           "Consultez le rapport de votre machine, son historique et l'export PDF.",
           "Review your machine report, its history, and the PDF export.",
           "Review your machine report, its history, and the PDF export.",
-        )
-      : activeTab === "planner"
-      ? l(
-          "Partir de l'etat machine, choisir les priorites flotte, puis valider les actions utiles.",
-          "Start from machine status, choose fleet priorities, then validate the useful actions.",
-          "Start from machine status, choose fleet priorities, then validate the useful actions.",
         )
       : l(
           "Rassembler l'etat machine, l'historique et les actions dans une synthese claire et exportable.",
@@ -72,44 +69,46 @@ export function IAPage() {
           "Gather machine status, history, and actions into a clear report ready to export.",
         );
 
-  const tabs = isAdmin
-    ? [
-        {
-          id: "planner" as const,
-          label: l("Plan d'action", "Action plan", "Plan d'action"),
-          icon: Brain,
-          description: l(
+  const tabs = [
+    {
+      id: "planner" as const,
+      label: isAdmin
+        ? l("Plan d'action", "Action plan", "Plan d'action")
+        : l("Plan machine", "Machine action plan", "Machine action plan"),
+      icon: Brain,
+      description: isAdmin
+        ? l(
             "Priorites machine, actions utiles et preparation du calendrier.",
             "Machine priorities, useful actions, and calendar preparation.",
             "Machine priorities, useful actions, and calendar preparation.",
+          )
+        : l(
+            "Etat de votre machine, contexte GMAO et validation des actions utiles.",
+            "Your machine status, GMAO context, and useful action validation.",
+            "Your machine status, GMAO context, and useful action validation.",
           ),
-        },
-        {
-          id: "report" as const,
-          label: l("Rapports", "Reports", "Reports"),
-          icon: FileText,
-          description: l(
+    },
+    {
+      id: "report" as const,
+      label: isAdmin
+        ? l("Rapports", "Reports", "Reports")
+        : l("Rapport machine", "Machine report", "Machine report"),
+      icon: FileText,
+      description: isAdmin
+        ? l(
             "Synthese, historique et export PDF.",
             "Summary, history, and PDF export.",
             "Summary, history, and PDF export.",
-          ),
-        },
-      ]
-    : [
-        {
-          id: "report" as const,
-          label: l("Rapport machine", "Machine report", "Machine report"),
-          icon: FileText,
-          description: l(
+          )
+        : l(
             "Synthese de votre machine, historique et export PDF.",
             "Your machine summary, history, and PDF export.",
             "Your machine summary, history, and PDF export.",
           ),
-        },
-      ];
+    },
+  ];
 
   const switchTab = (tab: IATab) => {
-    if (!isAdmin && tab !== "report") return;
     navigate(tab === "report" ? "/ia?tab=report" : "/ia?tab=planner");
   };
 
@@ -124,7 +123,7 @@ export function IAPage() {
             </p>
           </div>
           <div className="rounded-full border border-border bg-surface-3 px-3 py-1 text-[0.68rem] font-semibold text-muted-foreground">
-            {isAdmin
+            {activeTab === "planner"
               ? l(
                   "Lire -> prioriser -> valider -> suivre",
                   "Review -> prioritize -> validate -> track",
@@ -134,7 +133,7 @@ export function IAPage() {
           </div>
         </div>
 
-        <div className={`grid grid-cols-1 gap-3 ${isAdmin ? "md:grid-cols-2" : ""}`}>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;

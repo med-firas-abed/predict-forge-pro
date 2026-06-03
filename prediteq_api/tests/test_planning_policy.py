@@ -1,8 +1,11 @@
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
 from core.planning_policy import resolve_planning_policy, select_task_template
-from routers.planner import _evaluate_repeat_guard
+from routers.planner import _evaluate_repeat_guard, _resolve_scoped_machine_code
 
 
 class PlanningPolicyTests(unittest.TestCase):
@@ -107,6 +110,41 @@ class PlannerRepeatGuardTests(unittest.TestCase):
         guard = _evaluate_repeat_guard(history_summary, decision, task_template)
 
         self.assertFalse(guard["blocked"])
+
+
+class PlannerScopeTests(unittest.TestCase):
+    def test_standard_user_is_scoped_to_assigned_machine_code(self):
+        user = SimpleNamespace(is_admin=False, machine_id="machine-uuid-1")
+        query = MagicMock()
+        query.select.return_value = query
+        query.eq.return_value = query
+        query.limit.return_value = query
+        query.execute.return_value = SimpleNamespace(data=[{"code": "ASC-C3"}])
+        supabase = MagicMock()
+        supabase.table.return_value = query
+
+        with patch("routers.planner.get_machine_filter", return_value="machine-uuid-1"):
+            with patch("routers.planner.get_supabase", return_value=supabase):
+                resolved = _resolve_scoped_machine_code(None, user)
+
+        self.assertEqual(resolved, "ASC-C3")
+
+    def test_standard_user_cannot_target_another_machine_code(self):
+        user = SimpleNamespace(is_admin=False, machine_id="machine-uuid-1")
+        query = MagicMock()
+        query.select.return_value = query
+        query.eq.return_value = query
+        query.limit.return_value = query
+        query.execute.return_value = SimpleNamespace(data=[{"code": "ASC-C3"}])
+        supabase = MagicMock()
+        supabase.table.return_value = query
+
+        with patch("routers.planner.get_machine_filter", return_value="machine-uuid-1"):
+            with patch("routers.planner.get_supabase", return_value=supabase):
+                with self.assertRaises(HTTPException) as ctx:
+                    _resolve_scoped_machine_code("ASC-B2", user)
+
+        self.assertEqual(ctx.exception.status_code, 403)
 
 
 if __name__ == "__main__":

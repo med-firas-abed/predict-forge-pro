@@ -866,6 +866,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
   const { insights } = useFleetPredictiveInsights(machines);
   const location = useLocation();
   const isAdmin = currentUser?.role === "admin";
+  const canValidatePlannerTasks = currentUser?.status === "approved";
   const [riskData, setRiskData] = useState<RiskEntry[]>([]);
   const [loadingRisk, setLoadingRisk] = useState(false);
   const [planText, setPlanText] = useState("");
@@ -884,8 +885,8 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     [location.search],
   );
   const fallbackPlannerRows = useMemo(
-    () => buildFallbackPlannerRows(insights, undefined, { allowOverlap: isAdmin }),
-    [insights, isAdmin],
+    () => buildFallbackPlannerRows(insights, undefined, { allowOverlap: canValidatePlannerTasks }),
+    [canValidatePlannerTasks, insights],
   );
   const blockedCalendarRows = useMemo(
     () =>
@@ -979,9 +980,13 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
   const loadFallbackPlannerRowsWithHistory = async () => {
     try {
       const tasks = await listGmaoTaches(isAdmin ? undefined : currentUser?.machineId);
-      return buildFallbackPlannerRows(insights, buildTaskHistoryIndex(tasks), { allowOverlap: isAdmin });
+      return buildFallbackPlannerRows(insights, buildTaskHistoryIndex(tasks), {
+        allowOverlap: canValidatePlannerTasks,
+      });
     } catch {
-      return buildFallbackPlannerRows(insights, undefined, { allowOverlap: isAdmin });
+      return buildFallbackPlannerRows(insights, undefined, {
+        allowOverlap: canValidatePlannerTasks,
+      });
     }
   };
 
@@ -1047,7 +1052,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     setProposedTasks([]);
     setEditingIdx(null);
 
-    if (!isAdmin) {
+    if (!canValidatePlannerTasks && !isAdmin) {
       try {
         const hasLocalPlan = await hydrateLocalPlan();
         if (!hasLocalPlan) {
@@ -1076,7 +1081,10 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
 
       const backendResponse = await apiFetch("/planner/generate", {
         method: "POST",
-        body: JSON.stringify({ focus_machine: focusMachine, allow_overlap: isAdmin }),
+        body: JSON.stringify({
+          focus_machine: focusMachine,
+          allow_overlap: canValidatePlannerTasks,
+        }),
       });
       const data = normalizeGeneratePlanResponse(backendResponse);
       if (!data || (data.fleet.length === 0 && scopedRows.length === 0)) {
@@ -1158,7 +1166,10 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
     try {
       const response = (await apiFetch("/planner/approve", {
         method: "POST",
-        body: JSON.stringify({ ...task, allow_overlap: isAdmin }),
+        body: JSON.stringify({
+          ...task,
+          allow_overlap: canValidatePlannerTasks,
+        }),
       })) as ApproveTaskResponse;
       toast.success(
         replaceMachineCodesForDisplay(
@@ -1206,7 +1217,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
       }
 
       try {
-        if (!isAdmin) {
+        if (!canValidatePlannerTasks) {
           const existingTasks = await listGmaoTaches();
           const duplicateMessage = findLocalDuplicateMessage(existingTasks, task);
           if (duplicateMessage) {
@@ -1907,7 +1918,7 @@ export function PlannerPage({ embedded = false }: PlannerPageProps) {
                       <button
                         type="button"
                         onClick={() => void approveTask(idx)}
-                        disabled={approvingIdx === idx || !isAdmin}
+                        disabled={approvingIdx === idx || !canValidatePlannerTasks}
                         className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
                       >
                         {approvingIdx === idx ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}

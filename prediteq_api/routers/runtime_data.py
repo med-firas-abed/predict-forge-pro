@@ -201,7 +201,7 @@ async def list_tasks(
 @router.post("/tasks")
 async def create_task(
     body: TaskCreateRequest,
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_auth),
 ):
     effective_machine_id = _resolve_machine_scope(user, body.machine_id)
     sb = get_supabase()
